@@ -367,7 +367,7 @@ function positionLevelMachinery(state,w,h){
  const hazard=state.hazards?.find(item=>item.id==='grinder');
  if(!hazard){grinderVisual.visible=false;return;}
  grinderVisual.visible=Math.abs(hazard.x-state.camera-w/2)<w*.85;
- grinderVisual.position.set(hazard.x-state.camera-w/2,h/2-h*.88+(state.cameraY||0)+104,0);
+ grinderVisual.position.set(hazard.x-state.camera-w/2,h/2-(h*.88+(hazard.groundOffset||0))+(state.cameraY||0)+104,0);
  // Always spin, including while the character is still in the launcher.
  if(grinderDrum)grinderDrum.rotation.z=-(state.machineryClock||0)*5.1;
  if(state.shredded&&!previousShred&&grinderDrum){
@@ -751,8 +751,8 @@ function positionGore(state,w,h){
   part.userData.resting=false;
   scene.add(part);goreParts.push(part);
  }
- const floor=h*.88;
  for(const p of goreParts){
+  const floor=window.launcherGroundYAt?window.launcherGroundYAt(p.userData.worldX):h*.88;
   const u=p.userData;
   if(u.joint==='rh'){
    // Keep the existing forearm/hand fragment; fingertips lead its creeping
@@ -920,7 +920,7 @@ function animate(){
    if(state.groundTime>0){
     model.updateMatrixWorld(true);
     const visibleBounds=new THREE.Box3().setFromObject(model);
-    const floorScreen=h/2-h*.88+(state.cameraY||0);
+    const floorScreen=h/2-(state.groundY??h*.88)+(state.cameraY||0);
     if(visibleBounds.min.y<floorScreen){
      model.position.y+=floorScreen-visibleBounds.min.y;
     }
