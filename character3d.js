@@ -97,9 +97,23 @@ function seatCharacterOnChair(){
  const target=seatRoot.localToWorld(chairHipAnchor.clone());
  model.rotation.order='YXZ';
  model.rotation.y=Math.PI/2;
- model.rotation.z=0; // keep rider upright in screen space; hip remains anchored to moving chair
+ model.rotation.z=0;
  model.position.set(0,0,0);
  model.updateMatrixWorld(true);
+ // The loaded rigs have different torso/rest orientations. Match the actual
+ // hip-to-chest vector to the chair back, rather than guessing an angle.
+ const torso=bones.Spine2||bones.Spine1||bones.Spine||bones.Neck;
+ if(torso){
+  const hipPos=bones.Hips.getWorldPosition(new THREE.Vector3());
+  const chestPos=torso.getWorldPosition(new THREE.Vector3());
+  const v=chestPos.sub(hipPos);
+  const currentAngle=Math.atan2(v.y,v.x);
+  // Chair back stays close to vertical; it follows the arm tilt slightly.
+  const desiredAngle=Math.PI/2+THREE.MathUtils.clamp(seatRoot.rotation.z,-.25,.25);
+  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9);
+  model.updateMatrixWorld(true);
+ }
+ // Re-anchor after correcting torso tilt; otherwise the hips drift.
  const actual=bones.Hips.getWorldPosition(new THREE.Vector3());
  model.position.add(target.sub(actual));
  model.updateMatrixWorld(true);
