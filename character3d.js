@@ -398,6 +398,16 @@ function buildMachineTemplate(source,kind){
    template.add(rotor);
   }else template.add(mesh);
  });
+ // The hopper's uppermost point is a cutter, not the surface that holds blood.
+ // Locate the seam using the supplied stationary purple panel and striped trim.
+ if(kind==='hopper'){
+  let trim=null,panel=null;
+  source.traverse(o=>{if(!o.isMesh)return;const name=o.material?.name||'';
+   if(name.includes('Stripes'))trim=new THREE.Box3().setFromObject(o);
+   if(o.name==='Object_7')panel=new THREE.Box3().setFromObject(o);
+  });
+  if(trim&&panel)template.userData.bloodHeightRatio=((trim.max.y+panel.max.y)*.5-bounds.min.y)/size.x;
+ }
  template.userData.kind=kind;template.userData.heightRatio=size.y/size.x;return template;
 }
 async function loadLevelMachinery(){
@@ -430,7 +440,7 @@ function positionLevelMachinery(state,w,h){
   const height=template.userData.heightRatio*width/root.userData.facingWidth;
   const centerY=kind==='spiked'?floor-106:floor-height/2;
   root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),35);
-  window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,centerY,height,width,kind,feedBelt:hazard.feedBelt};
+  window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,bloodTop:kind==='hopper'&&template.userData.bloodHeightRatio?floor-template.userData.bloodHeightRatio*width/root.userData.facingWidth:undefined,centerY,height,width,kind,feedBelt:hazard.feedBelt};
   if(!root.userData.cutters&&window.weaponOverlayReady){
    const cutter=['axe','machete','knife'][Math.floor(hazard.x/100)%3];
    for(const motor of root.children.filter(p=>p.userData.motorAxis)){
