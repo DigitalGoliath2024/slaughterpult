@@ -394,7 +394,7 @@ function animate(){
  if(model&&window.characterOverlayReady){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
-  if(rag){
+  if(rag && !state.shredded){
    const tilt=direction(rag.hip,rag.chest)-Math.PI/2;
    model.position.x=rag.hip.x-state.camera-w/2;
    model.position.y=h/2-rag.hip.y+(state.cameraY||0)-21;
@@ -412,6 +412,8 @@ function animate(){
    rotate('LeftLeg',norm(a('lk','lf')-a('hip','lk')));
    rotate('RightLeg',norm(a('rk','rf')-a('hip','rk')));
    rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
+  } else if(state.shredded){
+   model.visible=false;
   } else {
    applySittingPose();
    if(!seatCharacterOnChair()){
