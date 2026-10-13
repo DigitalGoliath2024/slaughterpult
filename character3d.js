@@ -358,13 +358,22 @@ function updateBloodModels(state,w,h){
   // Convert the tall static splash sculpture to a smaller impact effect.
   const bounds=new THREE.Box3().setFromObject(model3d);
   const size=bounds.getSize(new THREE.Vector3());
-  const k=42/(Math.max(size.x,size.y,size.z)||1);
-  model3d.scale.multiplyScalar(k);
-  model3d.rotation.y=Math.PI/2;
-  model3d.userData.worldX=point.x;
-  model3d.userData.worldY=Math.min(point.y,h*.88);
-  model3d.userData.angle=(Math.random()-.5)*.6;
-  scene.add(model3d);impactMeshes.push(model3d);
+  const k=86/(Math.max(size.x,size.y,size.z)||1);
+  // Center the original asset at its own geometry bounds before scaling.
+  // The prior code rotated a nearly flat splatter sideways and could make it
+  // vanish from the side-on camera altogether.
+  const center=bounds.getCenter(new THREE.Vector3());
+  const holder=new THREE.Group();
+  model3d.position.sub(center);
+  holder.add(model3d);
+  holder.scale.setScalar(k);
+  holder.rotation.y=0;
+  holder.userData.worldX=point.x;
+  holder.userData.worldY=Math.min(point.y,h*.88);
+  holder.userData.angle=(Math.random()-.5)*.6;
+  scene.add(holder);impactMeshes.push(holder);
+  continue;
+
  }
  for(const m of impactMeshes){
   m.position.set(m.userData.worldX-state.camera-w/2,h/2-m.userData.worldY+(state.cameraY||0),45);
