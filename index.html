@@ -165,7 +165,7 @@ const bloodSprites=Array.from({length:5},(_,variant)=>{
 function groundBlood(x,power=1){
  const floor=H*.88;
  // Tiny, irregular ground-level flecks; no vertical walls or airborne stains.
- bloodStains.push({x,y:floor-1,r:2.8+Math.random()*3*power,stretch:1.6+Math.random()*1.8,shade:Math.random(),rot:Math.random()*.3});
+ bloodStains.push({x,y:floor-1,r:4+Math.random()*4*power,stretch:1.6+Math.random()*1.8,shade:Math.random(),rot:Math.random()*.3});
  for(let i=0;i<Math.round(2+power*4);i++)
   bloodStains.push({x:x+(Math.random()-.5)*(18+power*22),y:floor-1,
    r:.5+Math.random()*1.7,stretch:.8+Math.random()*1.9,shade:Math.random(),rot:Math.random()*.4});
@@ -239,7 +239,9 @@ function drawGore(){
   ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
   ctx.fillStyle=s.shade>.5?'#57070d':'#921019';
   ctx.beginPath();
-  const rx=s.r*s.stretch,ry=Math.max(.55,s.r*.22);
+  // Slight overhead view of the floor puddle, keeping the side-on camera.
+  const rx=s.r*s.stretch*1.3,ry=Math.max(2.2,s.r*.65);
+  ctx.translate(0,-ry*.42);
   for(let i=0;i<12;i++){
    const a=i*Math.PI/6;
    const k=.75+.18*Math.sin(i*12.1+s.shade*19)+.06*Math.cos(i*6.7+s.r);
@@ -717,7 +719,7 @@ const bloodSprites=Array.from({length:5},(_,variant)=>{
 function groundBlood(x,power=1){
  const floor=H*.88;
  // Tiny, irregular ground-level flecks; no vertical walls or airborne stains.
- bloodStains.push({x,y:floor-1,r:2.8+Math.random()*3*power,stretch:1.6+Math.random()*1.8,shade:Math.random(),rot:Math.random()*.3});
+ bloodStains.push({x,y:floor-1,r:4+Math.random()*4*power,stretch:1.6+Math.random()*1.8,shade:Math.random(),rot:Math.random()*.3});
  for(let i=0;i<Math.round(2+power*4);i++)
   bloodStains.push({x:x+(Math.random()-.5)*(18+power*22),y:floor-1,
    r:.5+Math.random()*1.7,stretch:.8+Math.random()*1.9,shade:Math.random(),rot:Math.random()*.4});
@@ -791,7 +793,9 @@ function drawGore(){
   ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
   ctx.fillStyle=s.shade>.5?'#57070d':'#921019';
   ctx.beginPath();
-  const rx=s.r*s.stretch,ry=Math.max(.55,s.r*.22);
+  // Slight overhead view of the floor puddle, keeping the side-on camera.
+  const rx=s.r*s.stretch*1.3,ry=Math.max(2.2,s.r*.65);
+  ctx.translate(0,-ry*.42);
   for(let i=0;i<12;i++){
    const a=i*Math.PI/6;
    const k=.75+.18*Math.sin(i*12.1+s.shade*19)+.06*Math.cos(i*6.7+s.r);
