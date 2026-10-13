@@ -481,7 +481,7 @@ function buildGorePart(joint){
  group.userData.halfWidth=size.x*scale/2;
  group.userData.radius=Math.max(size.x,size.y,size.z)*scale*.5;
  // Long limb geometry should lie along the floor, not stand vertically.
- group.userData.lieAngle=(joint==='head'?0:(Math.random()<.5?1:-1)*Math.PI/2);
+ group.userData.lieAngle=null; // capture actual orientation at first floor contact
  group.userData.resting=false;group.userData.bounces=0;
  group.userData.spin=(Math.random()<.5?-1:1)*(.014+Math.random()*.03);
  group.rotation.z=(Math.random()-.5)*.5;
@@ -518,7 +518,7 @@ function positionGore(state,w,h){
  const floor=h*.88;
  for(const p of goreParts){
   const u=p.userData;
-  const lieAngle=u.lieAngle||0;
+  const lieAngle=u.lieAngle===null?p.rotation.z:u.lieAngle;
   const floorExtent=Math.abs(Math.cos(lieAngle))*(u.halfHeight||12)+Math.abs(Math.sin(lieAngle))*(u.halfWidth||12);
   // A rounded skull rolls on its outer radius; never use its narrow mesh axis.
   const groundY=floor-Math.max(3,u.joint==='head'?u.radius||15:floorExtent);
@@ -531,6 +531,8 @@ function positionGore(state,w,h){
    p.rotation.x+=u.spin*dt*15;
    if(u.worldY>=groundY){
     u.worldY=groundY;
+    // Keep the orientation earned during the tumble, not a prescribed side pose.
+    if(u.lieAngle===null)u.lieAngle=p.rotation.z;
     if(u.vy>60&&u.bounces<(u.joint==='head'?4:2)){
      u.vy=-u.vy*(u.joint==='head'?.34:.19);u.vx*=u.joint==='head'?.79:.58;u.bounces++;
     }else{
@@ -541,8 +543,8 @@ function positionGore(state,w,h){
    }
   }else{
    u.worldY=groundY;
-   const ease=1-Math.exp(-13*dt);
-   p.rotation.z+=THREE.MathUtils.euclideanModulo(lieAngle-p.rotation.z+Math.PI,Math.PI*2)*ease-Math.PI*2*ease*(THREE.MathUtils.euclideanModulo(lieAngle-p.rotation.z+Math.PI,Math.PI*2)>Math.PI);
+   // Preserve landed spin angle: no automatic righting or standing upright.
+   p.rotation.z=u.lieAngle===null?p.rotation.z:u.lieAngle;
    p.rotation.x*=Math.exp(-9*dt);
   }
   if(u.joint==='head'&&u.eyes){
