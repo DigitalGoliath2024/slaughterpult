@@ -345,6 +345,36 @@ function applySittingPose(){
  pose('LeftForeArm',-.22,0,0);
 }
 
+let jetpackModel=null;
+window.jetpackOverlayReady=false;
+function buildJetpackTemplate(source){
+ source.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3()),root=new THREE.Group();
+ source.traverse(o=>{if(!o.isMesh)return;const geometry=(o.geometry.index?o.geometry.toNonIndexed():o.geometry.clone());geometry.applyMatrix4(o.matrixWorld);const pos=geometry.attributes.position,colors=[];
+  for(let i=0;i<pos.count;i+=3){let x=0,y=0;for(let k=0;k<3;k++){x+=(pos.getX(i+k)-center.x)/3;y+=(pos.getY(i+k)-bounds.min.y)/3;}const height=y/size.y;
+   const outer=Math.abs(x)>size.x*.24,color=new THREE.Color(height<.1?0x27323b:height>.85?0xcfb785:outer?(x<0?0xc74435:0xe99c32):0x236d78);
+   for(let k=0;k<3;k++)colors.push(color.r,color.g,color.b);
+  }
+  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geometry.translate(-center.x,-center.y,-center.z);geometry.scale(1/size.y,1/size.y,1/size.y);
+  root.add(new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({vertexColors:true,metalness:.65,roughness:.42,side:THREE.DoubleSide})));
+ });
+ const flames=[];for(const side of [-1,1]){
+  for(const y of [-.2,.27]){const band=new THREE.Mesh(new THREE.TorusGeometry(.095,.012,6,20),new THREE.MeshStandardMaterial({color:0xd6ad55,metalness:.8,roughness:.3}));band.rotation.x=Math.PI/2;band.position.set(side*.27,y,0);root.add(band);}
+  const flame=new THREE.Mesh(new THREE.ConeGeometry(.07,.48,8),new THREE.MeshBasicMaterial({color:0xff8b27,transparent:true,opacity:.9}));flame.rotation.z=Math.PI;flame.position.set(side*.27,-.72,0);root.add(flame);flames.push(flame);
+ }
+ root.userData.flames=flames;return root;
+}
+async function loadJetpack(){try{const g=await new GLTFLoader().loadAsync('./jet_pack.glb');jetpackModel=buildJetpackTemplate(g.scene);jetpackModel.scale.setScalar(35);jetpackModel.visible=false;scene.add(jetpackModel);window.jetpackOverlayReady=true;}catch(e){console.warn('Supplied jet pack unavailable',e);}}
+function positionJetpack(state,w,h){
+ if(!jetpackModel)return;jetpackModel.visible=!!state.jetpackMounted;if(!jetpackModel.visible)return;
+ let center,up;
+ if(state.rag){const hip=state.rag.waist||state.rag.hip,chest=state.rag.chest;center=new THREE.Vector3((hip.x+chest.x)/2-state.camera-w/2,h/2-(hip.y+chest.y)/2+(state.cameraY||0),-5);up=new THREE.Vector3(chest.x-hip.x,hip.y-chest.y,0).normalize();
+  if(state.shredded){const torso=goreParts.find(p=>p.userData.joint==='chest');if(torso){center.set(torso.userData.worldX-state.camera-w/2,h/2-torso.userData.worldY+(state.cameraY||0),-5);}}
+ }else if(model&&bones.Hips&&bones.Neck){model.updateMatrixWorld(true);const a=bones.Hips.getWorldPosition(new THREE.Vector3()),b=bones.Neck.getWorldPosition(new THREE.Vector3());center=a.clone().add(b).multiplyScalar(.5);up=b.sub(a).normalize();}
+ else{jetpackModel.visible=false;return;}
+ jetpackModel.position.copy(center).add(new THREE.Vector3(-up.y,up.x,0).multiplyScalar(13));
+ jetpackModel.quaternion.setFromAxisAngle(new THREE.Vector3(0,0,1),Math.atan2(up.y,up.x)-Math.PI/2).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),1));
+ for(const flame of jetpackModel.userData.flames){flame.visible=state.jetActive;flame.scale.y=.8+.2*Math.sin((state.levelClock||0)*55);}
+}
 // Spinning grinder, permanently mounted to a braced steel support.
 let grinderDrum=null;let goreParts=[],goreAsset=null,goreWasShredded=false;
 const machineryTemplates=new Map(),machineryInstances=new Map();
@@ -1152,6 +1182,7 @@ function animate(){
    }
   }
  }else if(model){model.visible=false;}
+ positionJetpack(state,w,h);
  renderer.render(scene,camera);
  drawBasket(state,w,h);
 }
@@ -1177,4 +1208,4 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();animate();}
