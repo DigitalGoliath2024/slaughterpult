@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ALIASES = {'cowboy': ('cowboy', 'southern'), 'human': ('philip', 'human', 'positive'), 'meshy': ('scared', 'crash', 'meshy')}
+ALIASES = {'cowboy': ('cowboy', 'southern'), 'human': ('philip', 'human', 'positive'), 'meshy': ('scared', 'crash', 'meshy', 'dummy')}
 
 def classify(path):
     name = re.sub(r'[^a-z0-9]+', ' ', str(path).lower())
@@ -21,6 +21,8 @@ def build(root):
         if path.suffix.lower() not in ('.mp3', '.wav', '.ogg', '.m4a'):
             continue
         relative = path.relative_to(root).as_posix()
+        if relative.startswith('audio/effects/'):
+            continue
         character, stage = classify(relative)
         if character and stage:
             catalog[character][stage].append(relative)

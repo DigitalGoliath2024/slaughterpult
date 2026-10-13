@@ -360,6 +360,7 @@ function buildJetpackTemplate(source){
  const flames=[];for(const side of [-1,1]){
   for(const y of [-.2,.27]){const band=new THREE.Mesh(new THREE.TorusGeometry(.095,.012,6,20),new THREE.MeshStandardMaterial({color:0xd6ad55,metalness:.8,roughness:.3}));band.rotation.x=Math.PI/2;band.position.set(side*.27,y,0);root.add(band);}
   const flame=new THREE.Mesh(new THREE.ConeGeometry(.07,.48,8),new THREE.MeshBasicMaterial({color:0xff8b27,transparent:true,opacity:.9}));flame.rotation.z=Math.PI;flame.position.set(side*.27,-.72,0);root.add(flame);flames.push(flame);
+  const core=new THREE.Mesh(new THREE.ConeGeometry(.035,.3,8),new THREE.MeshBasicMaterial({color:0x79cfff,transparent:true,opacity:.95}));core.rotation.z=Math.PI;core.position.set(side*.27,-.63,.008);root.add(core);flames.push(core);
  }
  root.userData.flames=flames;return root;
 }
