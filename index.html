@@ -86,6 +86,8 @@ industrialWallImage.src='./rusted_slaughter_wall.png';
 // Sky is in world space ABOVE the wall; the camera exposes it when tracking high launches.
 const cleanFactoryWallImage=new Image();
 cleanFactoryWallImage.src='./rusted_slaughter_wall_nobg.png';
+const horrorFactoryImage=new Image();
+horrorFactoryImage.src='./Meshy_AI_horror_factory_interior.png';
 const levelSkyImages={slide:new Image(),factory:new Image()};
 levelSkyImages.slide.src='./Meshy_AI_night_sky_giant_heads.png';
 levelSkyImages.factory.src='./Meshy_AI_cosmic_surreal_entities.png';
@@ -114,15 +116,19 @@ function drawSky(){
   ctx.drawImage(sky,sourceX,0,visibleWidth,visibleHeight,0,cameraY,W,H);
  }
  const bg=currentLevel==='factory'
-  ?(cleanFactoryWallImage.complete&&cleanFactoryWallImage.naturalWidth?cleanFactoryWallImage:industrialWallImage)
+  ?(horrorFactoryImage.complete&&horrorFactoryImage.naturalWidth?horrorFactoryImage:cleanFactoryWallImage.complete&&cleanFactoryWallImage.naturalWidth?cleanFactoryWallImage:industrialWallImage)
   :(factoryWallReady?factoryWallImage:null);
  if(bg&&bg.complete&&bg.naturalWidth>0){
-  const tileW=currentLevel==='factory'?Math.max(880,Math.round(H*2.2)):Math.max(780,Math.round(H*2.25));
+  const tileW=bg===horrorFactoryImage?floor*bg.naturalWidth/(bg.naturalHeight*.85):currentLevel==='factory'?Math.max(880,Math.round(H*2.2)):Math.max(780,Math.round(H*2.25));
   const step=tileW-(currentLevel==='factory'?28:0);
   const start=Math.floor(camera/step)-1;
   for(let i=start;i<start+Math.ceil(W/step)+3;i++){
    const x=i*step-camera;
-   if(bg===industrialWallImage){
+   if(bg===horrorFactoryImage){
+    // Align the supplied factory's wall/floor junction to the playable ground.
+    // Crop its baked floor; the textured physical floor starts at this seam.
+    ctx.drawImage(bg,0,0,bg.naturalWidth,bg.naturalHeight*.85,x,0,tileW,floor);
+   }else if(bg===industrialWallImage){
     ctx.drawImage(bg,12,102,bg.naturalWidth-24,Math.min(650,bg.naturalHeight-204),x,0,tileW,H);
    }else{
     // Preserve transparent pixels of the clean factory panel. The cosmic
