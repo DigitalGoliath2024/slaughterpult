@@ -453,6 +453,28 @@ function buildGorePart(joint){
  const size=bounds.getSize(new THREE.Vector3());
  for(const mesh of group.children)mesh.geometry.translate(-center.x,-center.y,-center.z);
  const scale=joint==='head'?29/(Math.max(size.x,size.y,size.z)||1):33/(Math.max(size.x,size.y,size.z)||1);
+ // Two expressive eyeballs sit inside the skull sockets; pupils animate only
+ // after the detached head has stopped rolling.
+ if(joint==='head'){
+  const white=new THREE.MeshStandardMaterial({color:0xfff4e1,roughness:.28});
+  const iris=new THREE.MeshStandardMaterial({color:0x386d75,roughness:.34});
+  const pupilMat=new THREE.MeshStandardMaterial({color:0x101018,roughness:.18});
+  const eyeRadius=Math.max(size.x,size.y)*.115;
+  const eyes=[];
+  for(const side of [-1,1]){
+   const eye=new THREE.Group();
+   eye.position.set(side*size.x*.17,size.y*.09,size.z*.40);
+   const ball=new THREE.Mesh(new THREE.SphereGeometry(eyeRadius,16,12),white);
+   const colored=new THREE.Mesh(new THREE.SphereGeometry(eyeRadius*.50,12,10),iris);
+   colored.position.z=eyeRadius*.77;
+   const pupil=new THREE.Mesh(new THREE.SphereGeometry(eyeRadius*.29,12,10),pupilMat);
+   pupil.position.z=eyeRadius*.99;
+   eye.add(ball,colored,pupil);group.add(eye);
+   eyes.push({colored,pupil,radius:eyeRadius});
+  }
+  group.userData.eyes=eyes;
+  group.userData.eyeTime=0;
+ }
  group.scale.setScalar(scale);
  group.userData.joint=joint;
  group.userData.halfHeight=size.y*scale/2;
@@ -522,6 +544,20 @@ function positionGore(state,w,h){
    const ease=1-Math.exp(-13*dt);
    p.rotation.z+=THREE.MathUtils.euclideanModulo(lieAngle-p.rotation.z+Math.PI,Math.PI*2)*ease-Math.PI*2*ease*(THREE.MathUtils.euclideanModulo(lieAngle-p.rotation.z+Math.PI,Math.PI*2)>Math.PI);
    p.rotation.x*=Math.exp(-9*dt);
+  }
+  if(u.joint==='head'&&u.eyes){
+   u.eyeTime+=dt;
+   // Wake up once stationary; slowly scan side-to-side with an occasional
+   // nervous upward glance, rather than staring straight ahead.
+   const awake=u.resting?Math.min(1,(u.eyeTime-1)*2):0;
+   const lookX=awake*(Math.sin(u.eyeTime*1.35)*.28+Math.sin(u.eyeTime*.57)*.13);
+   const lookY=awake*(Math.sin(u.eyeTime*.91)*.20);
+   for(const eye of u.eyes){
+    eye.colored.position.x=lookX*eye.radius;
+    eye.colored.position.y=lookY*eye.radius;
+    eye.pupil.position.x=lookX*eye.radius*1.15;
+    eye.pupil.position.y=lookY*eye.radius*1.15;
+   }
   }
   p.position.set(u.worldX-state.camera-w/2,h/2-u.worldY+(state.cameraY||0),65);
  }
