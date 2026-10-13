@@ -15,7 +15,7 @@ function resize(){const rect=canvas.getBoundingClientRect();W=rect.width;H=rect.
 function armPoint(i,angle=theta){let x=armOffsets[i]*armScale;return {x:pivot.x+x*Math.cos(angle),y:pivot.y-x*Math.sin(angle)};}function framePoint(i){let q=frameOffsets[i];return{x:pivot.x+q[0],y:pivot.y+q[1]};}function cradlePoint(angle=theta){let length=228*armScale;return{x:pivot.x+length*Math.cos(angle),y:pivot.y-length*Math.sin(angle)};}function worldPt(x,y){return{x:x-camera,y:y};}
 function startNotice(html){$('notice').innerHTML=html}function setPhase(p){phase=p;$('phaseText').textContent= p==='build'?'BUILD YOUR LAUNCHER':p==='charged'?'READY TO LAUNCH':p==='flying'?'FLIGHT IN PROGRESS': 'FLIGHT COMPLETE';$('phaseDescription').textContent=p==='build'?'Click one frame socket, then an arm socket to connect a part.':p==='charged'?'Release the arm and see how far your dummy flies.':p==='flying'?'Watch the dummy travel. Distance is measured from launch.':'Change components, charge, and try again.';$('launch').disabled=p!=='charged';$('charge').disabled=p==='flying';}
 function updatePanel(){const div=$('connections');div.innerHTML='';connections.forEach((c,i)=>{const el=document.createElement('div');el.className='connection';let label=c.type==='weight'?'Counterweight':c.type==='piston'?'Push piston':c.type==='spring'?'Tension spring':'Rubber band';el.innerHTML=`<span style="color:${colors[c.type]}">●</span> ${label} · F${c.f+1} → A${c.a+1} <button class="delete" data-index="${i}">✕</button>`;div.appendChild(el)});$('count').textContent=`(${connections.length}/4)`;div.querySelectorAll('.delete').forEach(b=>b.onclick=()=>{connections.splice(+b.dataset.index,1);reset(false);updatePanel()})}
-function reset(clear=true){theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;cameraY=0;maxDist=0;pending=null;particles=[];bloodStains=[];bloodDrops=[];lastBloodImpact=-1;$('distanceText').textContent='0 ft';if(clear){connections=[];armScale=1;releaseDeg=55;$('armLength').value=100;$('angle').value=55;$('armVal').textContent='100%';$('angleVal').textContent='55°'}setPhase('build');updatePanel();startNotice('<strong>Build mode:</strong> Select a part and connect a frame socket to an arm socket. Then pull back and launch.');render()}
+function reset(clear=true){theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;cameraY=0;maxDist=0;pending=null;particles=[];bloodStains=[];bloodDrops=[];lastBloodImpact=-1;hitHazards.clear();hazardPoints=0;levelFailed=false;$('distanceText').textContent='0 ft';if(clear){connections=[];armScale=1;releaseDeg=55;$('armLength').value=100;$('angle').value=55;$('armVal').textContent='100%';$('angleVal').textContent='55°'}setPhase('build');updatePanel();startNotice('<strong>Build mode:</strong> Select a part and connect a frame socket to an arm socket. Then pull back and launch.');render()}
 function loadDemo(){connections=[{type:'rubber',f:0,a:0},{type:'spring',f:2,a:1}];updatePanel();startNotice('<strong>Starter machine loaded:</strong> Two power sources are connected. You can change the mounting positions, add components, or pull back and launch.');}
 function socketAt(x,y){let match=null,bestD=20;frameOffsets.forEach((_,i)=>{const p=framePoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'frame',index:i}}});armOffsets.forEach((_,i)=>{const p=armPoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'arm',index:i}}});return match}
 canvas.addEventListener('pointerdown',e=>{if(phase==='flying')return;if(phase==='done')reset(false);const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const s=socketAt(x,y);if(!s)return;if(!pending){pending=s;startNotice(`<strong>Socket selected:</strong> ${s.kind==='frame'?'Frame':'Arm'} ${s.index+1}. Click a socket on the other piece.`)}else if(pending.kind!==s.kind){if(connections.length>=4){startNotice('<strong>Maximum 4 power components.</strong> Remove one before adding another.');pending=null;return}const c={type:selected,f:s.kind==='frame'?s.index:pending.index,a:s.kind==='arm'?s.index:pending.index};if(connections.some(z=>z.type===c.type&&z.f===c.f&&z.a===c.a)){startNotice('That component is already installed.');pending=null;return}connections.push(c);pending=null;updatePanel();setPhase('build');startNotice(`<strong>${selected.toUpperCase()} CONNECTED.</strong> Try changing the angle or arm length, or charge your launcher.`)}else{pending=s;startNotice('Choose a socket on the opposite piece.')}render()});
@@ -85,6 +85,45 @@ function drawGore(){
  }
  ctx.restore();
 }
+
+// First course: hazards are opt-in per level, ordered LEFT -> RIGHT.
+// A soft short landing is a fail; farther throws meet the shredder.
+// Individual level definitions can replace this array later.
+const LEVEL_HAZARDS=[
+ {id:'mattress',kind:'soft',x:790,width:260,points:0,label:'SOFT LANDING'},
+ {id:'grinder',kind:'grinder',x:1900,width:160,points:1500,label:'TRASH GRINDER'}
+];
+let hitHazards=new Set(),hazardPoints=0,levelFailed=false;
+function hazardHit(x,y){
+ if(!dummy||phase!=='airborne'||y<H*.88-105)return;
+ for(const h of LEVEL_HAZARDS){
+  if(hitHazards.has(h.id)||x<h.x-h.width*.5||x>h.x+h.width*.5)continue;
+  hitHazards.add(h.id);
+  if(h.kind==='soft'){levelFailed=true;hazardPoints=0; bloodDrops.length=0;}
+  else {hazardPoints+=h.points;bloodBurst(x,y,2.5);}
+ }
+}
+function drawHazards(){
+ const floor=H*.88;ctx.save();ctx.translate(-camera,0);
+ for(const h of LEVEL_HAZARDS){
+  if(h.x+h.width/2<camera-100||h.x-h.width/2>camera+W+100)continue;
+  if(h.kind==='soft'){
+   ctx.fillStyle='#d8d0b9';ctx.strokeStyle='#746e62';ctx.lineWidth=3;
+   ctx.beginPath();ctx.roundRect(h.x-h.width/2,floor-30,h.width,29,10);ctx.fill();ctx.stroke();
+   ctx.strokeStyle='#aa9b87';for(let i=0;i<7;i++){const x=h.x-h.width/2+20+i*35;ctx.beginPath();ctx.moveTo(x,floor-28);ctx.lineTo(x+12,floor-5);ctx.stroke();}
+  }
+  // Grinder body is a 3D GLB overlay; unobtrusive fallback while it loads.
+  if(h.kind==='grinder'&&!window.grinderOverlayReady){
+   ctx.fillStyle='#575c60';ctx.fillRect(h.x-65,floor-90,130,90);
+   ctx.fillStyle='#26292c';ctx.fillRect(h.x-46,floor-65,92,46);
+   ctx.strokeStyle='#b9babb';ctx.lineWidth=7;ctx.strokeRect(h.x-65,floor-90,130,90);
+  }
+  ctx.font='bold 13px system-ui';ctx.textAlign='center';
+  ctx.fillStyle=h.kind==='soft'?'#51493f':'#c7d4d9';
+  ctx.fillText(h.label,h.x,floor-(h.kind==='soft'?42:110));
+ }
+ ctx.restore();
+}
 const BODY=[['hip',0,0,8],['chest',0,-24,12],['neck',0,-41,5],['head',0,-55,13],['ls',-15,-30,5],['le',-26,-12,5],['lh',-31,6,5],['rs',15,-30,5],['re',26,-12,5],['rh',31,6,5],['lk',-10,25,6],['lf',-13,49,7],['rk',10,25,6],['rf',13,49,7]];
 const LINKS=[['hip','chest',24],['chest','neck',17],['neck','head',14],['chest','ls',17],['ls','le',22],['le','lh',19],['chest','rs',17],['rs','re',22],['re','rh',19],['hip','lk',27],['lk','lf',25],['hip','rk',27],['rk','rf',25],['hip','ls',31],['hip','rs',31],['ls','rs',30],['lk','rk',20],['chest','lk',51],['chest','rk',51]];
 function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY){const xx=x+dx,yy=y+dy;nodes[id]={x:xx,y:yy,px:xx-(vx-dy*spin)*.016,py:yy-(vy+dx*spin)*.016,r};}return {nodes,links:LINKS.map(([a,b])=>({a,b,len:Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y),broken:false})),settled:0,groundTime:0,restTime:0,fx:0};}
@@ -108,7 +147,7 @@ function updateRagdoll(dt){
     n.y=floor-n.r;
     n.py=n.y+Math.max(0,downward)*.12;
     n.px=n.x+vx*.42;
-    if(downward>2.5){hadImpact=true; if(downward>4 && bloodStains.length<1800 && Math.random()<.18)bloodBurst(n.x,floor,Math.min(2.4,downward/7));}
+    if(downward>2.5){hazardHit(n.x,n.y);hadImpact=true; if(downward>4 && bloodStains.length<1800 && Math.random()<.18)bloodBurst(n.x,floor,Math.min(2.4,downward/7));}
    }
   }
   if(hadImpact){impacts++; if(impacts===1||impacts%12===0)bloodBurst(rag.nodes.head.x,floor,1.3);}
@@ -162,15 +201,15 @@ function simulate(dt){if(phase==='launching'){
     startNotice(`<strong>Released!</strong> The arm swings up from behind the pivot and sends the dummy forward (right). Initial speed ${Math.round(Math.hypot(vx,vy))} px/s.`);
   }
 }
-if(phase==='airborne'&&dummy){updateRagdoll(dt);stepBlood(dt);let head=rag.nodes.head;maxDist=Math.max(maxDist,(Math.max(...Object.values(rag.nodes).map(n=>n.x))-flightStart)*.65);$('distanceText').textContent=Math.floor(maxDist)+' ft';if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Keep the dummy in frame on BOTH axes. Vertical tracking is activated
+if(phase==='airborne'&&dummy){updateRagdoll(dt);stepBlood(dt);hazardHit(dummy.x,dummy.y);let head=rag.nodes.head;maxDist=Math.max(maxDist,(Math.max(...Object.values(rag.nodes).map(n=>n.x))-flightStart)*.65);$('distanceText').textContent=Math.floor(maxDist)+' ft';if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Keep the dummy in frame on BOTH axes. Vertical tracking is activated
 // only above the normal playfield, and eases back to ground on descent.
  const desiredX=Math.max(0,dummy.x-W*.5);
  camera+=(desiredX-camera)*Math.min(1,dt*4);
  const highest=Math.min(...Object.values(rag.nodes).map(n=>n.y-n.r));
  const desiredY=Math.min(0,highest-H*.2);
- cameraY+=(desiredY-cameraY)*Math.min(1,dt*5);if(rag.settled>1.6||dummy.x>10000||frameTime>35){phase='done';setPhase('done');startNotice(`<strong>RESULT: ${Math.floor(maxDist)} ft.</strong> Ragdoll test: ${impacts} ground contacts. Change the launcher and try again.`)}}}
+ cameraY+=(desiredY-cameraY)*Math.min(1,dt*5);if(rag.settled>1.6||dummy.x>10000||frameTime>35){phase='done';setPhase('done');startNotice(`<strong>RESULT: ${Math.floor(maxDist)} ft.</strong> ${levelFailed?'SOFT LANDING — FAIL! No points.':`Score: ${Math.floor(maxDist)+hazardPoints} (${Math.floor(maxDist)} distance + ${hazardPoints} machinery).`} Change the launcher and try again.`)}}}
 
-function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#78aac9';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(0,-cameraY);drawSky();drawGore();if(camera<750)catapult();if(dummy){drawRag()}if(phase==='build'||phase==='charged'||phase==='done'){ctx.save();ctx.translate(-camera,0);for(let i=0;i<frameOffsets.length;i++){const p=framePoint(i);ctx.fillStyle=pending?.kind==='frame'&&pending.index===i?'#fff':'#37decc';ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);ctx.fill();ctx.fillStyle='#0c2636';ctx.font='bold 9px system-ui';ctx.fillText('F'+(i+1),p.x+9,p.y-7)}for(let i=0;i<armOffsets.length;i++){const p=armPoint(i);ctx.fillStyle=pending?.kind==='arm'&&pending.index===i?'#fff':'#ffc049';ctx.beginPath();ctx.arc(p.x,p.y,6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#342716';ctx.font='bold 9px system-ui';ctx.fillText('A'+(i+1),p.x+9,p.y-7)}ctx.restore()}ctx.restore()}
-function tick(now){window.launcherVisualState={W,H,camera,cameraY,phase,theta,tip:cradlePoint(),rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y}])):null};let dt=Math.min(.033,(now-lastTime)/1000||.016);lastTime=now;if(phase==='launching'||phase==='airborne')frameTime+=dt;else frameTime=0;simulate(dt);render();requestAnimationFrame(tick)}resize();loadDemo();setPhase('build');requestAnimationFrame(tick);
+function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#78aac9';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(0,-cameraY);drawSky();drawHazards();drawGore();if(camera<750)catapult();if(dummy){drawRag()}if(phase==='build'||phase==='charged'||phase==='done'){ctx.save();ctx.translate(-camera,0);for(let i=0;i<frameOffsets.length;i++){const p=framePoint(i);ctx.fillStyle=pending?.kind==='frame'&&pending.index===i?'#fff':'#37decc';ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);ctx.fill();ctx.fillStyle='#0c2636';ctx.font='bold 9px system-ui';ctx.fillText('F'+(i+1),p.x+9,p.y-7)}for(let i=0;i<armOffsets.length;i++){const p=armPoint(i);ctx.fillStyle=pending?.kind==='arm'&&pending.index===i?'#fff':'#ffc049';ctx.beginPath();ctx.arc(p.x,p.y,6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#342716';ctx.font='bold 9px system-ui';ctx.fillText('A'+(i+1),p.x+9,p.y-7)}ctx.restore()}ctx.restore()}
+function tick(now){window.launcherVisualState={W,H,camera,cameraY,phase,theta,tip:cradlePoint(),hazards:LEVEL_HAZARDS,rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y}])):null};let dt=Math.min(.033,(now-lastTime)/1000||.016);lastTime=now;if(phase==='launching'||phase==='airborne')frameTime+=dt;else frameTime=0;simulate(dt);render();requestAnimationFrame(tick)}resize();loadDemo();setPhase('build');requestAnimationFrame(tick);
 })();
 </script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js"></script></body></html>
