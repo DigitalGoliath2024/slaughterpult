@@ -169,16 +169,21 @@ function drawSkullBackdrop(){
 function drawSky(){
  if(currentLevel==='trampoline'){drawSkullBackdrop();drawTrampolineTerrain();return;}
  const floor=H*.88,sky=levelSkyImages[currentLevel];
- // Draw the distant sky in screen space, preserving the artwork's aspect
- // ratio. Camera altitude must never stretch it into a world-height plane.
+ // One panoramic sky band: mirrored horizontal joins keep long flights moving
+ // without vertical repeats, exposed borders, or changes to the artwork's aspect.
  ctx.fillStyle='#070913';ctx.fillRect(0,cameraY,W,H);
  if(sky.complete&&sky.naturalWidth>0){
   const sourceHeight=sky.naturalHeight*.86; // Hide the lower artwork border.
-  const scale=Math.max(W/sky.naturalWidth,H/sourceHeight);
-  const visibleWidth=W/scale,visibleHeight=H/scale;
-  const maxSourceOffset=sky.naturalWidth-visibleWidth;
-  const sourceX=Math.max(0,Math.min(maxSourceOffset,maxSourceOffset*.5+camera*.06));
-  ctx.drawImage(sky,sourceX,0,visibleWidth,visibleHeight,0,cameraY,W,H);
+  const scale=Math.max(W*1.25/sky.naturalWidth,H*1.35/sourceHeight);
+  const tileW=sky.naturalWidth*scale,tileH=sourceHeight*scale;
+  const skyCamera=camera*.18,start=Math.floor(skyCamera/tileW);
+  const cropY=Math.max(0,Math.min(tileH-H,(tileH-H)*.5+cameraY*.12));
+  for(let i=start;i<start+Math.ceil(W/tileW)+1;i++){
+   const x=i*tileW-skyCamera;
+   ctx.save();ctx.translate(x+(Math.abs(i%2)?tileW:0),cameraY-cropY);
+   if(Math.abs(i%2))ctx.scale(-1,1);
+   ctx.drawImage(sky,0,0,sky.naturalWidth,sourceHeight,0,0,tileW,tileH);ctx.restore();
+  }
  }
  const bg=currentLevel==='factory'
   ?(horrorFactoryImage.complete&&horrorFactoryImage.naturalWidth?horrorFactoryImage:cleanFactoryWallImage.complete&&cleanFactoryWallImage.naturalWidth?cleanFactoryWallImage:industrialWallImage)
