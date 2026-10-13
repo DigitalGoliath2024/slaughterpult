@@ -20,7 +20,33 @@ function loadDemo(){connections=[{type:'rubber',f:0,a:0},{type:'spring',f:2,a:1}
 function socketAt(x,y){let match=null,bestD=20;frameOffsets.forEach((_,i)=>{const p=framePoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'frame',index:i}}});armOffsets.forEach((_,i)=>{const p=armPoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'arm',index:i}}});return match}
 canvas.addEventListener('pointerdown',e=>{if(phase==='flying')return;if(phase==='done')reset(false);const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const s=socketAt(x,y);if(!s)return;if(!pending){pending=s;startNotice(`<strong>Socket selected:</strong> ${s.kind==='frame'?'Frame':'Arm'} ${s.index+1}. Click a socket on the other piece.`)}else if(pending.kind!==s.kind){if(connections.length>=4){startNotice('<strong>Maximum 4 power components.</strong> Remove one before adding another.');pending=null;return}const c={type:selected,f:s.kind==='frame'?s.index:pending.index,a:s.kind==='arm'?s.index:pending.index};if(connections.some(z=>z.type===c.type&&z.f===c.f&&z.a===c.a)){startNotice('That component is already installed.');pending=null;return}connections.push(c);pending=null;updatePanel();setPhase('build');startNotice(`<strong>${selected.toUpperCase()} CONNECTED.</strong> Try changing the angle or arm length, or charge your launcher.`)}else{pending=s;startNotice('Choose a socket on the opposite piece.')}render()});
 document.querySelectorAll('[data-part]').forEach(b=>b.onclick=()=>{selected=b.dataset.part;document.querySelectorAll('[data-part]').forEach(x=>x.classList.toggle('selected',x===b));pending=null;startNotice(`<strong>${b.querySelector('strong').textContent} selected.</strong> Click a frame socket, then an arm socket.`);render()});$('armLength').oninput=e=>{armScale=e.target.value/100;$('armVal').textContent=e.target.value+'%';if(phase!=='build')reset(false);render()};$('angle').oninput=e=>{releaseDeg=+e.target.value;$('angleVal').textContent=releaseDeg+'°';if(phase!=='build')reset(false);render()};$('reset').onclick=()=>reset(true);$('charge').onclick=()=>{if(!connections.length){loadDemo()}theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;maxDist=0;setPhase('charged');$('distanceText').textContent='0 ft';startNotice('<strong>Charged!</strong> The arm is pulled back. Press LAUNCH and see what happens.');render()};$('launch').onclick=()=>{if(phase!=='charged')return;phase='launching';omega=0;dummy=null;rag=null;flightStart=0;maxDist=0;setPhase('flying');phase='launching';startNotice('<strong>Launching!</strong> Stored elastic energy and leverage accelerate the arm.');};
-function drawSky(){let sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#5d94c2');sky.addColorStop(.65,'#b1d1e0');sky.addColorStop(1,'#e6c9a3');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(-(camera*.17)%700,0);for(let i=-1;i<4;i++){let xx=i*650+180;ctx.fillStyle='rgba(255,255,255,.55)';cloud(xx,H*.15,1);cloud(xx+220,H*.29,.7)}ctx.restore();const horizon=H*.72;ctx.save();ctx.translate(-camera*.12,0);ctx.fillStyle='#89999c';ctx.beginPath();ctx.moveTo(-100,horizon);for(let x=-100;x<W+camera*.12+350;x+=75){const y=horizon-24-Math.abs(Math.sin(x*.006))*50-Math.abs(Math.sin(x*.013))*38;ctx.lineTo(x,y)}ctx.lineTo(W+camera*.12+500,H);ctx.lineTo(-100,H);ctx.fill();ctx.fillStyle='#bd9874';ctx.beginPath();ctx.moveTo(-100,horizon+15);for(let x=-100;x<W+camera*.12+350;x+=55){ctx.lineTo(x,horizon+4+Math.sin(x*.015)*13)}ctx.lineTo(W+camera*.12+500,H);ctx.lineTo(-100,H);ctx.fill();ctx.restore();const floor=H*.88;let ground=ctx.createLinearGradient(0,floor,0,H);ground.addColorStop(0,'#a87b57');ground.addColorStop(1,'#6b4a37');ctx.fillStyle=ground;ctx.fillRect(0,floor,W,H-floor);ctx.strokeStyle='#765338';ctx.lineWidth=2;for(let i=0;i<30;i++){let x=(i*139-(camera*.85)%1390+1500)% (W+150);let y=floor+12+(i*71)%(Math.max(15,H-floor-13));ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+18,y+2);ctx.stroke()}for(let i=0;i<15;i++){let x=i*165-camera*.95; if(x<0||x>W)continue;ctx.strokeStyle='#e9c5a3';ctx.beginPath();ctx.moveTo(x,floor);ctx.lineTo(x,floor-7);ctx.stroke();ctx.fillStyle='#e9c5a3';ctx.font='10px system-ui';ctx.fillText(`${i*100}ft`,x+4,floor-10)}}
+// Temporary industrial wall. A custom texture can replace these panels later.
+function drawSky(){
+ const floor=H*.88;
+ ctx.fillStyle='#343b42';ctx.fillRect(0,0,W,floor);
+ ctx.save();ctx.translate(-(camera*.38)%240,0);
+ for(let x=-240;x<W+260;x+=240){
+  ctx.fillStyle=x%480===0?'#414950':'#3b4349';
+  ctx.fillRect(x+3,0,234,floor);
+  ctx.fillStyle='#242d33';ctx.fillRect(x+230,0,7,floor);
+  ctx.strokeStyle='#65717a';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(x+8,63);ctx.lineTo(x+226,63);ctx.moveTo(x+8,floor-90);ctx.lineTo(x+226,floor-90);ctx.stroke();
+  ctx.fillStyle='#879198';
+  for(const yy of [77,floor-103])for(const xx of [18,216]){
+   ctx.beginPath();ctx.arc(x+xx,yy,3,0,2*Math.PI);ctx.fill();
+  }
+ }
+ ctx.restore();
+ // A pipe rail and concrete apron sell the backdrop as a factory interior.
+ ctx.fillStyle='#222a2e';ctx.fillRect(0,floor-9,W,12);
+ ctx.strokeStyle='#89939b';ctx.lineWidth=5;
+ ctx.beginPath();ctx.moveTo(0,90);ctx.lineTo(W,90);ctx.stroke();
+ const concrete=ctx.createLinearGradient(0,floor,0,H);
+ concrete.addColorStop(0,'#656a6b');concrete.addColorStop(1,'#303536');
+ ctx.fillStyle=concrete;ctx.fillRect(0,floor,W,H-floor);
+ ctx.strokeStyle='#454c4f';ctx.lineWidth=2;
+ for(let x=-(camera%170);x<W+170;x+=170){ctx.beginPath();ctx.moveTo(x,floor);ctx.lineTo(x+22,H);ctx.stroke();}
+}
 function cloud(x,y,s){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.beginPath();ctx.ellipse(0,0,50,14,0,0,Math.PI*2);ctx.ellipse(-20,-9,24,17,0,0,Math.PI*2);ctx.ellipse(17,-11,33,19,0,0,Math.PI*2);ctx.fill();ctx.restore()}
 function beam(a,b,width=12,color='#b77b46'){ctx.save();ctx.lineCap='round';ctx.strokeStyle='#3e312c';ctx.lineWidth=width+5;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();ctx.strokeStyle='rgba(255,217,150,.46)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(a.x,a.y-width*.23);ctx.lineTo(b.x,b.y-width*.23);ctx.stroke();ctx.restore()}
 function joint(p,r=7){ctx.fillStyle='#26384a';ctx.beginPath();ctx.arc(p.x,p.y,r+3,0,Math.PI*2);ctx.fill();ctx.fillStyle='#98a3ae';ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#445765';ctx.beginPath();ctx.arc(p.x,p.y,Math.max(2,r/3),0,Math.PI*2);ctx.fill()}
