@@ -720,6 +720,16 @@ function animate(){
    rotate('RightLeg',norm(a('rk','rf')-a('hip','rk')));
    if(bones.Head)bones.Head.scale.setScalar(state.headDetached?.001:1);
    if(!state.headDetached)rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
+   // The physics floor is solid; keep the *visible skinned mesh* above it too.
+   // Previously its fixed pelvis offset could sink the actual torso through ground.
+   if(state.groundTime>0){
+    model.updateMatrixWorld(true);
+    const visibleBounds=new THREE.Box3().setFromObject(model);
+    const floorScreen=h/2-h*.88+(state.cameraY||0);
+    if(visibleBounds.min.y<floorScreen){
+     model.position.y+=floorScreen-visibleBounds.min.y;
+    }
+   }
   } else if(state.shredded){
    if(bones.Head)bones.Head.scale.setScalar(1);
    model.visible=false;
