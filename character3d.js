@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
-let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={};
+let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={},seatRoot=null,seatReady=false;
 try {
  renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
@@ -14,6 +14,42 @@ try {
  camera=new THREE.OrthographicCamera(-500,500,300,-300,0.1,2000);
  camera.position.set(0,0,1000);camera.lookAt(0,0,0);
 } catch(e){status.textContent='3D unavailable — 2D ragdoll active';}
+
+const chairURL='./Meshy_AI_catapult_seat_3d_1013060518_image-to-3d-texture.glb';
+async function loadChair(){
+ try{
+  const response=await fetch(chairURL,{method:'HEAD'});
+  if(!response.ok)throw Error('Chair GLB not uploaded');
+  const gltf=await new GLTFLoader().loadAsync(chairURL);
+  seatRoot=new THREE.Group();
+  // 3D seat stays fixed on the arm, not on the airborne ragdoll.
+  const chair=gltf.scene;
+  const box=new THREE.Box3().setFromObject(chair),span=new THREE.Vector3();
+  box.getSize(span);
+  if(span.y<=0)throw Error('Invalid chair dimensions');
+  chair.scale.multiplyScalar(120/span.y);
+  chair.updateMatrixWorld(true);
+  const scaled=new THREE.Box3().setFromObject(chair);
+  const mid=scaled.getCenter(new THREE.Vector3());
+  chair.position.sub(mid);
+  // Meshy model arrives as a side-profile chair; view its profile along Z.
+  seatRoot.add(chair);
+  scene.add(seatRoot);
+  seatReady=true;window.seatOverlayReady=true;
+ }catch(e){
+  console.warn('3D chair unavailable, original basket retained',e);
+  window.seatOverlayReady=false;
+ }
+}
+function positionChair(state,w,h){
+ if(!seatRoot||!seatReady)return;
+ // Seat follows the end of the wooden arm even after the rider leaves.
+ seatRoot.visible=state.camera<750;
+ seatRoot.position.set(state.tip.x-state.camera-w/2-8,h/2-state.tip.y+41,-5);
+ // Zero rotation at the loaded angle; rotate with the arm as it fires.
+ seatRoot.rotation.z=-(state.theta-3.39);
+}
+
 const parts=['LeftShoulder','RightShoulder','LeftHand','RightHand','Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg','LeftFoot','RightFoot'];
 const urls={cowboy:'./western_cowboy_rigged.glb',human:'./rigged_t-pose_human_male_w_50_face_blendshapes.glb',meshy:'./Meshy_AI_scared_crash_characte_All_Animations.glb'};
 function bone(part){
@@ -183,6 +219,7 @@ function animate(){
    applySittingPose();
   }
  }else if(model){model.visible=false;}
+ positionChair(state,w,h);
  renderer.render(scene,camera);
  drawBasket(state,w,h);
 }
@@ -199,7 +236,7 @@ function drawBasket(state,w,h){
  if(basketCanvas.width!==cw||basketCanvas.height!==ch){basketCanvas.width=cw;basketCanvas.height=ch;}
  basketCtx.setTransform(dpr,0,0,dpr,0,0);
  basketCtx.clearRect(0,0,w,h);
- if(state.rag||!window.characterOverlayReady)return;
+ if(seatReady||state.rag||!window.characterOverlayReady)return;
  const x=state.tip.x-state.camera,y=state.tip.y;
  basketCtx.save();basketCtx.translate(x,y);basketCtx.rotate(-state.theta);
  basketCtx.fillStyle='#344a59';basketCtx.strokeStyle='#172b38';basketCtx.lineWidth=4;
@@ -208,4 +245,4 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){load('cowboy');animate();}
+if(renderer){loadChair();load('cowboy');animate();}
