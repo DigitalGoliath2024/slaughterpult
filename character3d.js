@@ -508,10 +508,13 @@ function positionGore(state,w,h){
   if(goreParts.some(p=>p.userData.joint===joint)||!goreAsset)continue;
   const part=buildGorePart(joint);if(!part)continue;
   const node=state.rag[joint]||state.rag.chest;
+  // Nearby but varied scatter: inherit the ragdoll's impact momentum,
+  // then add limited independent kicks, not long-range explosions.
   part.userData.worldX=node.x;
   part.userData.worldY=node.y;
-  part.userData.vx=(Math.random()-.42)*185;
-  part.userData.vy=-90-Math.random()*170;
+  part.userData.vx=THREE.MathUtils.clamp((node.vx||0)*.28,-90,90)+(Math.random()-.5)*155;
+  part.userData.vy=THREE.MathUtils.clamp((node.vy||0)*.23,-90,100)-45-Math.random()*105;
+  part.userData.originX=node.x;
   part.userData.resting=false;
   scene.add(part);goreParts.push(part);
  }
@@ -526,6 +529,8 @@ function positionGore(state,w,h){
    u.vy+=780*dt;
    u.vx*=Math.exp(-.34*dt);
    u.worldX+=u.vx*dt;
+   // Keep debris within a plausible vicinity of the impact site.
+   u.worldX=THREE.MathUtils.clamp(u.worldX,u.originX-165,u.originX+165);
    u.worldY+=u.vy*dt;
    p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    p.rotation.x+=u.spin*dt*15;
