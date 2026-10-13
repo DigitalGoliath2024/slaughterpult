@@ -70,12 +70,12 @@ async function loadChair(){
    seatRoot.add(b);
   }
   scene.add(seatRoot);
-  seatReady=true;window.seatOverlayReady=true;
+  seatReady=true;window.seatOverlayReady=true;window.seatLoading=false;
   status.textContent='3D chair loaded · '+(activeId==='cowboy'?'Cowboy':activeId==='human'?'Human':'Crash Character');
  }catch(e){
   console.warn('3D chair unavailable, original basket retained',e);
   status.textContent='Chair could not load: '+(e?.message||'unknown error');
-  window.seatOverlayReady=false;
+  window.seatOverlayReady=false;window.seatLoading=false;
  }
 }
 function positionChair(state,w,h){
@@ -137,7 +137,7 @@ function bone(part){
  return found;
 }
 async function load(id){
- const mine=++ticket;window.characterOverlayReady=false;
+ const mine=++ticket;window.characterOverlayReady=false;window.characterLoading=true;
  status.textContent='Checking '+id+' character file…';
  try {
   const check=await fetch(urls[id],{method:'HEAD',cache:'no-store'});
@@ -164,12 +164,12 @@ async function load(id){
   calibrateRightHandRest();
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
-  window.characterOverlayReady=true;
+  window.characterOverlayReady=true;window.characterLoading=false;
   status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v35';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
   status.textContent='Could not load '+id+' · '+(e?.message||'model error');
-  window.characterOverlayReady=false;
+  window.characterOverlayReady=false;window.characterLoading=false;
  }
 }
 document.querySelectorAll('[data-character]').forEach(b=>b.addEventListener('click',()=>load(b.dataset.character)));
