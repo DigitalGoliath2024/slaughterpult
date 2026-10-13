@@ -97,7 +97,7 @@ function seatCharacterOnChair(){
  const target=seatRoot.localToWorld(chairHipAnchor.clone());
  model.rotation.order='YXZ';
  model.rotation.y=Math.PI/2;
- model.rotation.z=seatRoot.rotation.z-0.09; // gentle lean toward screen-left
+ model.rotation.z=seatRoot.rotation.z; // torso aligned with seat; no extra left tilt
  model.position.set(0,0,0);
  model.updateMatrixWorld(true);
  const actual=bones.Hips.getWorldPosition(new THREE.Vector3());
