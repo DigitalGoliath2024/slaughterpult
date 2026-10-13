@@ -441,37 +441,52 @@ function clearGoreParts(){
  }
  goreParts=[];goreWasShredded=false;
 }
+// Detached gore is a separate ballistic simulation; physics nodes may be pinned
+// to equipment or finish at rest above the floor and must not suspend visuals.
+let goreLastTime=0;
 function positionGore(state,w,h){
  const fullShred=!!state.shredded,headOnly=!!state.headDetached;
- if((!fullShred&&!headOnly)||!state.rag){if(goreParts.length)clearGoreParts();return;}
- // Head can break independently without shredding the entire body.
- if(!goreParts.length&&goreAsset){
-  for(const joint of fullShred?Object.keys(GORE_MAP):['head']){
-   const part=buildGorePart(joint);if(part){scene.add(part);goreParts.push(part);}
-  }
- }
- if(fullShred&&goreParts.length===1){
-  // Upgrade from a detached head to the entire dissected skeleton.
-  for(const joint of Object.keys(GORE_MAP).filter(x=>x!=='head')){
-   const part=buildGorePart(joint);if(part){scene.add(part);goreParts.push(part);}
-  }
+ if((!fullShred&&!headOnly)||!state.rag){if(goreParts.length)clearGoreParts();goreLastTime=0;return;}
+ const now=performance.now();
+ const dt=goreLastTime?Math.min(.035,(now-goreLastTime)/1000):1/60;
+ goreLastTime=now;
+ const joints=fullShred?Object.keys(GORE_MAP):['head'];
+ for(const joint of joints){
+  if(goreParts.some(p=>p.userData.joint===joint)||!goreAsset)continue;
+  const part=buildGorePart(joint);if(!part)continue;
+  const node=state.rag[joint]||state.rag.chest;
+  part.userData.worldX=node.x;
+  part.userData.worldY=node.y;
+  part.userData.vx=(Math.random()-.42)*185;
+  part.userData.vy=-90-Math.random()*170;
+  part.userData.resting=false;
+  scene.add(part);goreParts.push(part);
  }
  const floor=h*.88;
  for(const p of goreParts){
-  const n=state.rag[p.userData.joint];if(!n)continue;
-  const groundY=floor-(p.userData.halfHeight||12);
-  const landed=n.y>=groundY-2;
-  if(landed&&!p.userData.resting){
-   p.userData.resting=true;p.userData.restX=n.x;p.userData.bounces=0;
+  const u=p.userData;
+  const groundY=floor-(u.halfHeight||12);
+  if(!u.resting){
+   u.vy+=780*dt;
+   u.vx*=Math.exp(-.34*dt);
+   u.worldX+=u.vx*dt;
+   u.worldY+=u.vy*dt;
+   p.rotation.z+=u.spin*dt*60;
+   p.rotation.x+=u.spin*dt*15;
+   if(u.worldY>=groundY){
+    u.worldY=groundY;
+    if(u.vy>85&&u.bounces<2){
+     u.vy=-u.vy*.19;u.vx*=.58;u.bounces++;
+    }else{
+     u.vy=0;u.vx=0;u.resting=true;
+    }
+   }
+  }else{
+   u.worldY=groundY;
+   p.rotation.z*=Math.exp(-9*dt);
+   p.rotation.x*=Math.exp(-9*dt);
   }
-  if(!p.userData.resting){p.rotation.z+=p.userData.spin;p.rotation.x+=p.userData.spin*.25;}
-  else{
-   p.userData.bounces++;
-   p.rotation.z*=.88;p.rotation.x*=.88;
-  }
-  const x=p.userData.resting?p.userData.restX:n.x;
-  const y=p.userData.resting?groundY:Math.min(n.y,groundY);
-  p.position.set(x-state.camera-w/2,h/2-y+(state.cameraY||0),65);
+  p.position.set(u.worldX-state.camera-w/2,h/2-u.worldY+(state.cameraY||0),65);
  }
 }
 function animate(){
