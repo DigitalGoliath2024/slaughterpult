@@ -45,8 +45,8 @@ industrialWallImage.src='./rusted_slaughter_wall.png';
 function drawSky(){
  const floor=H*.88;
  ctx.fillStyle='#343b42';ctx.fillRect(0,0,W,floor);
- const bg=currentLevel==='factory'?(factoryWallReady?factoryWallImage:industrialWallImage):industrialWallImage;
- const ready=currentLevel==='factory'?(factoryWallReady||industrialWallReady):industrialWallReady;
+ const bg=currentLevel==='factory'?industrialWallImage:(factoryWallReady?factoryWallImage:industrialWallImage);
+ const ready=currentLevel==='factory'?industrialWallReady:(factoryWallReady||industrialWallReady);
  if(ready){
   // Tile the source's metal-panel artwork across the world. Crop its light
   // outer margins, which are not part of the factory wall.
@@ -146,7 +146,7 @@ function stepBlood(dt){
   let splashed=false;
   for(const obstacle of LEVEL_HAZARDS){
    if(d.x<obstacle.x-obstacle.width/2||d.x>obstacle.x+obstacle.width/2)continue;
-   const surface=obstacle.kind==='ramp'?rampY(obstacle,d.x):obstacle.kind==='conveyor'?floor-77:obstacle.kind==='press'?floor-120+(Math.sin(levelClock*4)+1)*33:obstacle.kind==='roller'?floor-135:obstacle.kind==='grinder'?floor-105:null;
+   const surface=obstacle.kind==='ramp'?rampY(obstacle,d.x):obstacle.kind==='conveyor'?floor-77:obstacle.kind==='press'?pressBottomY():obstacle.kind==='roller'?floor-135:obstacle.kind==='grinder'?floor-105:null;
    // Cross the visible surface from the previous position.
    if(surface!==null&&d.vy>0&&oldY<=surface+d.size&&d.y>=surface-d.size){
     markWall(d.x,surface,Math.min(2,d.size/3));
@@ -237,7 +237,9 @@ const COURSES={
  ]
 };
 let LEVEL_HAZARDS=COURSES.slide;
-const gateOpen=()=>Math.sin(levelClock*2.15)>-.03;
+const gateOpen=()=>Math.sin(levelClock*2.15)>.35;
+const gateGap=()=>gateOpen()?115:12;
+const pressBottomY=()=>H*.88-155+(Math.sin(levelClock*4)+1)*52;
 const rampY=(h,x)=>H*.88-h.y+(x-(h.x-h.width*.5))*h.slope;
 let hitHazards=new Set(),hazardPoints=0,levelFailed=false;
 // Each contacting physics node is tested, not just the dummy's center.
@@ -270,7 +272,7 @@ function hazardHit(x,y,part=null){
    }
    continue;
   }
-  if(h.kind==='door'&&n&&!gateOpen()&&n.y>floor-205){
+  if(h.kind==='door'&&n&&!gateOpen()&&n.y>floor-220){
    n.x=h.x-h.width/2-n.r;n.px=n.x+Math.abs(n.x-n.px)*.25;
    n.py=n.y-3;rag.doorHit=true;
    if(!hitHazards.has('doorFail')){hitHazards.add('doorFail');levelFailed=true;hazardPoints=0;bloodBurst(n.x,n.y,.7);}
@@ -285,10 +287,14 @@ function hazardHit(x,y,part=null){
    continue;
   }
   if(h.kind==='press'&&n){
-   const pressBottom=floor-120+(Math.sin(levelClock*4)+1)*33;
+   const pressBottom=pressBottomY();
    if(n.y+n.r>=pressBottom-15&&n.y<floor-42){
     const speed=Math.hypot(n.x-n.px,n.y-n.py)*60;
-    n.y=pressBottom-n.r;n.py=n.y+6;
+    const incoming=n.y-n.py;
+    n.y=Math.min(n.y,pressBottom-n.r);
+    // Rebound downward as the press rises; never leave a joint attached to the moving piston.
+    n.py=n.y-Math.max(2,Math.abs(incoming)*.35);
+    n.px=n.x+(n.x-n.px)*.2;
     if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;directionalBlood(x,y,-.6,-1.2,1.8);if(speed>125)tearJoint('neck','head',x,y,speed);}
    }
    continue;
@@ -328,9 +334,14 @@ function drawHazards(){
   }else if(h.kind==='door'){
    ctx.fillStyle='#85939a';ctx.fillRect(h.x-32,floor-220,64,13);
    ctx.fillStyle='#303a40';ctx.fillRect(h.x-34,floor-220,9,220);ctx.fillRect(h.x+25,floor-220,9,220);
-   const lift=gateOpen()?145:5;
-   ctx.fillStyle='#676d70';ctx.fillRect(h.x-26,floor-206-lift,52,198);
-   ctx.strokeStyle='#aeb8bc';ctx.lineWidth=3;ctx.strokeRect(h.x-26,floor-206-lift,52,198);
+   // Opposing upper and lower steel jaws form the timed opening.
+   const gap=gateGap(),middle=floor-114;
+   const upperBottom=middle-gap/2,lowerTop=middle+gap/2;
+   ctx.fillStyle='#676d70';ctx.fillRect(h.x-26,floor-330,52,upperBottom-(floor-330));
+   ctx.fillRect(h.x-26,lowerTop,52,floor-lowerTop);
+   ctx.strokeStyle='#aeb8bc';ctx.lineWidth=3;
+   ctx.strokeRect(h.x-26,floor-330,52,upperBottom-(floor-330));
+   ctx.strokeRect(h.x-26,lowerTop,52,floor-lowerTop);
    ctx.fillStyle=gateOpen()?'#6bdb9d':'#ff655d';ctx.beginPath();ctx.arc(h.x,floor-235,7,0,Math.PI*2);ctx.fill();
    ctx.fillStyle='#171e21';ctx.font='bold 13px system-ui';ctx.fillText(gateOpen()?'OPEN':'CLOSED',h.x-24,floor-222);
   }else if(h.kind==='conveyor'){
@@ -352,7 +363,7 @@ function drawHazards(){
   }else if(h.kind==='press'){
    ctx.fillStyle='#52616b';ctx.fillRect(h.x-47,floor-237,94,25);
    for(const x of [h.x-40,h.x+35]){ctx.fillStyle='#86949b';ctx.fillRect(x,floor-215,7,152);}
-   const bottom=floor-120+(Math.sin(levelClock*4)+1)*33;
+   const bottom=pressBottomY();
    ctx.fillStyle='#bac4c8';ctx.fillRect(h.x-35,floor-212,70,bottom-(floor-212));
    ctx.fillStyle='#6a777d';ctx.fillRect(h.x-53,bottom-12,106,20);
    ctx.fillStyle='#c08f3c';for(let x=h.x-50;x<h.x+47;x+=19)ctx.fillRect(x,bottom-11,10,5);
@@ -491,7 +502,7 @@ function drawRag(){if(window.characterOverlayReady||!rag)return;ctx.save();ctx.t
 limb('hip','chest',20,'#db9b40');limb('chest','neck',11,'#e8b95d');for(const [a,b] of [['chest','ls'],['ls','le'],['le','lh'],['chest','rs'],['rs','re'],['re','rh'],['hip','lk'],['lk','lf'],['hip','rk'],['rk','rf']])limb(a,b, a==='hip'||a==='chest'?11:9,a[0]==='l'?'#e4b559':'#e7aa42');
 for(const [id,x] of Object.entries(n)){if(id==='head'){ctx.fillStyle='#20252b';ctx.beginPath();ctx.arc(x.x,x.y,16,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f3c66c';ctx.beginPath();ctx.arc(x.x,x.y,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#393d40';ctx.beginPath();ctx.arc(x.x-4,x.y-2,2,0,Math.PI*2);ctx.arc(x.x+4,x.y-2,2,0,Math.PI*2);ctx.fill();}else if(!['hip','chest'].includes(id)){ctx.fillStyle='#333f48';ctx.beginPath();ctx.arc(x.x,x.y,Math.min(x.r,5),0,Math.PI*2);ctx.fill();ctx.fillStyle='#8e9a9f';ctx.beginPath();ctx.arc(x.x,x.y,2,0,Math.PI*2);ctx.fill()}}ctx.restore()}
 function drawDummy(x,y,angle=0){ctx.save();ctx.translate(x,y);ctx.rotate(-angle*.3);ctx.lineCap='round';ctx.strokeStyle='#20252b';ctx.lineWidth=14;ctx.beginPath();ctx.moveTo(0,-27);ctx.lineTo(0,-3);ctx.moveTo(-6,-14);ctx.lineTo(-18,3);ctx.moveTo(6,-14);ctx.lineTo(18,3);ctx.moveTo(-5,0);ctx.lineTo(-12,21);ctx.moveTo(5,0);ctx.lineTo(12,21);ctx.stroke();ctx.strokeStyle='#dfa347';ctx.lineWidth=10;ctx.stroke();ctx.fillStyle='#f1bf5d';ctx.strokeStyle='#242d31';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,-42,13,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore()}
-function forces(){let T=0;for(const c of connections){let a=framePoint(c.f),b=armPoint(c.a),dx=a.x-b.x,dy=a.y-b.y,len=Math.hypot(dx,dy)||1,unit={x:dx/len,y:dy/len};let power=0;if(c.type==='rubber')power=Math.max(0,(len-105)*.34);if(c.type==='spring')power=Math.max(0,(len-70)*.22);if(c.type==='piston')power=-Math.max(0,(165-len)*.35);if(c.type==='weight')power=28;const fx=unit.x*power,fy=unit.y*power,rx=b.x-pivot.x,ry=b.y-pivot.y;T+=(rx*fy-ry*fx)*-.0012;}return T}
+function forces(){let T=0;for(const c of connections){let a=framePoint(c.f),b=armPoint(c.a),dx=a.x-b.x,dy=a.y-b.y,len=Math.hypot(dx,dy)||1,unit={x:dx/len,y:dy/len};let power=0;if(c.type==='rubber')power=Math.max(0,(len-105)*.23);if(c.type==='spring')power=Math.max(0,(len-70)*.48);if(c.type==='piston')power=-Math.max(0,(165-len)*.35);if(c.type==='weight')power=28;const fx=unit.x*power,fy=unit.y*power,rx=b.x-pivot.x,ry=b.y-pivot.y;T+=(rx*fy-ry*fx)*-.0012;}return T}
 function simulate(dt){if(phase==='launching'||phase==='airborne')levelClock+=dt;if(phase==='launching'){
   // The cradle starts BEHIND the pivot (to the left). As the arm swings
   // upward toward the front, its tangential velocity carries the dummy RIGHT.
