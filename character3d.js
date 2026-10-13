@@ -571,11 +571,13 @@ function clearGoreParts(){
 let goreLastTime=0;
 function positionGore(state,w,h){
  const fullShred=!!state.shredded,headOnly=!!state.headDetached;
- if((!fullShred&&!headOnly)||!state.rag){window.skullCameraTarget=null;if(goreParts.length)clearGoreParts();goreLastTime=0;return;}
+ const detached=new Set(state.injuries||[]);
+ if((!fullShred&&!headOnly&&!detached.size)||!state.rag){window.skullCameraTarget=null;if(goreParts.length)clearGoreParts();goreLastTime=0;return;}
  const now=performance.now();
  const dt=goreLastTime?Math.min(.035,(now-goreLastTime)/1000):1/60;
  goreLastTime=now;
- const joints=fullShred?Object.keys(GORE_MAP):['head'];
+ const severedParts={'neck:head':'head','le:lh':'lh','re:rh':'rh','lk:lf':'lf','rk:rf':'rf','ls:le':'le','rs:re':'re','hip:lk':'lk','hip:rk':'rk','hip:waist':'chest'};
+ const joints=fullShred?Object.keys(GORE_MAP):[...new Set([...detached].map(x=>severedParts[x]).filter(Boolean))];
  for(const joint of joints){
   if(goreParts.some(p=>p.userData.joint===joint)||!goreAsset)continue;
   // The skull is always exposed. The rest is a different combination each crash.
@@ -729,6 +731,14 @@ function animate(){
    rotate('RightHand',wristSwing('re','rh'));
    rotate('LeftFoot',THREE.MathUtils.clamp((rag.lf.x-rag.lk.x)*.009,-.35,.35));
    rotate('RightFoot',THREE.MathUtils.clamp((rag.rf.x-rag.rk.x)*.009,-.35,.35));
+   // Remove visibly severed distal pieces from the intact skinned avatar.
+   // Spawn the corresponding fragment in positionGore instead of leaving
+   // an intact arm or leg mysteriously connected to its detached counterpart.
+   const injuries=new Set(state.injuries||[]);
+   for(const [edge,part] of [
+    ['le:lh','RightHand'],['re:rh','LeftHand'],
+    ['lk:lf','LeftFoot'],['rk:rf','RightFoot']
+   ])if(bones[part])bones[part].scale.setScalar(injuries.has(edge)?.001:1);
    if(bones.Head)bones.Head.scale.setScalar(state.headDetached?.001:1);
    if(!state.headDetached)rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
    // The physics floor is solid; keep the *visible skinned mesh* above it too.
