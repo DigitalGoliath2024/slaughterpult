@@ -21,9 +21,26 @@ function socketAt(x,y){let match=null,bestD=20;frameOffsets.forEach((_,i)=>{cons
 canvas.addEventListener('pointerdown',e=>{if(phase==='flying')return;if(phase==='done')reset(false);const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const s=socketAt(x,y);if(!s)return;if(!pending){pending=s;startNotice(`<strong>Socket selected:</strong> ${s.kind==='frame'?'Frame':'Arm'} ${s.index+1}. Click a socket on the other piece.`)}else if(pending.kind!==s.kind){if(connections.length>=4){startNotice('<strong>Maximum 4 power components.</strong> Remove one before adding another.');pending=null;return}const c={type:selected,f:s.kind==='frame'?s.index:pending.index,a:s.kind==='arm'?s.index:pending.index};if(connections.some(z=>z.type===c.type&&z.f===c.f&&z.a===c.a)){startNotice('That component is already installed.');pending=null;return}connections.push(c);pending=null;updatePanel();setPhase('build');startNotice(`<strong>${selected.toUpperCase()} CONNECTED.</strong> Try changing the angle or arm length, or charge your launcher.`)}else{pending=s;startNotice('Choose a socket on the opposite piece.')}render()});
 document.querySelectorAll('[data-part]').forEach(b=>b.onclick=()=>{selected=b.dataset.part;document.querySelectorAll('[data-part]').forEach(x=>x.classList.toggle('selected',x===b));pending=null;startNotice(`<strong>${b.querySelector('strong').textContent} selected.</strong> Click a frame socket, then an arm socket.`);render()});$('armLength').oninput=e=>{armScale=e.target.value/100;$('armVal').textContent=e.target.value+'%';if(phase!=='build')reset(false);render()};$('angle').oninput=e=>{releaseDeg=+e.target.value;$('angleVal').textContent=releaseDeg+'°';if(phase!=='build')reset(false);render()};$('reset').onclick=()=>reset(true);$('charge').onclick=()=>{if(!connections.length){loadDemo()}theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;maxDist=0;setPhase('charged');$('distanceText').textContent='0 ft';startNotice('<strong>Charged!</strong> The arm is pulled back. Press LAUNCH and see what happens.');render()};$('launch').onclick=()=>{if(phase!=='charged')return;phase='launching';omega=0;dummy=null;rag=null;flightStart=0;maxDist=0;setPhase('flying');phase='launching';startNotice('<strong>Launching!</strong> Stored elastic energy and leverage accelerate the arm.');};
 // Temporary industrial wall. A custom texture can replace these panels later.
+// Upload the supplied image as rusted_slaughter_wall.png beside index.html.
+// If it is missing, retain the procedural industrial wall as a fallback.
+const industrialWallImage=new Image();
+let industrialWallReady=false;
+industrialWallImage.onload=()=>{industrialWallReady=true;};
+industrialWallImage.onerror=()=>{industrialWallReady=false;};
+industrialWallImage.src='./rusted_slaughter_wall.png';
 function drawSky(){
  const floor=H*.88;
  ctx.fillStyle='#343b42';ctx.fillRect(0,0,W,floor);
+ if(industrialWallReady){
+  // Tile the source's metal-panel artwork across the world. Crop its light
+  // outer margins, which are not part of the factory wall.
+  const tileW=Math.max(680,Math.round(floor*1.92));
+  const first=Math.floor(camera/tileW)-1;
+  for(let i=first;i<first+Math.ceil(W/tileW)+3;i++){
+   const x=i*tileW-camera;
+   ctx.drawImage(industrialWallImage,8,95,1520,670,x,0,tileW,floor);
+  }
+ } else {
  ctx.save();ctx.translate(-(camera*.38)%240,0);
  for(let x=-240;x<W+260;x+=240){
   ctx.fillStyle=x%480===0?'#414950':'#3b4349';
@@ -37,6 +54,7 @@ function drawSky(){
   }
  }
  ctx.restore();
+ }
  // A pipe rail and concrete apron sell the backdrop as a factory interior.
  ctx.fillStyle='#222a2e';ctx.fillRect(0,floor-9,W,12);
  ctx.strokeStyle='#89939b';ctx.lineWidth=5;
