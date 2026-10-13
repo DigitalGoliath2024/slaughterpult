@@ -97,7 +97,7 @@ function seatCharacterOnChair(){
  const target=seatRoot.localToWorld(chairHipAnchor.clone());
  model.rotation.order='YXZ';
  model.rotation.y=Math.PI/2;
- model.rotation.z=seatRoot.rotation.z; // torso aligned with seat; no extra left tilt
+ model.rotation.z=0; // keep rider upright in screen space; hip remains anchored to moving chair
  model.position.set(0,0,0);
  model.updateMatrixWorld(true);
  const actual=bones.Hips.getWorldPosition(new THREE.Vector3());
@@ -263,7 +263,7 @@ function calibrateRightHandRest(){
 function applySittingPose(){
  for(const part of parts)if(bones[part])bones[part].quaternion.copy(base[part]);
  for(const [part,angle] of Object.entries(seatBends))pose(part,angle,0,0);
- pose('Spine',.08,0,0);
+ pose('Spine',0,0,0);
  // Preserve shoulders in their bind orientation and bend the arms at the
  // mapped upper-arm joints. Calibrated per loaded character.
  for(const [part,v] of Object.entries(armPose))pose(part,v.x,0,v.z);
