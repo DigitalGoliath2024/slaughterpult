@@ -32,12 +32,18 @@ async function loadChair(){
   const scaled=new THREE.Box3().setFromObject(chair);
   const mid=scaled.getCenter(new THREE.Vector3());
   chair.position.sub(mid);
-  // Meshy model arrives as a side-profile chair; view its profile along Z.
+  // The Meshy chair has its wide side profile in the Y/Z plane; turn it 90°
+  // so its profile faces the orthographic camera looking down Z.
+  chair.rotation.y=Math.PI/2;
+  chair.traverse(n=>{if(n.isMesh){n.frustumCulled=false;n.material?.side!==undefined&&(n.material.side=THREE.DoubleSide);}});
+  console.info('Slaughterpult chair loaded',span);
   seatRoot.add(chair);
   scene.add(seatRoot);
   seatReady=true;window.seatOverlayReady=true;
+  status.textContent='3D chair loaded · '+(activeId==='cowboy'?'Cowboy':activeId==='human'?'Human':'Crash Character');
  }catch(e){
   console.warn('3D chair unavailable, original basket retained',e);
+  status.textContent='Chair could not load: '+(e?.message||'unknown error');
   window.seatOverlayReady=false;
  }
 }
@@ -45,7 +51,7 @@ function positionChair(state,w,h){
  if(!seatRoot||!seatReady)return;
  // Seat follows the end of the wooden arm even after the rider leaves.
  seatRoot.visible=state.camera<750;
- seatRoot.position.set(state.tip.x-state.camera-w/2-8,h/2-state.tip.y+41,-5);
+ seatRoot.position.set(state.tip.x-state.camera-w/2-8,h/2-state.tip.y+23,12);
  // Zero rotation at the loaded angle; rotate with the arm as it fires.
  seatRoot.rotation.z=-(state.theta-3.39);
 }
