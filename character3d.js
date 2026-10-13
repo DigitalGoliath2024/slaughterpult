@@ -537,7 +537,7 @@ function animate(){
  positionChair(state,w,h);
  positionLevelMachinery(state,w,h);
  positionGore(state,w,h);
- if(model&&window.characterOverlayReady){
+ if(model&&window.characterOverlayReady&&!window.seatLoading){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
   if(rag && !state.shredded){
