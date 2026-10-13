@@ -95,9 +95,7 @@ function seatCharacterOnChair(){
  if(!seatReady||!seatRoot||!model||!bones.Hips)return false;
  seatRoot.updateMatrixWorld(true);
  const target=seatRoot.localToWorld(chairHipAnchor.clone());
- model.rotation.order='YXZ';
- model.rotation.y=Math.PI/2;
- model.rotation.z=0;
+ model.quaternion.setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2);
  model.position.set(0,0,0);
  model.updateMatrixWorld(true);
  // The loaded rigs have different torso/rest orientations. Match the actual
@@ -112,7 +110,9 @@ function seatCharacterOnChair(){
   // Align shoulder/head axis with the actual reclined backrest. Using the arm
   // angle directly avoids adding an unrelated rightward lean.
   const desiredAngle=Math.PI/2+seatRoot.rotation.z;
-  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.65,.65);
+  const tilt=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.35,.35);
+  model.quaternion.setFromAxisAngle(new THREE.Vector3(0,0,1),tilt)
+   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2));
   model.updateMatrixWorld(true);
  }
  // Re-anchor after correcting torso tilt; otherwise the hips drift.
@@ -312,26 +312,78 @@ function applySittingPose(){
  pose('LeftForeArm',-.22,0,0);
 }
 
-// Level-one machinery, intake aimed toward the incoming projectile from left.
-let grinderVisual=null;window.grinderOverlayReady=false;
+// Spinning grinder, permanently mounted to a braced steel support.
+let grinderVisual=null,grinderDrum=null,grinderStains=[],previousShred=false;
+window.grinderOverlayReady=false;
 async function loadLevelMachinery(){
  try{
   const g=await new GLTFLoader().loadAsync('./trash_grinder.glb');
-  grinderVisual=g.scene;
-  const bounds=new THREE.Box3().setFromObject(grinderVisual);
-  const size=bounds.getSize(new THREE.Vector3());
-  grinderVisual.scale.multiplyScalar(140/(Math.max(size.x,size.y,size.z)||1));
-  grinderVisual.rotation.y=-Math.PI/2;
-  grinderVisual.traverse(n=>{if(n.isMesh)n.frustumCulled=false;});
-  scene.add(grinderVisual);window.grinderOverlayReady=true;
- }catch(e){console.warn('Grinder model unavailable, fallback displayed',e);}
+  grinderVisual=new THREE.Group();
+  const original=g.scene;
+  const box=new THREE.Box3().setFromObject(original);
+  const span=box.getSize(new THREE.Vector3());
+  original.scale.multiplyScalar(195/(Math.max(span.x,span.y,span.z)||1));
+  original.rotation.y=-Math.PI/2;
+  original.position.y=35;
+  original.traverse(n=>{if(n.isMesh)n.frustumCulled=false;});
+  grinderVisual.add(original);
+  const metal=new THREE.MeshStandardMaterial({color:0x626d76,metalness:.78,roughness:.42});
+  const iron=new THREE.MeshStandardMaterial({color:0x252d33,metalness:.65,roughness:.48});
+  const blood=new THREE.MeshStandardMaterial({color:0x790811,roughness:.8,metalness:0,side:THREE.DoubleSide});
+  function beam(w,h,d,x,y,z,material){
+   const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);
+   m.position.set(x,y,z);grinderVisual.add(m);return m;
+  }
+  // Frame ends at ground, steel uprights support both ends of the drum axle.
+  beam(200,12,42,0,-99,0,metal);
+  for(const x of [-72,72]){
+   beam(12,106,20,x,-47,0,metal);
+   beam(22,19,28,x,5,0,iron);
+   const brace=beam(9,122,13,x*.60,-49,-12,metal);
+   brace.rotation.z=(x<0?-.38:.38);
+  }
+  // Rotating roller axis runs across the machine, facing the side camera.
+  grinderDrum=new THREE.Group();grinderDrum.position.set(0,10,27);
+  const drum=new THREE.Mesh(new THREE.CylinderGeometry(39,39,120,18),iron);
+  drum.rotation.z=Math.PI/2;grinderDrum.add(drum);
+  for(let i=0;i<12;i++){
+   const a=i*Math.PI/6;
+   const tooth=new THREE.Mesh(new THREE.BoxGeometry(121,9,10),metal);
+   tooth.position.set(0,Math.cos(a)*40,Math.sin(a)*40);
+   tooth.rotation.x=a;
+   grinderDrum.add(tooth);
+  }
+  grinderDrum.userData.bloodMaterial=blood;
+  grinderVisual.add(grinderDrum);
+  scene.add(grinderVisual);
+  window.grinderOverlayReady=true;
+ }catch(e){console.warn('Grinder asset failed; fallback remains visible',e);}
 }
 function positionLevelMachinery(state,w,h){
  if(!grinderVisual)return;
- const hazard=state.hazards?.find(x=>x.id==='grinder');
+ const hazard=state.hazards?.find(item=>item.id==='grinder');
  if(!hazard){grinderVisual.visible=false;return;}
- grinderVisual.visible=Math.abs(hazard.x-state.camera-w/2)<w*.8;
- grinderVisual.position.set(hazard.x-state.camera-w/2,h/2-h*.88+(state.cameraY||0)+45,0);
+ grinderVisual.visible=Math.abs(hazard.x-state.camera-w/2)<w*.85;
+ grinderVisual.position.set(hazard.x-state.camera-w/2,h/2-h*.88+(state.cameraY||0)+104,0);
+ // Always spin, including while the character is still in the launcher.
+ if(grinderDrum)grinderDrum.rotation.x+=.085;
+ if(state.shredded&&!previousShred&&grinderDrum){
+  // Each stain is a separate irregular flat patch parented to the roller:
+  // the blood rotates *with* the drum and persists until reset.
+  const mat=grinderDrum.userData.bloodMaterial;
+  for(let i=0;i<23;i++){
+   const stain=new THREE.Mesh(new THREE.PlaneGeometry(5+Math.random()*15,3+Math.random()*9),mat);
+   const a=Math.random()*Math.PI*2;
+   stain.position.set((Math.random()-.5)*110,Math.cos(a)*41,Math.sin(a)*41);
+   stain.rotation.x=a-Math.PI/2;stain.rotation.z=Math.random()*Math.PI;
+   grinderDrum.add(stain);grinderStains.push(stain);
+  }
+ }
+ if(!state.shredded&&previousShred&&grinderDrum){
+  for(const stain of grinderStains){grinderDrum.remove(stain);stain.geometry.dispose();}
+  grinderStains=[];
+ }
+ previousShred=!!state.shredded;
 }
 function animate(){
  requestAnimationFrame(animate);
