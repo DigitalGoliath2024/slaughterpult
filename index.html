@@ -54,7 +54,7 @@ function drawSky(){
   const first=Math.floor(camera/tileW)-1;
   for(let i=first;i<first+Math.ceil(W/tileW)+3;i++){
    const x=i*tileW-camera;
-   if(bg===industrialWallImage)ctx.drawImage(bg,8,95,bg.naturalWidth-16,Math.max(10,bg.naturalHeight-110),x,0,tileW,floor);
+   if(bg===industrialWallImage)ctx.drawImage(bg,12,102,bg.naturalWidth-24,Math.min(650,bg.naturalHeight-204),x,0,tileW,floor);
    else ctx.drawImage(bg,0,0,bg.naturalWidth,bg.naturalHeight,x,0,tileW,floor);
   }
  } else {
