@@ -177,7 +177,9 @@ const direction=(a,b)=>Math.atan2(-(b.y-a.y),b.x-a.x);
 const norm=a=>Math.atan2(Math.sin(a),Math.cos(a));
 function rotate(part,angle){
  if(!bones[part])return;
- bones[part].quaternion.copy(base[part]).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),angle));
+ // The avatar is turned 90 degrees around Y for the side view. Its local X
+ // is the actual forward/back flex axis; Z twists into/out of the screen.
+ bones[part].quaternion.copy(base[part]).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),angle));
 }
 // Pose rotations are layered on each character's original bind pose.
 function pose(part,x=0,y=0,z=0){
@@ -710,6 +712,8 @@ function animate(){
    if(bones.Spine)rotate('Spine',flex*.60);
    if(bones.Spine1)rotate('Spine1',flex*.27);
    if(bones.Spine2)rotate('Spine2',flex*.13);
+   rotate('LeftShoulder',norm(a('chest','ls')-tilt+Math.PI/2)*.45);
+   rotate('RightShoulder',norm(a('chest','rs')-tilt+Math.PI/2)*.45);
    rotate('LeftArm',norm(a('ls','le')-tilt+Math.PI/2));
    rotate('RightArm',norm(a('rs','re')-tilt+Math.PI/2));
    rotate('LeftForeArm',norm(a('le','lh')-a('ls','le')));
@@ -718,6 +722,12 @@ function animate(){
    rotate('RightUpLeg',norm(a('hip','rk')-tilt+Math.PI/2));
    rotate('LeftLeg',norm(a('lk','lf')-a('hip','lk')));
    rotate('RightLeg',norm(a('rk','rf')-a('hip','rk')));
+   // Allow hands and feet to respond to velocity rather than remain rigid.
+   const wristSwing=(p,q)=>THREE.MathUtils.clamp((rag[q].x-rag[p].x)*.015,-.55,.55);
+   rotate('LeftHand',wristSwing('le','lh'));
+   rotate('RightHand',wristSwing('re','rh'));
+   rotate('LeftFoot',THREE.MathUtils.clamp((rag.lf.x-rag.lk.x)*.009,-.35,.35));
+   rotate('RightFoot',THREE.MathUtils.clamp((rag.rf.x-rag.rk.x)*.009,-.35,.35));
    if(bones.Head)bones.Head.scale.setScalar(state.headDetached?.001:1);
    if(!state.headDetached)rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
    // The physics floor is solid; keep the *visible skinned mesh* above it too.
