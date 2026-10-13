@@ -37,7 +37,30 @@ async function loadChair(){
   chair.rotation.y=Math.PI/2;
   chair.traverse(n=>{if(n.isMesh){n.frustumCulled=false;n.material?.side!==undefined&&(n.material.side=THREE.DoubleSide);}});
   console.info('Slaughterpult chair loaded',span);
+  // Local origin is the centerline of the catapult girder at its tip.
+  // The imported Meshy chair is 104 units tall, so its lowest foot is ~52
+  // units below its centered origin. Lift it until its foot rests on a bracket.
+  chair.position.y+=64;
   seatRoot.add(chair);
+  // A visible welded saddle, cross plate, and four clamp bolts connect the
+  // chair's lower frame to the metal throwing arm; all move as one assembly.
+  const steel=new THREE.MeshStandardMaterial({color:0x465563,metalness:.85,roughness:.36});
+  const edge=new THREE.MeshStandardMaterial({color:0x9eafb9,metalness:.8,roughness:.32});
+  const bolt=new THREE.MeshStandardMaterial({color:0xc7cdd1,metalness:.9,roughness:.24});
+  function block(w,h,d,x,y,z,mat){
+   const part=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+   part.position.set(x,y,z);
+   seatRoot.add(part);
+   return part;
+  }
+  block(54,7,14,0,1,0,steel);       // flange welded across girder
+  block(14,12,16,0,9,0,steel);      // riser under the seat
+  block(42,5,17,0,15,0,edge);      // chair base mounting plate
+  for(const x of [-16,16])for(const z of [-7,7]){
+   const b=new THREE.Mesh(new THREE.CylinderGeometry(2.8,2.8,2,8),bolt);
+   b.rotation.x=Math.PI/2;b.position.set(x,18,z);
+   seatRoot.add(b);
+  }
   scene.add(seatRoot);
   seatReady=true;window.seatOverlayReady=true;
   status.textContent='3D chair loaded · '+(activeId==='cowboy'?'Cowboy':activeId==='human'?'Human':'Crash Character');
@@ -49,9 +72,9 @@ async function loadChair(){
 }
 function positionChair(state,w,h){
  if(!seatRoot||!seatReady)return;
- // Seat follows the end of the wooden arm even after the rider leaves.
+ // The bracket origin stays physically on the steel girder tip.
  seatRoot.visible=state.camera<750;
- seatRoot.position.set(state.tip.x-state.camera-w/2-8,h/2-state.tip.y+19,12);
+ seatRoot.position.set(state.tip.x-state.camera-w/2-18,h/2-state.tip.y,12);
  // Zero rotation at the loaded angle; rotate with the arm as it fires.
  seatRoot.rotation.z=state.theta-Math.PI;
 }
