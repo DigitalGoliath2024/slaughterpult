@@ -329,7 +329,7 @@ function drawHazards(){
 }
 const BODY=[['hip',0,0,8],['chest',0,-24,12],['neck',0,-41,5],['head',0,-55,13],['ls',-15,-30,5],['le',-26,-12,5],['lh',-31,6,5],['rs',15,-30,5],['re',26,-12,5],['rh',31,6,5],['lk',-10,25,6],['lf',-13,49,7],['rk',10,25,6],['rf',13,49,7]];
 const LINKS=[['hip','chest',24],['chest','neck',17],['neck','head',14],['chest','ls',17],['ls','le',22],['le','lh',19],['chest','rs',17],['rs','re',22],['re','rh',19],['hip','lk',27],['lk','lf',25],['hip','rk',27],['rk','rf',25],['hip','ls',31],['hip','rs',31],['ls','rs',30],['lk','rk',20],['chest','lk',51],['chest','rk',51]];
-function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY){const xx=x+dx,yy=y+dy;nodes[id]={x:xx,y:yy,px:xx-(vx-dy*spin)*.016,py:yy-(vy+dx*spin)*.016,r};}return {nodes,links:LINKS.map(([a,b])=>({a,b,len:Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y),broken:false})),settled:0,groundTime:0,restTime:0,fx:0,shredded:false,pinned:{}};}
+function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY){const xx=x+dx,yy=y+dy;nodes[id]={x:xx,y:yy,px:xx-(vx-dy*spin)*.016,py:yy-(vy+dx*spin)*.016,r};}return {nodes,links:LINKS.map(([a,b])=>({a,b,len:Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y),broken:false})),settled:0,groundTime:0,restTime:0,fx:0,shredded:false,pinned:{},injuries:new Set(),impactCooldown:0};}
 // A machinery strike tears detachable joints loose, transferring an actual
 // outward impulse to each Verlet particle. Detached pieces continue under gravity.
 // Spray decals originate at real particle impacts, never from a square scatter.
@@ -366,9 +366,33 @@ function shredRagdoll(x,y,contactPart=null){
  directionalBlood(x,y,1,-.85,5.5);
  directionalBlood(x,y,-.5,-.7,2.4);
 }
+function tearJoint(a,b,x,y,force){
+ if(!rag)return false;
+ const link=rag.links.find(l=>!l.broken&&((l.a===a&&l.b===b)||(l.a===b&&l.b===a)));
+ if(!link)return false;
+ link.broken=true;rag.injuries.add(a+':'+b);
+ const node=rag.nodes[b]||rag.nodes[a];
+ if(node){const kick=Math.min(11,Math.max(3,force*.012));node.px=node.x-kick*(Math.random()>.5?1:-1);node.py=node.y-3;}
+ directionalBlood(x,y,.8,-1.1,1.55);markWall(x,y,.7);
+ return true;
+}
+function checkImpactForce(part,speed,x,y,type){
+ if(!rag||rag.shredded||rag.impactCooldown>0)return;
+ // Impact intensity expressed in world-units per second, not a literal medical G reading.
+ const severity=speed*(type==='nail'?1.22:type==='press'?1.35:1);
+ if(severity>260&&part!=='head'&&part!=='neck'){
+  if(tearJoint('neck','head',rag.nodes.neck.x,rag.nodes.neck.y,severity)){
+   rag.impactCooldown=.5;
+   startNotice('<strong>EXTREME IMPACT!</strong> Head separated under the sudden stop.');
+  }
+ }else if(severity>180&&part==='head'){
+  if(tearJoint('neck','head',x,y,severity))rag.impactCooldown=.5;
+ }
+}
 function updateRagdoll(dt){
  if(!rag)return;
  const floor=H*.88;
+ rag.impactCooldown=Math.max(0,rag.impactCooldown-dt);
  let groundedThisFrame=false;
  // Fixed-sized Verlet substeps keep limb constraints stable across frame-rate changes.
  const steps=Math.max(1,Math.ceil(dt/(1/120))),h=dt/steps;
@@ -379,9 +403,12 @@ function updateRagdoll(dt){
    const grounded=rag.groundTime>0;
    const drag=grounded?.975:.998;
    const vx=(n.x-n.px)*drag,vy=(n.y-n.py)*drag;
+   const incomingSpeed=Math.hypot(vx,vy)/Math.max(h,.00001);
    n.px=n.x;n.py=n.y;
    n.x+=vx;n.y+=vy+650*h*h*(part==='lh'||part==='rh'?1.55:part==='le'||part==='re'?1.2:1);
+   const pinsBefore=Object.keys(rag.pinned).length;
    hazardHit(n.x,n.y,part);
+   if(Object.keys(rag.pinned).length>pinsBefore){checkImpactForce(part,incomingSpeed,n.x,n.y,'nail');}
    if(n.y+n.r>floor){
     groundedThisFrame=true;
     const downward=n.y-n.py;
