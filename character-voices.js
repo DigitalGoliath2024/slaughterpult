@@ -39,7 +39,10 @@ window.characterVoiceClips = {
       "dummy_before_launch_4.mp3",
       "dummy_before_launch_5.mp3"
     ],
-    "flying": [],
+    "flying": [
+      "dummy_flying_1.mp3",
+      "dummy_flying_2.mp3"
+    ],
     "landed": [
       "dummy_landed_1.mp3",
       "dummy_landed_2.mp3",
