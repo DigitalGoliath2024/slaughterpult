@@ -30,56 +30,76 @@ function catapult(){const px=pivot.x-camera,py=pivot.y,ground=H*.88;const feet=[
 // joint lengths are solved iteratively, and the ground collides with every limb.
 // Gore effects live for the entire attempt and reset only on a fresh build.
 let bloodStains=[],bloodDrops=[],fireClock=0,lastBloodImpact=-1;window.goreImpactQueue=[];window.goreResetId=0;
-// Blood is a ground stain after ordinary impact, not an explosion of spikes.
-// Only machinery damage produces moving spray.
+// Small textured blood sprites have velocity and gravity; only stains persist.
+const bloodSprites=Array.from({length:5},(_,variant)=>{
+ const tile=document.createElement('canvas');tile.width=32;tile.height=32;
+ const t=tile.getContext('2d');
+ const rad=10+variant%3;
+ t.translate(16,16);t.rotate(variant*1.31);
+ t.fillStyle=variant%2?'#760710':'#ae111c';
+ t.beginPath();
+ for(let i=0;i<13;i++){
+  const a=i*Math.PI*2/13;
+  const r=rad*(.72+.20*Math.sin(i*4.2+variant*2.1)+.10*Math.cos(i*7+variant));
+  const x=Math.cos(a)*r,y=Math.sin(a)*r*.82;
+  if(i===0)t.moveTo(x,y);else t.lineTo(x,y);
+ }
+ t.closePath();t.fill();
+ return tile;
+});
 function groundBlood(x,power=1){
  const floor=H*.88;
- const spread=12+power*14;
- bloodStains.push({x,y:floor-2,r:Math.min(15,5+power*3),stretch:2+Math.random(),shade:Math.random(),rot:0});
- for(let i=0;i<Math.round(4+power*3);i++){
-  const dx=(Math.random()-.5)*spread*2;
-  bloodStains.push({x:x+dx,y:floor-1,r:.8+Math.random()*2.3,stretch:1.1+Math.random()*1.5,shade:Math.random(),rot:0});
- }
+ // Tiny, irregular ground-level flecks; no vertical walls or airborne stains.
+ bloodStains.push({x,y:floor-1,r:2.8+Math.random()*3*power,stretch:1.6+Math.random()*1.8,shade:Math.random(),rot:Math.random()*.3});
+ for(let i=0;i<Math.round(2+power*4);i++)
+  bloodStains.push({x:x+(Math.random()-.5)*(18+power*22),y:floor-1,
+   r:.5+Math.random()*1.7,stretch:.8+Math.random()*1.9,shade:Math.random(),rot:Math.random()*.4});
  if(bloodStains.length>1200)bloodStains.splice(0,bloodStains.length-1200);
 }
 function bloodBurst(x,y,power=1){
- const floor=H*.88;
- groundBlood(x,power);
- // Reserved for grinder impacts, not ordinary ground contact.
- for(let i=0;i<Math.min(32,Math.round(12*power));i++){
-  const angle=Math.PI*1.15+Math.random()*Math.PI*.7;
-  const speed=70+Math.random()*160*power;
-  bloodDrops.push({x,y,px:x,py:y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,
-    r:.5+Math.random()*.6,life:8});
+ // Actual splash physics: upward launch velocity, sideways spread, gravity.
+ const count=Math.min(85,Math.round(13+power*16));
+ for(let i=0;i<count;i++){
+  const speed=(65+Math.random()*235)*Math.min(2.1,power);
+  const angle=-Math.PI+Math.random()*Math.PI; // upward half-plane in screen space
+  bloodDrops.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,
+    size:1.5+Math.random()*4.0,angle:Math.random()*Math.PI*2,
+    spin:(Math.random()-.5)*9,sprite:Math.floor(Math.random()*bloodSprites.length)});
  }
+ if(bloodDrops.length>350)bloodDrops.splice(0,bloodDrops.length-350);
 }
 function stepBlood(dt){
  const floor=H*.88;
  for(let i=bloodDrops.length-1;i>=0;i--){
-  const d=bloodDrops[i];d.life-=dt;d.vy+=650*dt;
-  d.px=d.x;d.py=d.y;d.x+=d.vx*dt;d.y+=d.vy*dt;
-  if(d.y>=floor||d.life<=0){groundBlood(d.x,.22);bloodDrops.splice(i,1);}
+  const d=bloodDrops[i];
+  d.vy+=780*dt;
+  d.vx*=Math.max(.85,1-dt*.35);
+  d.x+=d.vx*dt;d.y+=d.vy*dt;d.angle+=d.spin*dt;
+  if(d.y>=floor-d.size*.5){
+   groundBlood(d.x,.25+d.size*.07);
+   bloodDrops.splice(i,1);
+  }
  }
 }
 function drawGore(){
  ctx.save();ctx.translate(-camera,0);
  for(const s of bloodStains){
-  ctx.save();ctx.translate(s.x,s.y);
-  ctx.fillStyle=s.shade>.5?'#57070d':'#9c1018';
-  const rx=s.r*s.stretch,ry=Math.max(.8,s.r*.19);
+  ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
+  ctx.fillStyle=s.shade>.5?'#57070d':'#921019';
   ctx.beginPath();
+  const rx=s.r*s.stretch,ry=Math.max(.55,s.r*.22);
   for(let i=0;i<12;i++){
    const a=i*Math.PI/6;
-   const f=.76+.18*Math.sin(i*12.1+s.shade*19)+.08*Math.cos(i*6.7+s.r);
-   const px=Math.cos(a)*rx*f,py=Math.sin(a)*ry*f;
-   if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+   const k=.75+.18*Math.sin(i*12.1+s.shade*19)+.06*Math.cos(i*6.7+s.r);
+   if(i===0)ctx.moveTo(Math.cos(a)*rx*k,Math.sin(a)*ry*k);
+   else ctx.lineTo(Math.cos(a)*rx*k,Math.sin(a)*ry*k);
   }
   ctx.closePath();ctx.fill();ctx.restore();
  }
- // Tiny in-flight streaks on machinery collisions only; no balls or spikes.
  for(const d of bloodDrops){
-  ctx.strokeStyle='rgba(109,9,16,.68)';ctx.lineWidth=.65;
-  ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-d.vx*.006,d.y-d.vy*.006);ctx.stroke();
+  ctx.save();ctx.translate(d.x,d.y);ctx.rotate(d.angle);
+  const size=d.size;ctx.drawImage(bloodSprites[d.sprite],-size,-size,size*2,size*2);
+  ctx.restore();
  }
  ctx.restore();
 }
@@ -164,7 +184,7 @@ function updateRagdoll(dt){
     if(downward>2.5){hazardHit(n.x,n.y);hadImpact=true; if(downward>6 && Math.random()<.055)groundBlood(n.x,Math.min(1.2,downward/12));}
    }
   }
-  if(hadImpact){impacts++; if(impacts===1)groundBlood(rag.nodes.head.x,.9);}
+  if(hadImpact){impacts++; if(impacts===1){groundBlood(rag.nodes.head.x,.9);bloodBurst(rag.nodes.head.x,floor-10,.42);}}
   for(let iter=0;iter<18;iter++){
    for(const link of rag.links){
     if(link.broken)continue;
