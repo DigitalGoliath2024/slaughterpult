@@ -54,28 +54,31 @@ const actionSounds={
  launch:[['catapult_launch_with_#1-1791930256015.mp3',.35],['catapult_launch_with_#2-1791930221469.mp3',.55]],
  squish:[['splat_squish_sound_#1-1791930022493.mp3',.85],['splat_squish_sound_#2-1791930016713.mp3',1],['splat_squish_sound_#2-1791930038748.mp3',.5],['splat_squish_sound_#4-1791930006652.mp3',.7],['splat_squish_sound_#4-1791930030413.mp3',.85]]
 };
-const activeActionSounds=new Set(),lastActionClip=new Map();let squishCooldown=0,boneCooldown=0,bodyImpactCooldown=0;
-function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();squishCooldown=boneCooldown=bodyImpactCooldown=0;}
+const activeActionSounds=new Set(),lastActionClip=new Map();let squishCooldown=0,boneCooldown=0,bodyImpactCooldown=0,impactQuietTime=0;
+function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();squishCooldown=boneCooldown=bodyImpactCooldown=impactQuietTime=0;}
 function playActionSound(kind){
+ if(kind==='bone'&&Math.random()>.25)return;
+ if(rag?.voiceLanded&&!rag.landingPending&&characterVoice&&!characterVoice.paused&&kind!=='knife')return;
  if((kind==='squish'&&squishCooldown>0)||(kind==='bone'&&boneCooldown>0))return;
  const pool=actionSounds[kind],choices=pool.length>1?pool.filter(([file])=>file!==lastActionClip.get(kind)):pool;
  const [file,volume]=choices[Math.floor(Math.random()*choices.length)];lastActionClip.set(kind,file);
- if(kind==='bone')boneCooldown=.055;
- if(kind==='squish')squishCooldown=.055; // One contact often tears several joints in the same physics step.
- if(activeActionSounds.size>=4){const oldest=activeActionSounds.values().next().value;oldest.pause();activeActionSounds.delete(oldest);}
- const sound=new Audio('./'+encodeURIComponent(file));sound.effectVolume=volume;sound.volume=volume*(characterVoice&&!characterVoice.paused?.65:1);
+ if(kind==='bone')boneCooldown=2.5;
+ if(kind==='squish')squishCooldown=.18; // One contact often tears several joints in the same physics step.
+ if(activeActionSounds.size>=2){const replace=kind==='knife'?activeActionSounds.values().next().value:kind==='squish'?[...activeActionSounds].find(sound=>sound.effectKind==='bone'):null;if(!replace)return;replace.pause();activeActionSounds.delete(replace);}
+ const sound=new Audio('./'+encodeURIComponent(file));sound.effectKind=kind;sound.effectVolume=volume;if(kind!=='launch')impactQuietTime=0;sound.volume=volume*(characterVoice&&!characterVoice.paused?.65:1);
  activeActionSounds.add(sound);sound.onended=()=>activeActionSounds.delete(sound);sound.onerror=sound.onended;
  sound.play().catch(()=>activeActionSounds.delete(sound));
 }
 function playBodyImpact(speed=200){
  if(speed<120||bodyImpactCooldown>0||rag?.softLanding)return;
- bodyImpactCooldown=.16;playActionSound('landing');playActionSound('squish');playActionSound('bone');
+ bodyImpactCooldown=.7;playActionSound('landing');playActionSound(Math.random()<.25?'bone':'squish');
 }
 function stopFlightSounds(){for(const sound of [flyingSound,jetEngineSound])if(sound)sound.pause();flyingSound=jetEngineSound=null;}
 function playFlightEffect(file,volume){const sound=new Audio('./audio/effects/'+file);sound.loop=false;sound.volume=volume;sound.play().catch(()=>{});return sound;}
 function startFlightSounds(){stopFlightSounds();playActionSound('launch');flyingSound=playFlightEffect('flying_character_sound.mp3',.5);flyingSound.loop=true;if(jetpackMounted&&rag?.jetFuel>0)jetEngineSound=playFlightEffect('freesound_community-jet-engine-6753.mp3',.28);}
 function syncFlightSounds(){
- syncMapAmbience();
+ syncMapAmbience();impactQuietTime+=PHYSICS_STEP;
+ if(rag?.landingPending&&rag.landingRestTime>=.6&&impactQuietTime>=.35&&activeActionSounds.size===0){rag.landingPending=false;playCharacterVoice('landed');}
  squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);boneCooldown=Math.max(0,boneCooldown-PHYSICS_STEP);bodyImpactCooldown=Math.max(0,bodyImpactCooldown-PHYSICS_STEP);
  for(const sound of activeActionSounds)sound.volume=sound.effectVolume*(characterVoice&&!characterVoice.paused?.65:1)*(activeActionSounds.size>1?.8:1);
  if(!rag||phase!=='airborne'){stopFlightSounds();return;}
@@ -1152,9 +1155,10 @@ function updateRagdoll(dt){
  // A grounded multi-body system can jitter forever under competing constraints.
  // Use whole-body motion to detect rest, then end simulation and retain the last pose.
  rag.groundTime=groundedThisFrame?rag.groundTime+dt:0;
- if(!rag.voiceLanded&&rag.groundTime>.18&&(rag.shredded||rag.softLanding||hip.y>groundYAt(hip.x)-55)){rag.voiceLanded=true;playCharacterVoice('landed');}
+ if(!rag.voiceLanded&&rag.groundTime>.18&&(rag.shredded||rag.softLanding||hip.y>groundYAt(hip.x)-55)){rag.voiceLanded=true;rag.landingPending=true;impactQuietTime=0;stopCharacterVoice();}
  const nodes=Object.values(rag.nodes);
  const avgStep=nodes.reduce((sum,n)=>sum+Math.hypot(n.x-n.px,n.y-n.py),0)/nodes.length;
+ rag.landingRestTime=rag.groundTime>.18&&avgStep<.45?(rag.landingRestTime||0)+dt:0;
  if(rag.groundTime>.45 && avgStep<2.5)rag.restTime+=dt;
  else rag.restTime=Math.max(0,rag.restTime-dt*.6);
  // In some overlapping poses the solver never fully converges; cap ground jitter.
@@ -1273,3 +1277,4 @@ function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,jetpackMounted,jetFuel:rag?.jetFuel??5,jetActive:!!(jetpackMounted&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('setupDialog').showModal();requestAnimationFrame(tick);
 })();
 </script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=front-lip-blood-20261013-19"></script></body></html>
+
