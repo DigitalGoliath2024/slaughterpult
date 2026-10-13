@@ -116,7 +116,7 @@ function bloodBurst(x,y,power=1){
     size:1.5+Math.random()*4.0,angle:Math.random()*Math.PI*2,
     spin:(Math.random()-.5)*9,sprite:Math.floor(Math.random()*bloodSprites.length)});
  }
- if(bloodDrops.length>350)bloodDrops.splice(0,bloodDrops.length-350);
+ if(bloodDrops.length>600)bloodDrops.splice(0,bloodDrops.length-600);
 }
 function stepBlood(dt){
  const floor=H*.88;
@@ -125,6 +125,17 @@ function stepBlood(dt){
   d.vy+=780*dt;
   d.vx*=Math.max(.85,1-dt*.35);
   d.x+=d.vx*dt;d.y+=d.vy*dt;d.angle+=d.spin*dt;
+  // Splashing droplets leave decals on nail ramps and moving equipment.
+  let splashed=false;
+  for(const obstacle of LEVEL_HAZARDS){
+   if(d.x<obstacle.x-obstacle.width/2||d.x>obstacle.x+obstacle.width/2)continue;
+   const surface=obstacle.kind==='ramp'?rampY(obstacle,d.x):obstacle.kind==='conveyor'?floor-77:obstacle.kind==='press'?floor-120+(Math.sin(levelClock*4)+1)*33:obstacle.kind==='grinder'?floor-105:null;
+   if(surface!==null&&d.vy>0&&d.y>=surface-7&&d.y<=surface+12){
+    wallStains.push({x:d.x,y:Math.min(floor-20,surface),size:3+Math.random()*5,seed:Math.random()});
+    splashed=true;break;
+   }
+  }
+  if(splashed){bloodDrops.splice(i,1);if(wallStains.length>1100)wallStains.splice(0,wallStains.length-1100);continue;}
   if(d.y>=floor-d.size*.5){
    groundBlood(d.x,.25+d.size*.07);
    bloodDrops.splice(i,1);
@@ -173,9 +184,9 @@ const COURSES={
  slide:[
   {id:'mattress',kind:'soft',x:790,width:240,points:0,label:'SOFT LANDING'},
   {id:'board1',kind:'ramp',x:1130,width:160,points:120,label:'NAIL SLIDE',y:125,slope:.24},
-  {id:'board2',kind:'ramp',x:1290,width:160,points:120,label:'',y:165,slope:.30},
+  {id:'board2',kind:'ramp',x:1290,width:160,points:120,label:'',y:165,slope:-.30},
   {id:'board3',kind:'ramp',x:1450,width:160,points:120,label:'',y:215,slope:.38},
-  {id:'board4',kind:'ramp',x:1610,width:160,points:120,label:'',y:273,slope:.44},
+  {id:'board4',kind:'ramp',x:1610,width:160,points:120,label:'',y:273,slope:-.44},
   {id:'grinder',kind:'grinder',x:1900,width:160,points:1500,label:'TRASH GRINDER'}
  ],
  factory:[
@@ -293,8 +304,8 @@ function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY
 // outward impulse to each Verlet particle. Detached pieces continue under gravity.
 function markWall(x,y){
  const floor=H*.88;
- for(let i=0;i<25;i++){
-  wallStains.push({x:x+(Math.random()-.5)*135,y:Math.min(floor-40,Math.max(70,y-75+(Math.random()-.5)*140)),size:1.5+Math.random()*5,seed:Math.random()});
+ for(let i=0;i<65;i++){
+  wallStains.push({x:x+(Math.random()-.5)*135,y:Math.min(floor-40,Math.max(70,y-75+(Math.random()-.5)*140)),size:2+Math.random()*8,seed:Math.random()});
  }
 }
 function shredRagdoll(x,y,contactPart=null){
@@ -310,7 +321,7 @@ function shredRagdoll(x,y,contactPart=null){
   n.px=n.x-Math.cos(angle)*speed*.016;
   n.py=n.y-Math.sin(angle)*speed*.016;
  }
- bloodBurst(x,y,3.2);
+ bloodBurst(x,y,5.5);
  markWall(x,y);
 }
 function updateRagdoll(dt){
@@ -398,8 +409,8 @@ if(phase==='airborne'&&dummy){updateRagdoll(dt);stepBlood(dt);let head=rag.nodes
  const desiredX=Math.max(0,dummy.x-W*.5);
  camera+=(desiredX-camera)*Math.min(1,dt*4);
  const highest=Math.min(...Object.values(rag.nodes).map(n=>n.y-n.r));
- const desiredY=Math.min(0,highest-H*.2);
- cameraY+=(desiredY-cameraY)*Math.min(1,dt*5);if(rag.settled>1.6 && rag.groundTime>1.5 && bloodDrops.length===0){phase='done';setPhase('done');startNotice(`<strong>RESULT: ${Math.floor(maxDist)} ft.</strong> ${levelFailed?'SOFT LANDING — FAIL! No points.':`Score: ${Math.floor(maxDist)+hazardPoints} (${Math.floor(maxDist)} distance + ${hazardPoints} machinery).`} Change the launcher and try again.`)}}}
+ const desiredY=rag.shredded||rag.groundTime>.3||phase==='done'?0:Math.min(0,highest-H*.2);
+ cameraY+=(desiredY-cameraY)*Math.min(1,dt*(rag.shredded?12:5));if(Math.abs(cameraY)<.5)cameraY=0;if(rag.settled>1.6 && rag.groundTime>1.5 && bloodDrops.length===0){phase='done';setPhase('done');startNotice(`<strong>RESULT: ${Math.floor(maxDist)} ft.</strong> ${levelFailed?'SOFT LANDING — FAIL! No points.':`Score: ${Math.floor(maxDist)+hazardPoints} (${Math.floor(maxDist)} distance + ${hazardPoints} machinery).`} Change the launcher and try again.`)}}}
 
 function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#78aac9';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(0,-cameraY);drawSky();drawHazards();drawGore();if(camera<750)catapult();if(dummy){drawRag()}if(phase==='build'||phase==='charged'||phase==='done'){ctx.save();ctx.translate(-camera,0);for(let i=0;i<frameOffsets.length;i++){const p=framePoint(i);ctx.fillStyle=pending?.kind==='frame'&&pending.index===i?'#fff':'#37decc';ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);ctx.fill();ctx.fillStyle='#0c2636';ctx.font='bold 9px system-ui';ctx.fillText('F'+(i+1),p.x+9,p.y-7)}for(let i=0;i<armOffsets.length;i++){const p=armPoint(i);ctx.fillStyle=pending?.kind==='arm'&&pending.index===i?'#fff':'#ffc049';ctx.beginPath();ctx.arc(p.x,p.y,6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#342716';ctx.font='bold 9px system-ui';ctx.fillText('A'+(i+1),p.x+9,p.y-7)}ctx.restore()}ctx.restore()}
 function tick(now){window.launcherVisualState={W,H,camera,cameraY,phase,theta,tip:cradlePoint(),hazards:LEVEL_HAZARDS,goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,shredded:!!rag?.shredded,rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y}])):null};let dt=Math.min(.033,(now-lastTime)/1000||.016);lastTime=now;if(phase==='launching'||phase==='airborne')frameTime+=dt;else frameTime=0;simulate(dt);render();requestAnimationFrame(tick)}resize();loadDemo();setPhase('build');requestAnimationFrame(tick);
