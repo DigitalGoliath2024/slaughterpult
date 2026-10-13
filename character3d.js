@@ -386,15 +386,18 @@ function positionLevelMachinery(state,w,h){
   const width=hazard.kind==='grinder'?hazard.width*1.25:hazard.width;
   const floor=h*.88+(hazard.groundOffset||0);
   if(!root){
-   root=template.clone(true);root.scale.setScalar(width);
+   root=template.clone(true);
+   if(kind==='twin')root.rotation.y=Math.PI/3;
+   const facingBounds=new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
+   root.userData.facingWidth=facingBounds.x;root.scale.setScalar(width/facingBounds.x);
    const support=new THREE.Group();
    root.userData.support=support;scene.add(support);scene.add(root);machineryInstances.set(key,root);
   }
   root.visible=Math.abs(hazard.x-state.camera-w/2)<w/2+width;
-  const height=template.userData.heightRatio*width;
+  const height=template.userData.heightRatio*width/root.userData.facingWidth;
   const centerY=kind==='spiked'?floor-106:floor-height/2;
   root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),35);
-  window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,centerY,height,width,kind};
+  window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,centerY,height,width,kind,feedBelt:hazard.feedBelt};
   if(!root.userData.cutters&&window.weaponOverlayReady){
    const cutter=['axe','machete','knife'][Math.floor(hazard.x/100)%3];
    for(const motor of root.children.filter(p=>p.userData.motorAxis)){
@@ -960,10 +963,11 @@ function positionGore(state,w,h){
   const node=state.rag[joint]||state.rag.chest;
   // Nearby but varied scatter: inherit the ragdoll's impact momentum,
   // then add limited independent kicks, not long-range explosions.
-  part.userData.worldX=node.x;
-  part.userData.worldY=node.y;
-  part.userData.vx=THREE.MathUtils.clamp((node.vx||0)*.28,-90,90)+(Math.random()-.5)*155;
-  part.userData.vy=THREE.MathUtils.clamp((node.vy||0)*.23,-90,100)-45-Math.random()*105;
+  const outlet=fullShred?state.shredOutlet:null;
+  part.userData.worldX=outlet?outlet.x+(Math.random()-.5)*12:node.x;
+  part.userData.worldY=outlet?outlet.y+(Math.random()-.5)*12:node.y;
+  part.userData.vx=outlet?120+Math.random()*180:THREE.MathUtils.clamp((node.vx||0)*.28,-90,90)+(Math.random()-.5)*155;
+  part.userData.vy=outlet?-35-Math.random()*100:THREE.MathUtils.clamp((node.vy||0)*.23,-90,100)-45-Math.random()*105;
   part.userData.originX=node.x;
   // Stable floor depth for this fragment, rather than a fresh random offset
   // each frame. Collision, resting pose and crawl share the same surface.

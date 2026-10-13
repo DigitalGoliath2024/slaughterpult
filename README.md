@@ -51,3 +51,5 @@ Motor assemblies are isolated, resized, and rotated. Bed and hanging dolls are b
 - [Free Pack - Steampunk Machinery. Low Poly](https://sketchfab.com/3d-models/free-pack-steampunk-machinery-low-poly-20942a52aafb465c90877534767f8990) — VMgershom — Sketchfab Standard License. Green, red, and blue station apparatuses support the spiked roller axle at their actual upper horn openings. Lower outlets emit timed fire and steam; active flame jets damage airborne ragdolls.
 
 Rankings are currently stored in browser localStorage (`slaughterpultRankingsV1`). The Farthest and Highest Score boards each show ten unique two-initial players, with distance, score, and month/year. Failed cushion runs do not qualify. Cash rewards and hydraulic purchase costs have been removed; hydraulic assist is freely selectable. Worldwide rankings will be added later.
+
+Knife roller machines face along the conveyor route with a three-quarter side view; their intakes overlap the preceding belt ends, and shredded fragments eject forward from the outlets. TOP 10 opens only when the player clicks its button; finishing or resetting a run does not open a modal.
