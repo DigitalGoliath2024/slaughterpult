@@ -4,7 +4,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
 let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={},seatRoot=null,seatReady=false;
 // Chair-space reference: the rider's pelvis sits above the mounting plate.
-const chairHipAnchor=new THREE.Vector3(5,38,29);
+const chairHipAnchor=new THREE.Vector3(-10,47,23);
 try {
  renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
@@ -37,6 +37,12 @@ async function loadChair(){
   // The Meshy chair has its wide side profile in the Y/Z plane; turn it 90°
   // so its profile faces the orthographic camera looking down Z.
   chair.rotation.y=Math.PI/2;
+  // Center *after* applying the profile rotation; otherwise the object's
+  // offset is computed in an unrelated axis and the seat drifts from its mount.
+  chair.updateMatrixWorld(true);
+  const facingBox=new THREE.Box3().setFromObject(chair);
+  const facingMid=facingBox.getCenter(new THREE.Vector3());
+  chair.position.sub(facingMid);
   chair.traverse(n=>{if(n.isMesh){n.frustumCulled=false;n.material?.side!==undefined&&(n.material.side=THREE.DoubleSide);}});
   console.info('Slaughterpult chair loaded',span);
   // Local origin is the centerline of the catapult girder at its tip.
@@ -78,7 +84,7 @@ function positionChair(state,w,h){
  seatRoot.visible=state.camera<750;
  seatRoot.position.set(state.tip.x-state.camera-w/2-18,h/2-state.tip.y,12);
  // Zero rotation at the loaded angle; rotate with the arm as it fires.
- seatRoot.rotation.z=state.theta-Math.PI;
+ seatRoot.rotation.z=Math.PI-state.theta;
 }
 
 
@@ -177,13 +183,18 @@ function calibrateSeatBends(){
   if(!bones[upper]||!bones[knee])continue;
   // Try both hip flexion directions and select knees projecting forward.
   let selected=0,best=-Infinity;
-  for(const sign of [-1,1]){
-   pose(upper,sign*1.15,0,0);
+  let selectedAngle=0;
+  for(const sign of [-1,1])for(const amount of [1.1,1.4,1.7,1.9]){
+   const testAngle=sign*amount;
+   pose(upper,testAngle,0,0);
    const kp=jointScreen(knee),hp=jointScreen(upper);
-   const advance=kp.x-hp.x;
-   if(advance>best){best=advance;selected=sign;}
+   // Aim thighs horizontally forward along the chair cushion, not down
+   // through the supporting girder.
+   const dx=kp.x-hp.x,dy=kp.y-hp.y;
+   const score=dx*2.3-Math.abs(dy)*1.3;
+   if(score>best){best=score;selectedAngle=testAngle;}
   }
-  seatBends[upper]=selected*1.15;
+  seatBends[upper]=selectedAngle;
   pose(upper,seatBends[upper]);
   // Choose knee fold that keeps ankles low and near the seat instead of kicking back.
   if(bones[foot]){
