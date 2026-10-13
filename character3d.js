@@ -549,23 +549,36 @@ function positionGore(state,w,h){
   }
   if(u.joint==='head'&&u.eyes){
    u.eyeTime+=dt;
-   // Fast saccades: deliberate looks left, right, up, down and toward viewer.
-   const awake=u.resting?1:0,t=u.eyeTime;
-   const directions=[[.67,.08],[-.67,.1],[0,.62],[0,-.58],[.08,-.05],
-                     [-.48,-.36],[.55,.38],[0,0]];
-   const step=Math.floor(t*2.6)%directions.length;
-   const target=directions[step];
-   const ease=1-Math.exp(-19*dt);
-   u.gazeX=(u.gazeX||0)+(target[0]*awake-(u.gazeX||0))*ease;
-   u.gazeY=(u.gazeY||0)+(target[1]*awake-(u.gazeY||0))*ease;
-   // Blink both eyes quickly every few seconds, including occasional double blinks.
-   const cycle=t%3.15;
-   const blink=awake&&(cycle<.13||cycle>.32&&cycle<.43);
+   // Natural eyes: irregular pauses, small tracking motions, occasional
+   // rapid saccades. No fixed repeating gaze sequence.
+   if(u.resting){
+    if(u.nextLook===undefined)u.nextLook=0;
+    if(u.eyeTime>=u.nextLook){
+     const glance=Math.random();
+     u.targetGazeX=(Math.random()*2-1)*(glance<.3?.25:.7);
+     u.targetGazeY=(Math.random()*2-1)*(glance<.3?.19:.48);
+     u.lookSpeed=glance<.43?22:glance<.8?6:2.2;
+     u.nextLook=u.eyeTime+.35+Math.random()*2.1;
+    }
+    if(u.nextBlink===undefined)u.nextBlink=u.eyeTime+1+Math.random()*3;
+    if(u.eyeTime>=u.nextBlink){
+     u.blinkStart=u.eyeTime;
+     u.doubleBlink=Math.random()<.18;
+     u.nextBlink=u.eyeTime+2+Math.random()*4;
+    }
+   }
+   const awake=u.resting?1:0;
+   const ease=1-Math.exp(-(u.lookSpeed||7)*dt);
+   u.gazeX=(u.gazeX||0)+((u.targetGazeX||0)*awake-(u.gazeX||0))*ease;
+   u.gazeY=(u.gazeY||0)+((u.targetGazeY||0)*awake-(u.gazeY||0))*ease;
+   const sinceBlink=u.eyeTime-(u.blinkStart??-100);
+   const blink=awake&&(sinceBlink<.15||(u.doubleBlink&&sinceBlink>.25&&sinceBlink<.37));
    for(const eye of u.eyes){
     const x=u.gazeX*eye.radius,y=u.gazeY*eye.radius;
     eye.colored.position.set(x,y,eye.radius*.77);
     eye.pupil.position.set(x*1.15,y*1.15,eye.radius*.99);
-    eye.ball.scale.y+=((blink?.09:1)-eye.ball.scale.y)*Math.min(1,dt*35);
+    const openness=blink?.08:1;
+    eye.ball.scale.y+=(openness-eye.ball.scale.y)*Math.min(1,dt*37);
     eye.colored.scale.y=eye.ball.scale.y;
     eye.pupil.scale.y=eye.ball.scale.y;
    }
