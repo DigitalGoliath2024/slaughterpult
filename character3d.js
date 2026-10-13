@@ -163,16 +163,16 @@ async function load(id){
   calibrateLeftHand();
   calibrateRightHandRest();
   applySittingPose();
-  document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
+  document.getElementById('characterSelect').value=id;
   window.characterOverlayReady=true;window.characterLoading=false;
-  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v35';
+  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' ready';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
   status.textContent='Could not load '+id+' · '+(e?.message||'model error');
   window.characterOverlayReady=false;window.characterLoading=false;
  }
 }
-document.querySelectorAll('[data-character]').forEach(b=>b.addEventListener('click',()=>load(b.dataset.character)));
+document.getElementById('characterSelect').addEventListener('change',e=>load(e.target.value));
 const direction=(a,b)=>Math.atan2(-(b.y-a.y),b.x-a.x);
 const norm=a=>Math.atan2(Math.sin(a),Math.cos(a));
 function rotate(part,angle){
