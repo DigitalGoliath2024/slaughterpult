@@ -312,6 +312,27 @@ function applySittingPose(){
  pose('LeftForeArm',-.22,0,0);
 }
 
+// Level-one machinery, intake aimed toward the incoming projectile from left.
+let grinderVisual=null;window.grinderOverlayReady=false;
+async function loadLevelMachinery(){
+ try{
+  const g=await new GLTFLoader().loadAsync('./trash_grinder.glb');
+  grinderVisual=g.scene;
+  const bounds=new THREE.Box3().setFromObject(grinderVisual);
+  const size=bounds.getSize(new THREE.Vector3());
+  grinderVisual.scale.multiplyScalar(140/(Math.max(size.x,size.y,size.z)||1));
+  grinderVisual.rotation.y=-Math.PI/2;
+  grinderVisual.traverse(n=>{if(n.isMesh)n.frustumCulled=false;});
+  scene.add(grinderVisual);window.grinderOverlayReady=true;
+ }catch(e){console.warn('Grinder model unavailable, fallback displayed',e);}
+}
+function positionLevelMachinery(state,w,h){
+ if(!grinderVisual)return;
+ const hazard=state.hazards?.find(x=>x.id==='grinder');
+ if(!hazard){grinderVisual.visible=false;return;}
+ grinderVisual.visible=Math.abs(hazard.x-state.camera-w/2)<w*.8;
+ grinderVisual.position.set(hazard.x-state.camera-w/2,h/2-h*.88+(state.cameraY||0)+45,0);
+}
 function animate(){
  requestAnimationFrame(animate);
  if(!renderer||!camera)return;
@@ -321,6 +342,7 @@ function animate(){
  if(canvas.width!==Math.round(w*renderer.getPixelRatio())||canvas.height!==Math.round(h*renderer.getPixelRatio()))renderer.setSize(w,h,false);
  camera.left=-w/2;camera.right=w/2;camera.top=h/2;camera.bottom=-h/2;camera.updateProjectionMatrix();
  positionChair(state,w,h);
+ positionLevelMachinery(state,w,h);
  if(model&&window.characterOverlayReady){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
@@ -378,4 +400,4 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();animate();}
