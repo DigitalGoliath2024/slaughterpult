@@ -83,7 +83,7 @@ function positionChair(state,w,h){
  // The bracket origin stays physically on the steel girder tip.
  seatRoot.visible=state.camera<750;
  seatRoot.position.set(state.tip.x-state.camera-w/2-18,h/2-state.tip.y,12);
- // Zero rotation at the loaded angle; rotate with the arm as it fires.
+ // Rigidly welded to the girder: arm rotation only, no independent seat tilt.
  seatRoot.rotation.z=Math.PI-state.theta;
 }
 
@@ -110,7 +110,7 @@ function seatCharacterOnChair(){
   const currentAngle=Math.atan2(v.y,v.x);
   // Chair back stays close to vertical; it follows the arm tilt slightly.
   const desiredAngle=Math.PI/2+THREE.MathUtils.clamp(seatRoot.rotation.z,-.25,.25);
-  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9)+0.22; // increase correction in visually improved direction by ~6 degrees
+  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9)+0.32; // further 5.7 degree correction in requested direction
   model.updateMatrixWorld(true);
  }
  // Re-anchor after correcting torso tilt; otherwise the hips drift.
@@ -163,7 +163,7 @@ async function load(id){
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
   window.characterOverlayReady=true;
-  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v32';
+  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v33';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
   status.textContent='Could not load '+id+' · '+(e?.message||'model error');
