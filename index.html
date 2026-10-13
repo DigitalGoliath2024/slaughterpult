@@ -444,7 +444,12 @@ function drawHazards(){
  ctx.restore();
 }
 const BODY=[['hip',0,0,8],['chest',0,-24,12],['neck',0,-41,5],['head',0,-55,13],['ls',-15,-30,5],['le',-26,-12,5],['lh',-31,6,5],['rs',15,-30,5],['re',26,-12,5],['rh',31,6,5],['lk',-10,25,6],['lf',-13,49,7],['rk',10,25,6],['rf',13,49,7]];
-const LINKS=[['hip','chest',24],['chest','neck',17],['neck','head',14],['chest','ls',17],['ls','le',22],['le','lh',19],['chest','rs',17],['rs','re',22],['re','rh',19],['hip','lk',27],['lk','lf',25],['hip','rk',27],['rk','rf',25],['hip','ls',31],['hip','rs',31],['ls','rs',30],['lk','rk',20],['chest','lk',51],['chest','rk',51]];
+// Hinged anatomical skeleton: no diagonal trusses across waist, hips or shoulders.
+// Those extra rigid links previously prevented folding under gravity and impacts.
+const LINKS=[['hip','chest',24],['chest','neck',17],['neck','head',14],
+ ['chest','ls',17],['ls','le',22],['le','lh',19],
+ ['chest','rs',17],['rs','re',22],['re','rh',19],
+ ['hip','lk',27],['lk','lf',25],['hip','rk',27],['rk','rf',25]];
 function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY){const xx=x+dx,yy=y+dy;nodes[id]={x:xx,y:yy,px:xx-(vx-dy*spin)*.016,py:yy-(vy+dx*spin)*.016,r};}return {nodes,links:LINKS.map(([a,b])=>({a,b,len:Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y),broken:false})),settled:0,groundTime:0,restTime:0,fx:0,shredded:false,pinned:{},injuries:new Set(),impactCooldown:0};}
 // A machinery strike tears detachable joints loose, transferring an actual
 // outward impulse to each Verlet particle. Detached pieces continue under gravity.
@@ -539,55 +544,41 @@ function updateRagdoll(dt){
   // Pinned ragdoll gravity is applied at every free joint above. Do not
   // force an arm pose here; it must be free to swing under its own weight.
   if(hadImpact){impacts++; if(impacts===1){groundBlood(rag.nodes.head.x,.9);bloodBurst(rag.nodes.head.x,floor-10,.42);}}
-  for(let iter=0;iter<11;iter++){
+  // Project constraints against the hard floor on *every* iteration.
+  // No brace links: the waist is now a genuine pivot, not a welded board.
+  for(let iter=0;iter<16;iter++){
    for(const link of rag.links){
     if(link.broken)continue;
     const a=rag.nodes[link.a],b=rag.nodes[link.b];
     const dx=b.x-a.x,dy=b.y-a.y,dist=Math.hypot(dx,dy)||.0001;
-    // Never break from in-air solver stretch. Limb detachment will require impact handling.
-    // Main bones remain stable while cross-body braces yield during hard reversals.
-    // Relaxing the triangle braces lets the torso twist and limbs trail impacts.
-    const brace=(link.a==='hip'&&['ls','rs'].includes(link.b))||
-      (link.a==='ls'&&link.b==='rs')||
-      (link.a==='lk'&&link.b==='rk')||
-      (link.a==='chest'&&['lk','rk'].includes(link.b));
-    // Anatomical cross-braces can hold the whole body rigidly sideways
-    // during impalement. Let real limbs hang from their primary joints.
-    if(hanging&&brace)continue;
-    const compliance=brace?.12:.48;
+    const compliance=.45;
     const correction=compliance*(dist-link.len)/dist;
     if(!rag.pinned[link.a]){a.x+=dx*correction;a.y+=dy*correction;}
     if(!rag.pinned[link.b]){b.x-=dx*correction;b.y-=dy*correction;}
     const pinned=rag.pinned[link.a]?link.a:rag.pinned[link.b]?link.b:null;
-    if(pinned&&dist>link.len*1.5){rag.pinned[pinned].stress+=(dist-link.len)*h;
-     if(rag.pinned[pinned].stress>8){link.broken=true;delete rag.pinned[pinned];bloodBurst(a.x,a.y,1.1);}
+    if(pinned&&dist>link.len*1.5){
+     rag.pinned[pinned].stress+=(dist-link.len)*h;
+     if(rag.pinned[pinned].stress>8){
+      link.broken=true;delete rag.pinned[pinned];bloodBurst(a.x,a.y,1.1);
+     }
     }
    }
-   // Resolve penetration after every constraint pass; joints are not the
-   // only solid contacts. A limb segment cannot tunnel beneath the floor.
    for(const [id,n] of Object.entries(rag.nodes)){
     if(rag.pinned[id])continue;
-    if(n.y+n.r>floor){
-     const penetration=n.y+n.r-floor;
-     n.y-=penetration;
-     if(n.py<n.y)n.py=n.y; // cancel velocity into the concrete
-     n.px=n.x+(n.x-n.px)*.38; // surface friction
+    const maxY=floor-n.r;
+    if(n.y>maxY){
+     n.y=maxY;
+     // Reset downwards Verlet velocity and damp lateral sliding at contact.
+     n.py=Math.min(n.py,maxY);
+     n.px=n.x+(n.x-n.px)*.25;
      groundedThisFrame=true;
     }
    }
-   // Mid-segment collision: prevent long constrained limbs bridging through
-   // the surface even when their endpoints are still barely above it.
-   for(const link of rag.links){
-    if(link.broken)continue;
-    const a=rag.nodes[link.a],b=rag.nodes[link.b];
-    const midY=(a.y+b.y)*.5;
-    const radius=Math.min(a.r,b.r)*.65;
-    if(midY+radius>floor){
-     const pen=midY+radius-floor;
-     if(!rag.pinned[link.a]){a.y-=pen;a.py=Math.max(a.py,a.y);}
-     if(!rag.pinned[link.b]){b.y-=pen;b.py=Math.max(b.py,b.y);}
-     groundedThisFrame=true;
-    }
+  }
+  // Final nonpenetration pass after all constraints, including impalement.
+  for(const [id,n] of Object.entries(rag.nodes)){
+   if(!rag.pinned[id]&&n.y>floor-n.r){
+    n.y=floor-n.r;n.py=Math.min(n.py,n.y);groundedThisFrame=true;
    }
   }
  }
