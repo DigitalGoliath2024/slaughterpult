@@ -27,7 +27,7 @@ async function loadChair(){
   const box=new THREE.Box3().setFromObject(chair),span=new THREE.Vector3();
   box.getSize(span);
   if(span.y<=0)throw Error('Invalid chair dimensions');
-  chair.scale.multiplyScalar(120/span.y);
+  chair.scale.multiplyScalar(104/span.y);
   chair.updateMatrixWorld(true);
   const scaled=new THREE.Box3().setFromObject(chair);
   const mid=scaled.getCenter(new THREE.Vector3());
@@ -51,9 +51,9 @@ function positionChair(state,w,h){
  if(!seatRoot||!seatReady)return;
  // Seat follows the end of the wooden arm even after the rider leaves.
  seatRoot.visible=state.camera<750;
- seatRoot.position.set(state.tip.x-state.camera-w/2-8,h/2-state.tip.y+23,12);
+ seatRoot.position.set(state.tip.x-state.camera-w/2-8,h/2-state.tip.y+19,12);
  // Zero rotation at the loaded angle; rotate with the arm as it fires.
- seatRoot.rotation.z=-(state.theta-3.39);
+ seatRoot.rotation.z=state.theta-Math.PI;
 }
 
 const parts=['LeftShoulder','RightShoulder','LeftHand','RightHand','Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg','LeftFoot','RightFoot'];
