@@ -419,7 +419,24 @@ function buildGorePart(joint){
   geometry.applyMatrix4(src.matrixWorld);
   geometry.computeBoundingBox();
   bounds.union(geometry.boundingBox);
-  const mesh=new THREE.Mesh(geometry,src.material);
+  // The source asset includes separate bone and muscle geometry, but some
+  // imported materials are neutral gray. Preserve texture maps while assigning
+  // anatomical color where a diffuse texture is absent.
+  const muscle=/muscle|brest|back|buttock|forearm|^leftarm|^rightarm|^l_leg|^rleg|lowerleg/i.test(src.name)&&!/bone/i.test(src.name);
+  const bone=/bone|skull|torso|foot/i.test(src.name);
+  const mat=Array.isArray(src.material)?src.material.map(m=>m.clone()):src.material.clone();
+  const tint=m=>{
+   if(!m.map){
+    m.color.set(muscle?0xa83a43:bone?0xd9cbb7:0xa65b59);
+    m.roughness=.91;
+   }else{
+    m.color.set(0xffffff); // don't gray-out genuine diffuse textures
+   }
+   m.side=THREE.DoubleSide;
+   m.needsUpdate=true;
+  };
+  if(Array.isArray(mat))mat.forEach(tint);else tint(mat);
+  const mesh=new THREE.Mesh(geometry,mat);
   mesh.frustumCulled=false;group.add(mesh);
  }
  const center=bounds.getCenter(new THREE.Vector3());
@@ -429,6 +446,9 @@ function buildGorePart(joint){
  group.scale.setScalar(scale);
  group.userData.joint=joint;
  group.userData.halfHeight=size.y*scale/2;
+ group.userData.halfWidth=size.x*scale/2;
+ // Long limb geometry should lie along the floor, not stand vertically.
+ group.userData.lieAngle=(joint==='head'?0:(Math.random()<.5?1:-1)*Math.PI/2);
  group.userData.resting=false;group.userData.bounces=0;
  group.userData.spin=(Math.random()<.5?-1:1)*(.014+Math.random()*.03);
  group.rotation.z=(Math.random()-.5)*.5;
@@ -465,7 +485,9 @@ function positionGore(state,w,h){
  const floor=h*.88;
  for(const p of goreParts){
   const u=p.userData;
-  const groundY=floor-(u.halfHeight||12);
+  const lieAngle=u.lieAngle||0;
+  const floorExtent=Math.abs(Math.cos(lieAngle))*(u.halfHeight||12)+Math.abs(Math.sin(lieAngle))*(u.halfWidth||12);
+  const groundY=floor-Math.max(3,floorExtent);
   if(!u.resting){
    u.vy+=780*dt;
    u.vx*=Math.exp(-.34*dt);
@@ -483,7 +505,8 @@ function positionGore(state,w,h){
    }
   }else{
    u.worldY=groundY;
-   p.rotation.z*=Math.exp(-9*dt);
+   const ease=1-Math.exp(-13*dt);
+   p.rotation.z+=THREE.MathUtils.euclideanModulo(lieAngle-p.rotation.z+Math.PI,Math.PI*2)*ease-Math.PI*2*ease*(THREE.MathUtils.euclideanModulo(lieAngle-p.rotation.z+Math.PI,Math.PI*2)>Math.PI);
    p.rotation.x*=Math.exp(-9*dt);
   }
   p.position.set(u.worldX-state.camera-w/2,h/2-u.worldY+(state.cameraY||0),65);
