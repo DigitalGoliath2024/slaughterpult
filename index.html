@@ -511,15 +511,25 @@ function tearJoint(a,b,x,y,force){
 }
 function checkImpactForce(part,speed,x,y,type){
  if(!rag||rag.shredded||rag.impactCooldown>0)return;
- // Impact intensity expressed in world-units per second, not a literal medical G reading.
- const severity=speed*(type==='nail'?1.22:type==='press'?1.35:1);
- if(severity>260&&part!=='head'&&part!=='neck'){
-  if(tearJoint('neck','head',rag.nodes.neck.x,rag.nodes.neck.y,severity)){
-   rag.impactCooldown=.5;
-   startNotice('<strong>EXTREME IMPACT!</strong> Head separated under the sudden stop.');
+ const severity=speed*(type==='nail'?1.15:type==='press'?1.25:1);
+ if(severity<230)return;
+ // Impact damage is local: tear one affected limb instead of always
+ // removing the head on every sudden stop.
+ const options={
+  lh:[['le','lh']],rh:[['re','rh']],
+  le:[['le','lh'],['ls','le']],re:[['re','rh'],['rs','re']],
+  lf:[['lk','lf']],rf:[['rk','rf']],
+  lk:[['lk','lf'],['hip','lk']],rk:[['rk','rf'],['hip','rk']],
+  head:[['neck','head']],neck:[['neck','head']],
+  hip:[['hip','lk'],['hip','rk']],chest:[['ls','le'],['rs','re']],
+  waist:[['hip','waist']]
+ };
+ const candidates=options[part]||[];
+ for(const [a,b] of candidates){
+  if(tearJoint(a,b,x,y,severity)){
+   rag.impactCooldown=.45;
+   break;
   }
- }else if(severity>180&&part==='head'){
-  if(tearJoint('neck','head',x,y,severity))rag.impactCooldown=.5;
  }
 }
 function checkWaistBend(){
