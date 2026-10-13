@@ -158,11 +158,12 @@ async function load(id){
   activeId=id;
   calibrateSeatBends();
   calibrateArms();
+  calibrateLeftHand();
   calibrateRightHandRest();
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
   window.characterOverlayReady=true;
-  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active';
+  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v28';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
   status.textContent='Could not load '+id+' · '+(e?.message||'model error');
@@ -248,6 +249,28 @@ function calibrateArms(){
   pose(upper,0,0,0);
   if(bones[hand])armPose[lower]=side==='Left'?{x:.12,z:0}:{x:-.75,z:0};
  }
+}
+// Calibrate the *left wrist*, not merely the elbow. The prior elbow-only
+// scoring left the wrist dangling below the chair, appearing as a loose hand.
+function calibrateLeftHand(){
+ if(!bones.LeftArm||!bones.LeftForeArm||!bones.LeftHand||!bones.Hips)return;
+ const hip=jointScreen('Hips');
+ // Relaxed hand at the OUTSIDE of the pelvis, above the seat base.
+ const target={x:hip.x-7,y:hip.y-8};
+ let best=Infinity,choice=null;
+ for(const x of [-1.35,-.8,-.3,.25,.8,1.35])
+ for(const z of [-1.4,-.7,0,.7,1.4]){
+  pose('LeftArm',x,0,z);
+  for(const elbowX of [-1.5,-.8,0,.8,1.5])
+  for(const elbowZ of [-.9,0,.9]){
+   pose('LeftForeArm',elbowX,0,elbowZ);
+   const wrist=jointScreen('LeftHand');
+   const err=(wrist.x-target.x)**2+(wrist.y-target.y)**2;
+   if(err<best){best=err;choice={upper:{x,z},lower:{x:elbowX,z:elbowZ}};}
+  }
+ }
+ if(choice){armPose.LeftArm=choice.upper;armPose.LeftForeArm=choice.lower;}
+ pose('LeftArm');pose('LeftForeArm');
 }
 // Find a natural right-arm rest against the seated right thigh by measuring
 // wrist and thigh in the model, rather than guessing joint rotation signs.
