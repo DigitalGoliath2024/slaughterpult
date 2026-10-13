@@ -84,7 +84,7 @@ let bloodStains=[],wallStains=[],bloodDrops=[],fireClock=0,lastBloodImpact=-1;wi
 const bloodSprites=Array.from({length:5},(_,variant)=>{
  const tile=document.createElement('canvas');tile.width=32;tile.height=32;
  const t=tile.getContext('2d');
- const rad=10+variant%3;
+ const rad=7+variant%4;
  t.translate(16,16);t.rotate(variant*1.31);
  t.fillStyle=variant%2?'#760710':'#ae111c';
  t.beginPath();
@@ -95,6 +95,9 @@ const bloodSprites=Array.from({length:5},(_,variant)=>{
   if(i===0)t.moveTo(x,y);else t.lineTo(x,y);
  }
  t.closePath();t.fill();
+ // Satellite droplets make each splash read as clustered spatter.
+ for(let k=0;k<4;k++){const a=variant*1.8+k*1.57,dist=9+(k%2)*5;
+  t.beginPath();t.arc(Math.cos(a)*dist,Math.sin(a)*dist,1.3+(k%3),0,Math.PI*2);t.fill();}
  return tile;
 });
 function groundBlood(x,power=1){
@@ -154,6 +157,8 @@ function drawGore(){
    else ctx.lineTo(s.x+Math.cos(a)*rr,s.y+Math.sin(a)*rr);
   }
   ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.arc(s.x+s.size*1.65,s.y-s.size*.55,Math.max(1,s.size*.26),0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(s.x-s.size*1.15,s.y+s.size*1.25,Math.max(.8,s.size*.2),0,Math.PI*2);ctx.fill();
  }
  for(const s of bloodStains){
   ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
