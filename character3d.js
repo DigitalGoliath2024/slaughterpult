@@ -476,18 +476,7 @@ function buildGorePart(joint){
   group.userData.eyeTime=0;
  }
  if(joint==='rh'){
-  // Finger-down crawling hand, modeled in the same local space as the gore asset.
-  const flesh=new THREE.MeshStandardMaterial({color:0x983a38,roughness:.88});
-  const unit=Math.max(size.x,size.y,size.z)||1;
-  const digits=[];
-  for(let i=0;i<5;i++){
-   const d=new THREE.Group();
-   d.position.set((i-2)*unit*.105,-unit*.06,size.z*.4);
-   const finger=new THREE.Mesh(new THREE.CapsuleGeometry(unit*.043,unit*.23,4,7),flesh);
-   finger.position.y=-unit*.18;
-   d.add(finger);group.add(d);digits.push(d);
-  }
-  group.userData.crawlFingers=digits;
+  // Animate the actual imported hand only; never add substitute fingers.
   group.userData.crawlClock=0;
   group.userData.crawlStartX=null;
   group.userData.crawlDirection=Math.random()<.5?-1:1;
@@ -565,21 +554,18 @@ function positionGore(state,w,h){
    }
   }else{
    u.worldY=groundY;
-   if(u.joint==='rh'&&u.crawlFingers){
+   if(u.joint==='rh'&&u.crawlClock!==undefined){
     if(u.crawlStartX===null)u.crawlStartX=u.worldX;
     u.crawlClock+=dt;
     const t=u.crawlClock;
-    // Plant the fingertips downward, pause, then take short uneven steps.
-    const stepping=t>1&&t<9&&Math.sin(t*4)>-.3;
-    if(stepping)u.worldX+=u.crawlDirection*25*dt;
-    u.worldX=THREE.MathUtils.clamp(u.worldX,u.crawlStartX-115,u.crawlStartX+115);
-    p.rotation.z+=(0-p.rotation.z)*Math.min(1,dt*8);
-    p.rotation.x=.06*Math.sin(t*5);
-    u.worldY=groundY-(stepping?Math.max(0,Math.sin(t*10))*2:0);
-    u.crawlFingers.forEach((finger,i)=>{
-     finger.rotation.z=(stepping?.32:.07)*Math.sin(t*10+i*1.4);
-     finger.rotation.x=(stepping?.24:.03)*Math.sin(t*10+i*1.8);
-    });
+    // Let the arm/hand lie flat, then inch away in short, slow movements.
+    const targetAngle=u.crawlDirection>0?-Math.PI/2:Math.PI/2;
+    p.rotation.z+=Math.atan2(Math.sin(targetAngle-p.rotation.z),Math.cos(targetAngle-p.rotation.z))*Math.min(1,dt*5);
+    const stepping=t>1.5&&t<12&&Math.sin(t*2.5)>-.35;
+    if(stepping)u.worldX+=u.crawlDirection*11*dt;
+    u.worldX=THREE.MathUtils.clamp(u.worldX,u.crawlStartX-75,u.crawlStartX+75);
+    p.rotation.x=stepping?.035*Math.sin(t*6):0;
+    u.worldY=groundY-(stepping?Math.max(0,Math.sin(t*6))*1.2:0);
    }else{
     // Other pieces keep their own landing orientation.
     p.rotation.z=u.lieAngle===null?p.rotation.z:u.lieAngle;
