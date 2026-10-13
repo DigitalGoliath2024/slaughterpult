@@ -4,7 +4,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
 let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={},seatRoot=null,seatReady=false;
 // Chair-space reference: pelvis is placed behind the chair foreground geometry (depth occlusion).
-const chairHipAnchor=new THREE.Vector3(-12,54,2); // lower pelvis 8px into seat without changing torso pose
+const chairHipAnchor=new THREE.Vector3(-15,54,2); // lower pelvis 8px into seat without changing torso pose
 try {
  renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
@@ -109,8 +109,10 @@ function seatCharacterOnChair(){
   const v=chestPos.sub(hipPos);
   const currentAngle=Math.atan2(v.y,v.x);
   // Chair back stays close to vertical; it follows the arm tilt slightly.
-  const desiredAngle=Math.PI/2+THREE.MathUtils.clamp(seatRoot.rotation.z,-.25,.25);
-  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9)+0.20; // further 5.7 degree correction in requested direction
+  // Align shoulder/head axis with the actual reclined backrest. Using the arm
+  // angle directly avoids adding an unrelated rightward lean.
+  const desiredAngle=Math.PI/2+seatRoot.rotation.z;
+  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.65,.65);
   model.updateMatrixWorld(true);
  }
  // Re-anchor after correcting torso tilt; otherwise the hips drift.
@@ -302,9 +304,12 @@ function applySittingPose(){
  for(const part of parts)if(bones[part])bones[part].quaternion.copy(base[part]);
  for(const [part,angle] of Object.entries(seatBends))pose(part,angle,0,0);
  pose('Spine',0,0,0);
- // Preserve shoulders in their bind orientation and bend the arms at the
- // mapped upper-arm joints. Calibrated per loaded character.
+ // Keep the left arm hanging behind the character in the seat view.
+ // The full limb returns to ordinary ragdoll posing immediately on release.
  for(const [part,v] of Object.entries(armPose))pose(part,v.x,0,v.z);
+ pose('LeftShoulder',0,-.85,-.35);
+ pose('LeftArm',.15,-1.35,-.8);
+ pose('LeftForeArm',-.22,0,0);
 }
 
 function animate(){
