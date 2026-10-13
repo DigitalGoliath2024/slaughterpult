@@ -34,7 +34,7 @@ async function load(id){
   model.traverse(n=>{if(n.isSkinnedMesh){n.frustumCulled=false;}});
   const box=new THREE.Box3().setFromObject(model),size=new THREE.Vector3();
   box.getSize(size);if(!(size.y>0))throw Error('Empty model');
-  model.scale.multiplyScalar(110/size.y);model.updateMatrixWorld(true);
+  model.scale.multiplyScalar(121/size.y);model.updateMatrixWorld(true);
   const mid=new THREE.Vector3();new THREE.Box3().setFromObject(model).getCenter(mid);
   model.position.x-=mid.x;model.position.y-=mid.y;
   bones={};base={};
