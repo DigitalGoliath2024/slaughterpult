@@ -230,12 +230,22 @@ function hazardHit(x,y,part=null){
   const n=part&&rag.nodes[part];
   if(h.kind==='ramp'&&n){
    const surface=rampY(h,x);
-   if(n.y+n.r>=surface-9&&n.y-n.r<surface+30){
-    if(n.y+n.r>surface){n.y=surface-n.r;n.py=n.y-1;n.px=n.x-2.6;}
-    // Nails catch individual distal joints while the body keeps sliding.
-    if(['lh','rh','lf','rf','le','re','lk','rk'].includes(part)&&!rag.pinned[part]&&Math.random()<.012){
-     rag.pinned[part]={x:n.x,y:n.y,stress:0};
-     directionalBlood(x,y,.7,-1,.55);groundBlood(x,.4);
+   // Nails are drawn every 14px, with tips 20px ABOVE the board face.
+   // Pin the pierced particle through an actual nail tip, not below the board.
+   const start=h.x-h.width/2;
+   const nailIndex=Math.max(0,Math.min(Math.floor((h.width-8)/14),(Math.round((x-start-9)/14))));
+   const nailX=start+9+nailIndex*14;
+   const nailTip=rampY(h,nailX)-20;
+   const approaching=n.y+n.r>=nailTip-4&&n.y-n.r<=surface+12;
+   if(approaching){
+    if(['lh','rh','lf','rf','le','re','lk','rk'].includes(part)&&
+       !rag.pinned[part]&&Math.abs(n.x-nailX)<10&&Math.random()<.024){
+     // Center of the limb overlaps the shaft, 7px down from the tip.
+     rag.pinned[part]={x:nailX,y:nailTip+7,stress:0};
+     n.x=nailX;n.y=nailTip+7;n.px=n.x;n.py=n.y;
+     directionalBlood(n.x,n.y,.7,-1,.55);
+    }else if(n.y+n.r>surface&&!rag.pinned[part]){
+     n.y=surface-n.r;n.py=n.y-1;n.px=n.x-2.6;
     }
     if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;}
    }
