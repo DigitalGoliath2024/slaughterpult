@@ -342,13 +342,26 @@ function hazardHit(x,y,part=null){
   if(h.kind==='press'&&n){
    const pressBottom=pressBottomY();
    if(n.y+n.r>=pressBottom-15&&n.y<floor-42){
-    const speed=Math.hypot(n.x-n.px,n.y-n.py)*60;
-    const incoming=n.y-n.py;
-    n.y=Math.min(n.y,pressBottom-n.r);
-    // Rebound downward as the press rises; never leave a joint attached to the moving piston.
-    n.py=n.y-Math.max(2,Math.abs(incoming)*.35);
-    n.px=n.x+(n.x-n.px)*.2;
-    if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;directionalBlood(x,y,-.6,-1.2,1.8);if(speed>125)tearJoint('neck','head',x,y,speed);}
+    const first=!hitHazards.has(h.id);
+    if(first){
+     hitHazards.add(h.id);hazardPoints+=h.points;
+     directionalBlood(n.x,n.y,-.3,-1,.75);
+     // Tear at most two joints. Keep the body mostly intact for funny bounces.
+     const candidates=[['le','lh'],['re','rh'],['lk','lf'],['rk','rf']];
+     let torn=0;
+     for(const [a,b] of candidates){
+      if(torn>=2)break;
+      if(Math.random()<.62&&tearJoint(a,b,n.x,n.y,100))torn++;
+     }
+     if(torn===0)tearJoint('le','lh',n.x,n.y,100);
+    }
+    // Carry the struck particle down and sideways out of the press's path,
+    // rather than repeatedly trapping it against the same moving surface.
+    const direction=n.x<h.x?-1:1;
+    n.y=Math.min(floor-n.r,Math.max(n.y,pressBottom+n.r+7));
+    n.py=n.y-2;
+    n.px=n.x-direction*5;
+    n.x+=direction*2;
    }
    continue;
   }
