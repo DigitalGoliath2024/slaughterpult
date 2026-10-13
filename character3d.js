@@ -369,7 +369,7 @@ function positionLevelMachinery(state,w,h){
  grinderVisual.visible=Math.abs(hazard.x-state.camera-w/2)<w*.85;
  grinderVisual.position.set(hazard.x-state.camera-w/2,h/2-h*.88+(state.cameraY||0)+104,0);
  // Always spin, including while the character is still in the launcher.
- if(grinderDrum)grinderDrum.rotation.z-=.085;
+ if(grinderDrum)grinderDrum.rotation.z=-(state.machineryClock||0)*5.1;
  if(state.shredded&&!previousShred&&grinderDrum){
   // Each stain is a separate irregular flat patch parented to the roller:
   // the blood rotates *with* the drum and persists until reset.
@@ -428,7 +428,7 @@ const weaponTemplates={},weaponStations=new Map();
 window.weaponOverlayReady=false;
 async function loadWeapons(){
  try{
-  const gltf=await new GLTFLoader().loadAsync('./retro__psx-like_horror_melee_weapons_pack.glb');
+  const gltf=await new GLTFLoader().loadAsync('./retro__psx-like_horror_melee_weapons_pack.glb?v=pbr2');
   const names={knife:'kitchenKnife_Bloody_',axe:'axe_bloody_',machete:'machete_Bloody_',cleaver:'cleaver_Bloody_'};
   for(const [kind,prefix] of Object.entries(names)){
    let source;gltf.scene.traverse(o=>{if(o.isMesh&&o.name.startsWith(prefix))source=o;});
@@ -453,7 +453,7 @@ async function loadWeapons(){
 }
 function mountedWeapon(parent,kind,length,x,y,angle,z=52){
  const template=weaponTemplates[kind]||weaponTemplates.knife;if(!template)return;
- const mesh=template.clone();mesh.scale.setScalar(length);
+ const mesh=template.clone();mesh.scale.setScalar(length*(parent.userData.rotatingBlade?1.05:1));
  mesh.position.set(x,y,z);mesh.rotation.z=angle;mesh.frustumCulled=false;
  parent.add(mesh);return mesh;
 }
@@ -466,7 +466,7 @@ function makeWeaponStation(hazard){
    const clockwise=shift<0;
    for(let i=0;i<8;i++){
     const angle=i*Math.PI/4;
-    const mount=new THREE.Group();mount.position.set(Math.cos(angle)*32,Math.sin(angle)*32,0);
+    const mount=new THREE.Group();mount.userData.rotatingBlade=true;mount.position.set(Math.cos(angle)*32,Math.sin(angle)*32,0);
     mount.rotation.z=angle-Math.PI/2;
     if(!clockwise)mount.rotation.y=Math.PI;
     mountedWeapon(mount,i%2?'axe':'machete',30,0,0,0);rotor.add(mount);
@@ -495,11 +495,12 @@ function positionWeapons(state,w,h){
   const floor=h/2-h*.88+(state.cameraY||0);
   root.position.set(hazard.x-state.camera-w/2,floor,0);
   if(hazard.kind==='press')root.position.y=h/2-(state.pressBottom+8)+(state.cameraY||0);
-  for(const {rotor,shift} of root.userData.rotors)rotor.rotation.z=(state.levelClock||0)*(shift<0?-2.6:2.6);
+  for(const {rotor,shift} of root.userData.rotors)rotor.rotation.z=(state.machineryClock||0)*(shift<0?-2.6:2.6);
  }
  for(const [id,root] of weaponStations)if(!active.has(id))root.visible=false;
  // Main grinder weapons are parented directly to the powered drum.
  if(grinderDrum&&!grinderDrum.userData.weaponsMounted){
+  grinderDrum.userData.rotatingBlade=true;
   for(let i=0;i<12;i++){
    const a=i*Math.PI/6;
    mountedWeapon(grinderDrum,i%3?'knife':'axe',25,Math.cos(a)*32,Math.sin(a)*32,a-Math.PI/2,64);
