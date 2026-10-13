@@ -389,9 +389,10 @@ function animate(){
    const tilt=direction(rag.hip,rag.chest)-Math.PI/2;
    model.position.x=rag.hip.x-state.camera-w/2;
    model.position.y=h/2-rag.hip.y+(state.cameraY||0)-21;
-   model.rotation.order='YXZ';
-   model.rotation.y=Math.PI/2;
-   model.rotation.z=tilt;
+   // Rotate the facing side-view model around the CAMERA'S Z axis.
+   // The old YXZ Euler ordering turned local Z into world X, causing propeller spin.
+   model.quaternion.setFromAxisAngle(new THREE.Vector3(0,0,1),tilt)
+     .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2));
    const a=(p,q)=>direction(rag[p],rag[q]);
    rotate('LeftArm',norm(a('ls','le')-tilt+Math.PI/2));
    rotate('RightArm',norm(a('rs','re')-tilt+Math.PI/2));
