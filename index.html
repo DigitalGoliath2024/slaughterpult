@@ -518,7 +518,7 @@ function updateRagdoll(dt){
   for(const [part,n] of Object.entries(rag.nodes)){
    const pin=rag.pinned[part];if(pin){n.x=pin.x;n.y=pin.y;n.px=n.x;n.py=n.y;continue;}
    const grounded=rag.groundTime>0;
-   const drag=grounded?.975:.998;
+   const drag=grounded?.982:.999;
    const vx=(n.x-n.px)*drag,vy=(n.y-n.py)*drag;
    const incomingSpeed=Math.hypot(vx,vy)/Math.max(h,.00001);
    n.px=n.x;n.py=n.y;
@@ -553,13 +553,20 @@ function updateRagdoll(dt){
    }
   }
   if(hadImpact){impacts++; if(impacts===1){groundBlood(rag.nodes.head.x,.9);bloodBurst(rag.nodes.head.x,floor-10,.42);}}
-  for(let iter=0;iter<18;iter++){
+  for(let iter=0;iter<11;iter++){
    for(const link of rag.links){
     if(link.broken)continue;
     const a=rag.nodes[link.a],b=rag.nodes[link.b];
     const dx=b.x-a.x,dy=b.y-a.y,dist=Math.hypot(dx,dy)||.0001;
     // Never break from in-air solver stretch. Limb detachment will require impact handling.
-    const correction=.5*(dist-link.len)/dist;
+    // Main bones remain stable while cross-body braces yield during hard reversals.
+    // Relaxing the triangle braces lets the torso twist and limbs trail impacts.
+    const brace=(link.a==='hip'&&['ls','rs'].includes(link.b))||
+      (link.a==='ls'&&link.b==='rs')||
+      (link.a==='lk'&&link.b==='rk')||
+      (link.a==='chest'&&['lk','rk'].includes(link.b));
+    const compliance=brace?.12:.48;
+    const correction=compliance*(dist-link.len)/dist;
     if(!rag.pinned[link.a]){a.x+=dx*correction;a.y+=dy*correction;}
     if(!rag.pinned[link.b]){b.x-=dx*correction;b.y-=dy*correction;}
     const pinned=rag.pinned[link.a]?link.a:rag.pinned[link.b]?link.b:null;
