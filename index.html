@@ -574,7 +574,32 @@ function updateRagdoll(dt){
      if(rag.pinned[pinned].stress>8){link.broken=true;delete rag.pinned[pinned];bloodBurst(a.x,a.y,1.1);}
     }
    }
-   for(const n of Object.values(rag.nodes))if(n.y+n.r>floor){n.y=floor-n.r;groundedThisFrame=true;}
+   // Resolve penetration after every constraint pass; joints are not the
+   // only solid contacts. A limb segment cannot tunnel beneath the floor.
+   for(const [id,n] of Object.entries(rag.nodes)){
+    if(rag.pinned[id])continue;
+    if(n.y+n.r>floor){
+     const penetration=n.y+n.r-floor;
+     n.y-=penetration;
+     if(n.py<n.y)n.py=n.y; // cancel velocity into the concrete
+     n.px=n.x+(n.x-n.px)*.38; // surface friction
+     groundedThisFrame=true;
+    }
+   }
+   // Mid-segment collision: prevent long constrained limbs bridging through
+   // the surface even when their endpoints are still barely above it.
+   for(const link of rag.links){
+    if(link.broken)continue;
+    const a=rag.nodes[link.a],b=rag.nodes[link.b];
+    const midY=(a.y+b.y)*.5;
+    const radius=Math.min(a.r,b.r)*.65;
+    if(midY+radius>floor){
+     const pen=midY+radius-floor;
+     if(!rag.pinned[link.a]){a.y-=pen;a.py=Math.max(a.py,a.y);}
+     if(!rag.pinned[link.b]){b.y-=pen;b.py=Math.max(b.py,b.y);}
+     groundedThisFrame=true;
+    }
+   }
   }
  }
  const hip=rag.nodes.hip;
