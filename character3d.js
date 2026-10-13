@@ -71,7 +71,7 @@ async function loadChair(){
   }
   scene.add(seatRoot);
   seatReady=true;window.seatOverlayReady=true;window.seatLoading=false;
-  status.textContent='3D chair loaded · '+(activeId==='cowboy'?'Cowboy':activeId==='human'?'Human':'Crash Character');
+  status.textContent='3D chair loaded · '+(activeId==='cowboy'?'Cowboy':activeId==='human'?'Philip':'Crash Character');
  }catch(e){
   console.warn('3D chair unavailable, original basket retained',e);
   status.textContent='Chair could not load: '+(e?.message||'unknown error');
@@ -165,7 +165,7 @@ async function load(id){
   applySittingPose();
   document.getElementById('characterSelect').value=id;
   window.characterOverlayReady=true;window.characterLoading=false;
-  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' ready';
+  status.textContent=({cowboy:'Cowboy',human:'Philip',meshy:'Crash Character'}[id]||id)+' ready';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
   status.textContent='Could not load '+id+' · '+(e?.message||'model error');
