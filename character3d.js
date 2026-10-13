@@ -15,7 +15,7 @@ try {
  camera.position.set(0,0,1000);camera.lookAt(0,0,0);
 } catch(e){status.textContent='3D unavailable — 2D ragdoll active';}
 const parts=['LeftShoulder','RightShoulder','Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg'];
-const urls={cowboy:'./western_cowboy_rigged.glb',human:'./rigged_t-pose_human_male_w_50_face_blendshapes.glb'};
+const urls={cowboy:'./western_cowboy_rigged.glb',human:'./rigged_t-pose_human_male_w_50_face_blendshapes.glb',meshy:'./Meshy_AI_scared_crash_characte_All_Animations.glb'};
 function bone(part){
  // Blender/Mixamo names differ: mixamorig:Hips_01 versus mixamorig_Hips_01.
  // GLTFLoader can sanitize ':' into '_' as well.
@@ -53,7 +53,7 @@ async function load(id){
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
   window.characterOverlayReady=true;
-  status.textContent=id==='cowboy'?'Cowboy · 3D active':'Human · 3D active';
+  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
   status.textContent='Could not load '+id+' · '+(e?.message||'model error');
