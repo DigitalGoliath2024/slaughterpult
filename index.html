@@ -30,64 +30,57 @@ function catapult(){const px=pivot.x-camera,py=pivot.y,ground=H*.88;const feet=[
 // joint lengths are solved iteratively, and the ground collides with every limb.
 // Gore effects live for the entire attempt and reset only on a fresh build.
 let bloodStains=[],bloodDrops=[],fireClock=0,lastBloodImpact=-1;window.goreImpactQueue=[];window.goreResetId=0;
+// Blood is a ground stain after ordinary impact, not an explosion of spikes.
+// Only machinery damage produces moving spray.
+function groundBlood(x,power=1){
+ const floor=H*.88;
+ const spread=12+power*14;
+ bloodStains.push({x,y:floor-2,r:Math.min(15,5+power*3),stretch:2+Math.random(),shade:Math.random(),rot:0});
+ for(let i=0;i<Math.round(4+power*3);i++){
+  const dx=(Math.random()-.5)*spread*2;
+  bloodStains.push({x:x+dx,y:floor-1,r:.8+Math.random()*2.3,stretch:1.1+Math.random()*1.5,shade:Math.random(),rot:0});
+ }
+ if(bloodStains.length>1200)bloodStains.splice(0,bloodStains.length-1200);
+}
 function bloodBurst(x,y,power=1){
  const floor=H*.88;
- // Static GLB sculpture intentionally disabled: it does not animate as fluid.
- const amount=Math.min(46,Math.round(16*power));
- for(let i=0;i<amount;i++){
-  const a=Math.random()*Math.PI*2,speed=(35+Math.random()*220)*power;
-  bloodDrops.push({x,y,px:x,py:y,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed-75,
-    r:.5+Math.random()*1.0,life:12+Math.random()*3,shape:Math.random()});
+ groundBlood(x,power);
+ // Reserved for grinder impacts, not ordinary ground contact.
+ for(let i=0;i<Math.min(32,Math.round(12*power));i++){
+  const angle=Math.PI*1.15+Math.random()*Math.PI*.7;
+  const speed=70+Math.random()*160*power;
+  bloodDrops.push({x,y,px:x,py:y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,
+    r:.5+Math.random()*.6,life:8});
  }
- // Immediate irregular impact decal: not tied to projectile lifetime.
- for(let i=0;i<12*power;i++){
-  bloodStains.push({x:x+(Math.random()-.5)*45*power,
-    y:floor-1,
-    r:1+Math.random()*3.2*power,stretch:1.3+Math.random()*2.2,
-    rot:Math.random()*Math.PI,shade:Math.random()});
- }
- if(bloodStains.length>1800)bloodStains.splice(0,bloodStains.length-1800);
 }
 function stepBlood(dt){
  const floor=H*.88;
  for(let i=bloodDrops.length-1;i>=0;i--){
   const d=bloodDrops[i];d.life-=dt;d.vy+=650*dt;
   d.px=d.x;d.py=d.y;d.x+=d.vx*dt;d.y+=d.vy*dt;
-  if(d.y>=floor-d.r){
-   d.y=floor-d.r;
-   for(let j=0;j<3;j++)bloodStains.push({x:d.x+(Math.random()-.5)*12,y:floor-1,
-      r:d.r*(1+Math.random()*2),stretch:.45+Math.random()*2.5,
-      rot:Math.random()*Math.PI,shade:Math.random()});
-   bloodDrops.splice(i,1);
-  }else if(d.life<=0){bloodStains.push({x:d.x,y:floor-1,r:d.r*1.5,stretch:2,rot:Math.random()*Math.PI,shade:Math.random()});bloodDrops.splice(i,1);}
+  if(d.y>=floor||d.life<=0){groundBlood(d.x,.22);bloodDrops.splice(i,1);}
  }
- if(bloodStains.length>1800)bloodStains.splice(0,bloodStains.length-1800);
 }
 function drawGore(){
  ctx.save();ctx.translate(-camera,0);
- // Stable jagged pooled decals, not repeated oval/disk primitives.
  for(const s of bloodStains){
-  const rx=s.r*s.stretch,ry=Math.max(.9,s.r*.45);
-  ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
-  ctx.fillStyle=s.shade>.5?'rgba(79,4,11,.92)':'rgba(141,8,17,.88)';
+  ctx.save();ctx.translate(s.x,s.y);
+  ctx.fillStyle=s.shade>.5?'#57070d':'#9c1018';
+  const rx=s.r*s.stretch,ry=Math.max(.8,s.r*.19);
   ctx.beginPath();
-  const lobes=9;
-  for(let j=0;j<=lobes;j++){
-   const ang=j/lobes*Math.PI*2;
-   const wobble=.72+.23*Math.sin(j*8.11+s.shade*31)+.15*Math.cos(j*12.7+s.r);
-   const px=Math.cos(ang)*rx*wobble,py=Math.sin(ang)*ry*wobble;
-   if(j===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+  for(let i=0;i<12;i++){
+   const a=i*Math.PI/6;
+   const f=.76+.18*Math.sin(i*12.1+s.shade*19)+.08*Math.cos(i*6.7+s.r);
+   const px=Math.cos(a)*rx*f,py=Math.sin(a)*ry*f;
+   if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
   }
   ctx.closePath();ctx.fill();ctx.restore();
  }
- // Fine streaks only while in motion; no cartoon circles or disk sprites.
+ // Tiny in-flight streaks on machinery collisions only; no balls or spikes.
  for(const d of bloodDrops){
-  ctx.strokeStyle='rgba(114,7,14,.88)';
-  ctx.lineWidth=Math.max(.5,d.r*.65);ctx.lineCap='butt';
-  ctx.beginPath();ctx.moveTo(d.px,d.py);ctx.lineTo(d.x,d.y);ctx.stroke();
+  ctx.strokeStyle='rgba(109,9,16,.68)';ctx.lineWidth=.65;
+  ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-d.vx*.006,d.y-d.vy*.006);ctx.stroke();
  }
- // Fire is hazard-triggered, not a default character effect.
- // No fire hazards are present in this level, so do not render flames.
  ctx.restore();
 }
 
@@ -168,10 +161,10 @@ function updateRagdoll(dt){
     n.y=floor-n.r;
     n.py=n.y+Math.max(0,downward)*.12;
     n.px=n.x+vx*.42;
-    if(downward>2.5){hazardHit(n.x,n.y);hadImpact=true; if(downward>4 && bloodStains.length<1800 && Math.random()<.18)bloodBurst(n.x,floor,Math.min(2.4,downward/7));}
+    if(downward>2.5){hazardHit(n.x,n.y);hadImpact=true; if(downward>6 && Math.random()<.055)groundBlood(n.x,Math.min(1.2,downward/12));}
    }
   }
-  if(hadImpact){impacts++; if(impacts===1||impacts%12===0)bloodBurst(rag.nodes.head.x,floor,1.3);}
+  if(hadImpact){impacts++; if(impacts===1)groundBlood(rag.nodes.head.x,.9);}
   for(let iter=0;iter<18;iter++){
    for(const link of rag.links){
     if(link.broken)continue;
