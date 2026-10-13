@@ -461,6 +461,13 @@ function positionGore(state,w,h){
   p.position.set(x-state.camera-w/2,h/2-y+(state.cameraY||0),55);
  }
 }
+// Separate visual for a head torn off by a hard impact.
+const detachedHead=new THREE.Mesh(
+ new THREE.SphereGeometry(11.5,18,12),
+ new THREE.MeshStandardMaterial({color:0xd6a581,roughness:.85})
+);
+detachedHead.visible=false;
+scene.add(detachedHead);
 function animate(){
  requestAnimationFrame(animate);
  if(!renderer||!camera)return;
@@ -472,6 +479,11 @@ function animate(){
  positionChair(state,w,h);
  positionLevelMachinery(state,w,h);
  positionGore(state,w,h);
+ detachedHead.visible=!!(state.headDetached&&state.rag&&!state.shredded);
+ if(detachedHead.visible){
+  const p=state.rag.head;
+  detachedHead.position.set(p.x-state.camera-w/2,h/2-p.y+(state.cameraY||0),78);
+ }
  if(model&&window.characterOverlayReady){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
@@ -492,10 +504,13 @@ function animate(){
    rotate('RightUpLeg',norm(a('hip','rk')-tilt+Math.PI/2));
    rotate('LeftLeg',norm(a('lk','lf')-a('hip','lk')));
    rotate('RightLeg',norm(a('rk','rf')-a('hip','rk')));
-   rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
+   if(bones.Head)bones.Head.scale.setScalar(state.headDetached?.001:1);
+   if(!state.headDetached)rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
   } else if(state.shredded){
+   if(bones.Head)bones.Head.scale.setScalar(1);
    model.visible=false;
   } else {
+   if(bones.Head)bones.Head.scale.setScalar(1);
    applySittingPose();
    if(!seatCharacterOnChair()){
     // Fallback positioning when the GLB chair fails to load.
