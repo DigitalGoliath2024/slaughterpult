@@ -408,8 +408,8 @@ function positionGore(state,w,h){
    const part=new THREE.Mesh(src.geometry,src.material);
    const bounds=new THREE.Box3().setFromObject(src);
    const size=bounds.getSize(new THREE.Vector3());
-   part.scale.setScalar(20/(Math.max(size.x,size.y,size.z)||1));
-   part.userData.joint=ids[i];
+   part.scale.setScalar(27/(Math.max(size.x,size.y,size.z)||1));
+   part.userData.joint=ids[i];part.userData.resting=false;part.userData.lastX=null;part.userData.lastY=null;
    part.rotation.z=Math.random()*Math.PI*2;
    scene.add(part);goreParts.push(part);
   }
@@ -418,8 +418,13 @@ function positionGore(state,w,h){
  for(const p of goreParts){
   const n=state.rag[p.userData.joint];
   if(!n)continue;
-  p.position.set(n.x-state.camera-w/2,h/2-n.y+(state.cameraY||0),55);
-  p.rotation.z+=.035;
+  const ground=h*.88;
+  // After the limb reaches the floor, freeze its orientation and floor height.
+  const landed=n.y>=ground-24;
+  if(landed&&!p.userData.resting){p.userData.resting=true;p.userData.restY=ground-13;p.userData.restAngle=p.rotation.z;}
+  if(!p.userData.resting){p.userData.restAngle=p.rotation.z+=.018;}
+  p.position.set(n.x-state.camera-w/2,h/2-(p.userData.resting?p.userData.restY:n.y)+(state.cameraY||0),55);
+  if(p.userData.resting)p.rotation.z=p.userData.restAngle;
  }
 }
 function animate(){
