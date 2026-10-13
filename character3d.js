@@ -150,7 +150,7 @@ async function load(id){
   model.traverse(n=>{if(n.isSkinnedMesh){n.frustumCulled=false;}});
   const box=new THREE.Box3().setFromObject(model),size=new THREE.Vector3();
   box.getSize(size);if(!(size.y>0))throw Error('Empty model');
-  model.scale.multiplyScalar(133.1/size.y); // 10% larger than prior 121px heightmodel.updateMatrixWorld(true);
+  model.scale.multiplyScalar(143/size.y); // 10% larger than prior 121px heightmodel.updateMatrixWorld(true);
   const mid=new THREE.Vector3();new THREE.Box3().setFromObject(model).getCenter(mid);
   model.position.x-=mid.x;model.position.y-=mid.y;
   bones={};base={};
@@ -333,6 +333,44 @@ function positionLevelMachinery(state,w,h){
  grinderVisual.visible=Math.abs(hazard.x-state.camera-w/2)<w*.8;
  grinderVisual.position.set(hazard.x-state.camera-w/2,h/2-h*.88+(state.cameraY||0)+45,0);
 }
+// Genuine uploaded 3D blood-splatter model; mesh geometry shared by a small
+// number of impact instances to avoid cloning hundreds of thousands of faces.
+let splatterSource=null,impactMeshes=[],previousGoreReset=-1;
+async function loadBloodModel(){
+ try{
+  const g=await new GLTFLoader().loadAsync('./blood_splatter%20(1).glb');
+  splatterSource=g.scene;
+  splatterSource.traverse(n=>{if(n.isMesh){n.frustumCulled=false;if(n.material)n.material.side=THREE.DoubleSide;}});
+  console.info('3D blood splatter model loaded');
+ }catch(e){console.warn('3D blood model failed to load',e);}
+}
+function updateBloodModels(state,w,h){
+ if(state.goreResetId!==previousGoreReset){
+  previousGoreReset=state.goreResetId;
+  for(const m of impactMeshes)scene.remove(m);
+  impactMeshes=[];
+ }
+ const queue=window.goreImpactQueue||[];
+ while(queue.length){
+  const point=queue.shift();
+  if(!splatterSource||impactMeshes.length>=3)continue;
+  const model3d=splatterSource.clone(true);
+  // Convert the tall static splash sculpture to a smaller impact effect.
+  const bounds=new THREE.Box3().setFromObject(model3d);
+  const size=bounds.getSize(new THREE.Vector3());
+  const k=42/(Math.max(size.x,size.y,size.z)||1);
+  model3d.scale.multiplyScalar(k);
+  model3d.rotation.y=Math.PI/2;
+  model3d.userData.worldX=point.x;
+  model3d.userData.worldY=Math.min(point.y,h*.88);
+  model3d.userData.angle=(Math.random()-.5)*.6;
+  scene.add(model3d);impactMeshes.push(model3d);
+ }
+ for(const m of impactMeshes){
+  m.position.set(m.userData.worldX-state.camera-w/2,h/2-m.userData.worldY+(state.cameraY||0),45);
+  m.rotation.z=m.userData.angle;
+ }
+}
 function animate(){
  requestAnimationFrame(animate);
  if(!renderer||!camera)return;
@@ -343,6 +381,7 @@ function animate(){
  camera.left=-w/2;camera.right=w/2;camera.top=h/2;camera.bottom=-h/2;camera.updateProjectionMatrix();
  positionChair(state,w,h);
  positionLevelMachinery(state,w,h);
+ updateBloodModels(state,w,h);
  if(model&&window.characterOverlayReady){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
@@ -400,4 +439,4 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadBloodModel();animate();}
