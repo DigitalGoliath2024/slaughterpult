@@ -164,16 +164,32 @@ function drawGore(){
 // Individual level definitions can replace this array later.
 const LEVEL_HAZARDS=[
  {id:'mattress',kind:'soft',x:790,width:260,points:0,label:'SOFT LANDING'},
+ {id:'nails',kind:'pin',x:1270,width:180,points:350,label:'NAIL BOARD'},
  {id:'grinder',kind:'grinder',x:1900,width:160,points:1500,label:'TRASH GRINDER'}
 ];
 let hitHazards=new Set(),hazardPoints=0,levelFailed=false;
-function hazardHit(x,y){
- if(!dummy||phase!=='airborne'||y<H*.88-105)return;
+// Each contacting physics node is tested, not just the dummy's center.
+function hazardHit(x,y,part=null){
+ if(!dummy||phase!=='airborne'||!rag)return;
  for(const h of LEVEL_HAZARDS){
-  if(hitHazards.has(h.id)||x<h.x-h.width*.5||x>h.x+h.width*.5)continue;
-  hitHazards.add(h.id);
-  if(h.kind==='soft'){levelFailed=true;hazardPoints=0; bloodDrops.length=0;}
-  else {hazardPoints+=h.points;shredRagdoll(x,y);}
+  if(x<h.x-h.width/2||x>h.x+h.width/2)continue;
+  const top=H*.88-(h.kind==='grinder'?125:h.kind==='pin'?48:30);
+  if(y<top)continue;
+  if(h.kind==='soft'){
+   if(!hitHazards.has(h.id)){hitHazards.add(h.id);levelFailed=true;hazardPoints=0;}
+   continue;
+  }
+  if(h.kind==='pin'&&part){
+   if(!rag.pinned[part]&&!rag.shredded){
+    const n=rag.nodes[part];if(!n)continue;
+    rag.pinned[part]={x:n.x,y:Math.min(H*.88-28,Math.max(top,n.y)),stress:0};
+    if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;}
+    groundBlood(n.x,1.5);
+   }
+  }else if(h.kind==='grinder'&&part&&!rag.shredded){
+   hitHazards.add(h.id);hazardPoints+=h.points;
+   shredRagdoll(x,y,part);
+  }
  }
 }
 function drawHazards(){
@@ -185,6 +201,15 @@ function drawHazards(){
    ctx.beginPath();ctx.roundRect(h.x-h.width/2,floor-30,h.width,29,10);ctx.fill();ctx.stroke();
    ctx.strokeStyle='#aa9b87';for(let i=0;i<7;i++){const x=h.x-h.width/2+20+i*35;ctx.beginPath();ctx.moveTo(x,floor-28);ctx.lineTo(x+12,floor-5);ctx.stroke();}
   }
+  if(h.kind==='pin'){
+   ctx.fillStyle='#654838';ctx.strokeStyle='#342b27';ctx.lineWidth=3;
+   ctx.fillRect(h.x-h.width/2,floor-17,h.width,17);
+   ctx.strokeRect(h.x-h.width/2,floor-17,h.width,17);
+   ctx.fillStyle='#adb0b2';
+   for(let x=h.x-h.width/2+7;x<h.x+h.width/2;x+=12){
+    ctx.beginPath();ctx.moveTo(x-4,floor-17);ctx.lineTo(x,floor-47);ctx.lineTo(x+4,floor-17);ctx.fill();
+   }
+  }
   // Grinder body is a 3D GLB overlay; unobtrusive fallback while it loads.
   if(h.kind==='grinder'&&!window.grinderOverlayReady){
    ctx.fillStyle='#575c60';ctx.fillRect(h.x-65,floor-90,130,90);
@@ -193,13 +218,13 @@ function drawHazards(){
   }
   ctx.font='bold 13px system-ui';ctx.textAlign='center';
   ctx.fillStyle=h.kind==='soft'?'#51493f':'#c7d4d9';
-  ctx.fillText(h.label,h.x,floor-(h.kind==='soft'?42:245));
+  ctx.fillText(h.label,h.x,floor-(h.kind==='soft'?42:h.kind==='pin'?65:245));
  }
  ctx.restore();
 }
 const BODY=[['hip',0,0,8],['chest',0,-24,12],['neck',0,-41,5],['head',0,-55,13],['ls',-15,-30,5],['le',-26,-12,5],['lh',-31,6,5],['rs',15,-30,5],['re',26,-12,5],['rh',31,6,5],['lk',-10,25,6],['lf',-13,49,7],['rk',10,25,6],['rf',13,49,7]];
 const LINKS=[['hip','chest',24],['chest','neck',17],['neck','head',14],['chest','ls',17],['ls','le',22],['le','lh',19],['chest','rs',17],['rs','re',22],['re','rh',19],['hip','lk',27],['lk','lf',25],['hip','rk',27],['rk','rf',25],['hip','ls',31],['hip','rs',31],['ls','rs',30],['lk','rk',20],['chest','lk',51],['chest','rk',51]];
-function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY){const xx=x+dx,yy=y+dy;nodes[id]={x:xx,y:yy,px:xx-(vx-dy*spin)*.016,py:yy-(vy+dx*spin)*.016,r};}return {nodes,links:LINKS.map(([a,b])=>({a,b,len:Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y),broken:false})),settled:0,groundTime:0,restTime:0,fx:0,shredded:false};}
+function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY){const xx=x+dx,yy=y+dy;nodes[id]={x:xx,y:yy,px:xx-(vx-dy*spin)*.016,py:yy-(vy+dx*spin)*.016,r};}return {nodes,links:LINKS.map(([a,b])=>({a,b,len:Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y),broken:false})),settled:0,groundTime:0,restTime:0,fx:0,shredded:false,pinned:{}};}
 // A machinery strike tears detachable joints loose, transferring an actual
 // outward impulse to each Verlet particle. Detached pieces continue under gravity.
 function markWall(x,y){
@@ -208,11 +233,12 @@ function markWall(x,y){
   wallStains.push({x:x+(Math.random()-.5)*135,y:Math.min(floor-40,Math.max(70,y-75+(Math.random()-.5)*140)),size:1.5+Math.random()*5,seed:Math.random()});
  }
 }
-function shredRagdoll(x,y){
+function shredRagdoll(x,y,contactPart=null){
  if(!rag||rag.shredded)return;
  rag.shredded=true;rag.shredAt={x,y};
  const joints=new Set(['neck:head','ls:le','le:lh','rs:re','re:rh','hip:lk','lk:lf','hip:rk','rk:rf']);
  for(const link of rag.links)if(joints.has(link.a+':'+link.b))link.broken=true;
+ rag.pinned={};
  for(const [id,n] of Object.entries(rag.nodes)){
   const dx=n.x-x,dy=n.y-y;
   const angle=Math.atan2(dy,dx)+(Math.random()-.5)*1.6;
@@ -232,18 +258,20 @@ function updateRagdoll(dt){
  for(let step=0;step<steps;step++){
   let hadImpact=false;
   for(const [part,n] of Object.entries(rag.nodes)){
+   const pin=rag.pinned[part];if(pin){n.x=pin.x;n.y=pin.y;n.px=n.x;n.py=n.y;continue;}
    const grounded=rag.groundTime>0;
    const drag=grounded?.975:.998;
    const vx=(n.x-n.px)*drag,vy=(n.y-n.py)*drag;
    n.px=n.x;n.py=n.y;
    n.x+=vx;n.y+=vy+650*h*h*(part==='lh'||part==='rh'?1.55:part==='le'||part==='re'?1.2:1);
+   hazardHit(n.x,n.y,part);
    if(n.y+n.r>floor){
     groundedThisFrame=true;
     const downward=n.y-n.py;
     n.y=floor-n.r;
     n.py=n.y+Math.max(0,downward)*.12;
     n.px=n.x+vx*.42;
-    if(downward>2.5){hazardHit(n.x,n.y);hadImpact=true; if(downward>6 && Math.random()<.055)groundBlood(n.x,Math.min(1.2,downward/12));}
+    if(downward>2.5){hadImpact=true; if(downward>6 && Math.random()<.055)groundBlood(n.x,Math.min(1.2,downward/12));}
    }
   }
   if(hadImpact){impacts++; if(impacts===1){groundBlood(rag.nodes.head.x,.9);bloodBurst(rag.nodes.head.x,floor-10,.42);}}
@@ -254,8 +282,12 @@ function updateRagdoll(dt){
     const dx=b.x-a.x,dy=b.y-a.y,dist=Math.hypot(dx,dy)||.0001;
     // Never break from in-air solver stretch. Limb detachment will require impact handling.
     const correction=.5*(dist-link.len)/dist;
-    a.x+=dx*correction;a.y+=dy*correction;
-    b.x-=dx*correction;b.y-=dy*correction;
+    if(!rag.pinned[link.a]){a.x+=dx*correction;a.y+=dy*correction;}
+    if(!rag.pinned[link.b]){b.x-=dx*correction;b.y-=dy*correction;}
+    const pinned=rag.pinned[link.a]?link.a:rag.pinned[link.b]?link.b:null;
+    if(pinned&&dist>link.len*1.5){rag.pinned[pinned].stress+=(dist-link.len)*h;
+     if(rag.pinned[pinned].stress>8){link.broken=true;delete rag.pinned[pinned];bloodBurst(a.x,a.y,1.1);}
+    }
    }
    for(const n of Object.values(rag.nodes))if(n.y+n.r>floor){n.y=floor-n.r;groundedThisFrame=true;}
   }
@@ -297,7 +329,7 @@ function simulate(dt){if(phase==='launching'){
     startNotice(`<strong>Released!</strong> The arm swings up from behind the pivot and sends the dummy forward (right). Initial speed ${Math.round(Math.hypot(vx,vy))} px/s.`);
   }
 }
-if(phase==='airborne'&&dummy){updateRagdoll(dt);stepBlood(dt);hazardHit(dummy.x,dummy.y);let head=rag.nodes.head;maxDist=Math.max(maxDist,(Math.max(...Object.values(rag.nodes).map(n=>n.x))-flightStart)*.65);$('distanceText').textContent=Math.floor(maxDist)+' ft';if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Keep the dummy in frame on BOTH axes. Vertical tracking is activated
+if(phase==='airborne'&&dummy){updateRagdoll(dt);stepBlood(dt);let head=rag.nodes.head;maxDist=Math.max(maxDist,(Math.max(...Object.values(rag.nodes).map(n=>n.x))-flightStart)*.65);$('distanceText').textContent=Math.floor(maxDist)+' ft';if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Keep the dummy in frame on BOTH axes. Vertical tracking is activated
 // only above the normal playfield, and eases back to ground on descent.
  const desiredX=Math.max(0,dummy.x-W*.5);
  camera+=(desiredX-camera)*Math.min(1,dt*4);
