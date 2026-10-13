@@ -906,7 +906,7 @@ function updateRagdoll(dt){
     const downward=n.y-n.py;
     n.y=floor-n.r;
     n.py=n.y+Math.max(0,downward)*(cushioned?.025:.12);
-    n.px=n.x+vx*(cushioned?.12:.42);
+    n.px=n.x-vx*(cushioned?.12:.42);
     if(!cushioned&&downward>2.5){hadImpact=true; if(downward>6 && Math.random()<.055)groundBlood(n.x,Math.min(1.2,downward/12));}
    }
   }
@@ -939,8 +939,8 @@ function updateRagdoll(dt){
     if(n.y>maxY){
      n.y=maxY;
      // Reset downwards Verlet velocity and damp lateral sliding at contact.
-     n.py=Math.min(n.py,maxY);
-     n.px=n.x+(n.x-n.px)*.25;
+     n.py=maxY;
+     // Constraint projection is position correction, not a repeated friction impulse.
      groundedThisFrame=true;
     }
    }
@@ -950,7 +950,7 @@ function updateRagdoll(dt){
   for(const [id,n] of Object.entries(rag.nodes)){
    const ground=supportYAt(n.x);
    if(!rag.pinned[id]&&n.y>ground-n.r){
-    n.y=ground-n.r;n.py=Math.min(n.py,n.y);groundedThisFrame=true;
+    n.y=ground-n.r;n.py=n.y;groundedThisFrame=true;
    }
   }
  }
@@ -1006,7 +1006,9 @@ function simulateStep(dt){stepCushions(dt);if(phase==='launching'||phase==='airb
   const target=Math.PI-releaseDeg*Math.PI/180;
   if(theta<=target || frameTime>5){
     theta=Math.max(target,theta);
-    const tip=cradlePoint(),speed=omega*150*armScale*.9;
+    // Preserve the authored launch strength after correcting the old .016s Verlet initialization.
+    const launchScale=currentLevel==='trampoline'?1:1.92;
+    const tip=cradlePoint(),speed=omega*150*armScale*.9*launchScale;
     const vx=Math.max(28,speed*Math.sin(theta));
     const vy=Math.min(-38,speed*Math.cos(theta));
     dummy={x:tip.x,y:tip.y-22,vx,vy,rot:0,spin:omega*.52};rag=makeRagdoll(dummy.x,dummy.y,vx,vy,omega*.52);impacts=0;
@@ -1047,4 +1049,4 @@ function drawApparatusEffects(){
 function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#11151b';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(0,-cameraY);drawSky();drawCushionFallback();drawContactShadows();drawHazards();drawApparatusEffects();drawGore();if(camera<750)catapult();if(dummy){drawRag()}if(phase==='build'||phase==='charged'||phase==='done'){ctx.save();ctx.translate(-camera,0);for(let i=0;i<frameOffsets.length;i++){const p=framePoint(i);ctx.fillStyle=pending?.kind==='frame'&&pending.index===i?'#fff':'#37decc';ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);ctx.fill();ctx.fillStyle='#0c2636';ctx.font='bold 9px system-ui';ctx.fillText('F'+(i+1),p.x+9,p.y-7)}for(let i=0;i<armOffsets.length;i++){const p=armPoint(i);ctx.fillStyle=pending?.kind==='arm'&&pending.index===i?'#fff':'#ffc049';ctx.beginPath();ctx.arc(p.x,p.y,6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#342716';ctx.font='bold 9px system-ui';ctx.fillText('A'+(i+1),p.x+9,p.y-7)}ctx.restore()}ctx.restore()}
 function tick(now){window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,pressBottom:pressBottomY(),camera,cameraY,phase,theta,tip:cradlePoint(),hazards:LEVEL_HAZARDS,goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);render();requestAnimationFrame(tick)}resize();loadDemo();moneyUI();setPhase('build');requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=fixed-physics-20261013-9"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=ground-crumple-20261013-10"></script></body></html>

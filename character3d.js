@@ -122,7 +122,7 @@ function seatCharacterOnChair(){
  return true;
 }
 
-const parts=['LeftShoulder','RightShoulder','LeftHand','RightHand','Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg','LeftFoot','RightFoot'];
+const parts=['LeftShoulder','RightShoulder','LeftHand','RightHand','Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg','LeftFoot','RightFoot','LeftToeBase','RightToeBase'];
 const urls={cowboy:'./western_cowboy_rigged.glb',human:'./rigged_t-pose_human_male_w_50_face_blendshapes.glb',meshy:'./Meshy_AI_scared_crash_characte_All_Animations.glb'};
 function bone(part){
  // Blender/Mixamo names differ: mixamorig:Hips_01 versus mixamorig_Hips_01.
@@ -180,6 +180,37 @@ function rotate(part,angle){
  // The avatar is turned 90 degrees around Y for the side view. Its local X
  // is the actual forward/back flex axis; Z twists into/out of the screen.
  bones[part].quaternion.copy(base[part]).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),angle));
+}
+// Aim the actual imported bone in the camera plane. Bind axes differ by model.
+function aimRagdollBone(part,child,from,to){
+ const b=bones[part],end=bones[child];if(!b||!end||!from||!to)return;
+ model.updateMatrixWorld(true);
+ const a=b.getWorldPosition(new THREE.Vector3()),q=end.getWorldPosition(new THREE.Vector3());
+ const dx=q.x-a.x,dy=q.y-a.y,tx=to.x-from.x,ty=from.y-to.y;
+ if(Math.hypot(dx,dy)<1e-5||Math.hypot(tx,ty)<1e-5)return;
+ const turn=norm(Math.atan2(ty,tx)-Math.atan2(dy,dx));
+ const world=b.getWorldQuaternion(new THREE.Quaternion());
+ world.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),turn));
+ const parent=b.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+ b.quaternion.copy(parent.multiply(world));
+}
+function poseRagdoll(rag){
+ for(const [part,b] of Object.entries(bones))b.quaternion.copy(base[part]);
+ const segments=[['Hips','Spine','hip','waist'],['Spine','Spine1','waist','chest'],['Spine1','Spine2','chest','neck'],['Spine2','Neck','chest','neck'],['Neck','Head','neck','head'],
+ ['LeftShoulder','LeftArm','chest','ls'],['RightShoulder','RightArm','chest','rs'],['LeftArm','LeftForeArm','ls','le'],['RightArm','RightForeArm','rs','re'],['LeftForeArm','LeftHand','le','lh'],['RightForeArm','RightHand','re','rh'],
+ ['LeftUpLeg','LeftLeg','hip','lk'],['RightUpLeg','RightLeg','hip','rk'],['LeftLeg','LeftFoot','lk','lf'],['RightLeg','RightFoot','rk','rf']];
+ for(const [part,child,a,b] of segments)aimRagdollBone(part,child,rag[a],rag[b]);
+ for(const [side,joint,knee] of [['Left','lf','lk'],['Right','rf','rk']]){
+  const foot=rag[joint],floor=window.launcherSupportYAt?.(foot.x);
+  if(Number.isFinite(floor)&&foot.y>=floor-9){
+   const facing=Math.sign(foot.x-rag[knee].x)||1;
+   aimRagdollBone(side+'Foot',side+'ToeBase',foot,{x:foot.x+facing*18,y:foot.y});
+  }
+ }
+ model.updateMatrixWorld(true);
+ // Pin the visible pelvis to the physical pelvis, including the rotated bind offset.
+ const pelvis=bones.Hips?.getWorldPosition(new THREE.Vector3());
+ if(pelvis){model.position.x+=model.userData.ragHipX-pelvis.x;model.position.y+=model.userData.ragHipY-pelvis.y;}
 }
 // Pose rotations are layered on each character's original bind pose.
 function pose(part,x=0,y=0,z=0){
@@ -1071,29 +1102,10 @@ function animate(){
    // The old YXZ Euler ordering turned local Z into world X, causing propeller spin.
    model.quaternion.setFromAxisAngle(new THREE.Vector3(0,0,1),tilt)
      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2));
+   model.userData.ragHipX=rag.hip.x-state.camera-w/2;
+   model.userData.ragHipY=h/2-rag.hip.y+(state.cameraY||0);
+   poseRagdoll(rag);
    const a=(p,q)=>direction(rag[p],rag[q]);
-   const waistAngle=norm(a('waist','chest')-a('hip','waist'));
-   // Distribute flex across available spine bones; no rigid torso board.
-   const flex=THREE.MathUtils.clamp(waistAngle,-2.7,2.7);
-   if(bones.Spine)rotate('Spine',flex*.60);
-   if(bones.Spine1)rotate('Spine1',flex*.27);
-   if(bones.Spine2)rotate('Spine2',flex*.13);
-   rotate('LeftShoulder',norm(a('chest','ls')-tilt+Math.PI/2)*.45);
-   rotate('RightShoulder',norm(a('chest','rs')-tilt+Math.PI/2)*.45);
-   rotate('LeftArm',norm(a('ls','le')-tilt+Math.PI/2));
-   rotate('RightArm',norm(a('rs','re')-tilt+Math.PI/2));
-   rotate('LeftForeArm',norm(a('le','lh')-a('ls','le')));
-   rotate('RightForeArm',norm(a('re','rh')-a('rs','re')));
-   rotate('LeftUpLeg',norm(a('hip','lk')-tilt+Math.PI/2));
-   rotate('RightUpLeg',norm(a('hip','rk')-tilt+Math.PI/2));
-   rotate('LeftLeg',norm(a('lk','lf')-a('hip','lk')));
-   rotate('RightLeg',norm(a('rk','rf')-a('hip','rk')));
-   // Allow hands and feet to respond to velocity rather than remain rigid.
-   const wristSwing=(p,q)=>THREE.MathUtils.clamp((rag[q].x-rag[p].x)*.015,-.55,.55);
-   rotate('LeftHand',wristSwing('le','lh'));
-   rotate('RightHand',wristSwing('re','rh'));
-   rotate('LeftFoot',THREE.MathUtils.clamp((rag.lf.x-rag.lk.x)*.009,-.35,.35));
-   rotate('RightFoot',THREE.MathUtils.clamp((rag.rf.x-rag.rk.x)*.009,-.35,.35));
    // Remove visibly severed distal pieces from the intact skinned avatar.
    // Spawn the corresponding fragment in positionGore instead of leaving
    // an intact arm or leg mysteriously connected to its detached counterpart.
@@ -1108,12 +1120,12 @@ function animate(){
    };
    for(const edge of injuries)if(regions[edge])hidden.add(regions[edge]);
    maskSeveredSkin(hidden);
-   if(!state.headDetached)rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
+   if(!state.headDetached&&bones.Head)bones.Head.quaternion.copy(base.Head);
    // The physics floor is solid; keep the *visible skinned mesh* above it too.
    // Previously its fixed pelvis offset could sink the actual torso through ground.
    if(state.groundTime>0){
     model.updateMatrixWorld(true);
-    const visibleBounds=new THREE.Box3().setFromObject(model);
+    const visibleBounds=new THREE.Box3().setFromObject(model,true);
     const floorScreen=h/2-(state.groundY??h*.88)+(state.cameraY||0);
     if(visibleBounds.min.y<floorScreen){
      model.position.y+=floorScreen-visibleBounds.min.y;
