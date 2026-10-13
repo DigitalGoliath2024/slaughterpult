@@ -624,6 +624,9 @@ function buildGorePart(joint){
   if(GORE_MAP[joint]?.some(name=>o.name.startsWith(name+'_')||o.name===name))entries.push(o);
  });
  if(!entries.length)return null;
+ // The crawler must be the original forearm bone WITH its attached hand.
+ // Never normalize a hand-only mesh to the size of an entire arm.
+ if(joint==='rh'&&!entries.some(mesh=>mesh.name==='RforearmBone'||mesh.name.startsWith('RforearmBone_')))return null;
  const group=new THREE.Group(),bounds=new THREE.Box3();
  for(const src of entries){
   const geometry=src.geometry.clone();
@@ -694,6 +697,7 @@ function buildGorePart(joint){
  }
  group.scale.setScalar(scale);
  group.userData.joint=joint;
+ group.userData.sourceMeshes=entries.map(mesh=>mesh.name);
  group.userData.halfHeight=size.y*scale/2;
  group.userData.halfWidth=size.x*scale/2;
  group.userData.radius=Math.max(size.x,size.y,size.z)*scale*.5;
