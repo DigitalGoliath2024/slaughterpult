@@ -3,8 +3,8 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
 let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={},seatRoot=null,seatReady=false;
-// Chair-space reference: the rider's pelvis sits above the mounting plate.
-const chairHipAnchor=new THREE.Vector3(-12,54,23); // lower pelvis 8px into seat without changing torso pose
+// Chair-space reference: pelvis is placed behind the chair foreground geometry (depth occlusion).
+const chairHipAnchor=new THREE.Vector3(-12,54,2); // lower pelvis 8px into seat without changing torso pose
 try {
  renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
@@ -50,19 +50,6 @@ async function loadChair(){
   // units below its centered origin. Lift it until its foot rests on a bracket.
   chair.position.y+=56;
   seatRoot.add(chair);
-  // Dark padded side bolster at the front edge of the seat. It overlaps the
-  // lower hips from the camera view, helping the rider sit *inside* the seat.
-  // This stays rigidly parented to the chair, never to the flying ragdoll.
-  const bolsterMaterial=new THREE.MeshStandardMaterial({color:0x202124,roughness:.9,metalness:0});
-  const bolster=new THREE.Mesh(new THREE.CapsuleGeometry(3,29,5,8),bolsterMaterial);
-  bolster.rotation.z=Math.PI/2;
-  bolster.position.set(-9,42,35);
-  seatRoot.add(bolster);
-  // Short rear hip bolster, just inside the backrest.
-  const rearPad=new THREE.Mesh(new THREE.CapsuleGeometry(3.5,14,5,8),bolsterMaterial);
-  rearPad.position.set(-27,49,33);
-  rearPad.rotation.z=-.12;
-  seatRoot.add(rearPad);
   // A visible welded saddle, cross plate, and four clamp bolts connect the
   // chair's lower frame to the metal throwing arm; all move as one assembly.
   const steel=new THREE.MeshStandardMaterial({color:0x465563,metalness:.85,roughness:.36});
@@ -123,7 +110,7 @@ function seatCharacterOnChair(){
   const currentAngle=Math.atan2(v.y,v.x);
   // Chair back stays close to vertical; it follows the arm tilt slightly.
   const desiredAngle=Math.PI/2+THREE.MathUtils.clamp(seatRoot.rotation.z,-.25,.25);
-  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9)+0.42; // further 5.7 degree correction in requested direction
+  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9)+0.20; // further 5.7 degree correction in requested direction
   model.updateMatrixWorld(true);
  }
  // Re-anchor after correcting torso tilt; otherwise the hips drift.
