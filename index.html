@@ -55,7 +55,7 @@ function resize(){const rect=canvas.getBoundingClientRect();W=rect.width;H=rect.
 function armPoint(i,angle=theta){let x=armOffsets[i]*armScale;return {x:pivot.x+x*Math.cos(angle),y:pivot.y-x*Math.sin(angle)};}function framePoint(i){let q=frameOffsets[i];return{x:pivot.x+q[0],y:pivot.y+q[1]};}function cradlePoint(angle=theta){let length=228*armScale;return{x:pivot.x+length*Math.cos(angle),y:pivot.y-length*Math.sin(angle)};}function worldPt(x,y){return{x:x-camera,y:y};}
 function startNotice(html){$('notice').innerHTML=html}function setPhase(p){phase=p;$('phaseText').textContent= p==='build'?'BUILD YOUR LAUNCHER':p==='charged'?'READY TO LAUNCH':p==='flying'?'FLIGHT IN PROGRESS': 'FLIGHT COMPLETE';$('phaseDescription').textContent=p==='build'?'Click one frame socket, then an arm socket to connect a part.':p==='charged'?'Release the arm and see how far your dummy flies.':p==='flying'?'Watch the dummy travel. Distance is measured from launch.':'Change components, charge, and try again.';$('launch').disabled=p!=='charged';$('charge').disabled=p==='flying';}
 function updatePanel(){const div=$('connections');div.innerHTML='';connections.forEach((c,i)=>{const el=document.createElement('div');el.className='connection';let label=c.type==='weight'?'Counterweight':c.type==='piston'?'Push piston':c.type==='spring'?'Tension spring':'Rubber band';el.innerHTML=`<span style="color:${colors[c.type]}">●</span> ${label} · F${c.f+1} → A${c.a+1} <button class="delete" data-index="${i}">✕</button>`;div.appendChild(el)});$('count').textContent=`(${connections.length}/4)`;div.querySelectorAll('.delete').forEach(b=>b.onclick=()=>{connections.splice(+b.dataset.index,1);reset(false);updatePanel()})}
-function reset(clear=true){levelClock=0;theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;cameraY=0;maxDist=0;pending=null;particles=[];bloodStains=[];wallStains=[];bloodDrops=[];lastBloodImpact=-1;window.goreImpactQueue=[];window.goreResetId++;window.skullCameraTarget=null;hitHazards.clear();hazardPoints=0;levelFailed=false;$('distanceText').textContent='0 ft';if(clear){connections=[];armScale=1;releaseDeg=55;$('armLength').value=100;$('angle').value=55;$('armVal').textContent='100%';$('angleVal').textContent='55°'}setPhase('build');updatePanel();startNotice('<strong>Build mode:</strong> Select a part and connect a frame socket to an arm socket. Then pull back and launch.');render()}
+function reset(clear=true){levelClock=0;theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;cameraY=0;maxDist=0;pending=null;particles=[];bloodStains=[];wallStains=[];bloodDrops=[];lastBloodImpact=-1;window.goreImpactQueue=[];window.goreResetId++;window.bodyCameraParts=[];hitHazards.clear();hazardPoints=0;levelFailed=false;$('distanceText').textContent='0 ft';if(clear){connections=[];armScale=1;releaseDeg=55;$('armLength').value=100;$('angle').value=55;$('armVal').textContent='100%';$('angleVal').textContent='55°'}setPhase('build');updatePanel();startNotice('<strong>Build mode:</strong> Select a part and connect a frame socket to an arm socket. Then pull back and launch.');render()}
 document.querySelectorAll('[data-level]').forEach(b=>b.onclick=()=>{
  currentLevel=b.dataset.level;LEVEL_HAZARDS=COURSES[currentLevel];
  document.querySelectorAll('[data-level]').forEach(x=>x.classList.toggle('selected',x===b));
@@ -66,7 +66,7 @@ $('buyHydraulic').onclick=()=>{if(!hydraulicOwned){if(credits<750)return;credits
 function loadDemo(){connections=[{type:'rubber',f:0,a:0},{type:'spring',f:2,a:1}];updatePanel();startNotice('<strong>Starter machine loaded:</strong> Two power sources are connected. You can change the mounting positions, add components, or pull back and launch.');}
 function socketAt(x,y){let match=null,bestD=20;frameOffsets.forEach((_,i)=>{const p=framePoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'frame',index:i}}});armOffsets.forEach((_,i)=>{const p=armPoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'arm',index:i}}});return match}
 canvas.addEventListener('pointerdown',e=>{if(phase==='flying')return;if(phase==='done')reset(false);const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const s=socketAt(x,y);if(!s)return;if(!pending){pending=s;startNotice(`<strong>Socket selected:</strong> ${s.kind==='frame'?'Frame':'Arm'} ${s.index+1}. Click a socket on the other piece.`)}else if(pending.kind!==s.kind){if(connections.length>=4){startNotice('<strong>Maximum 4 power components.</strong> Remove one before adding another.');pending=null;return}const c={type:selected,f:s.kind==='frame'?s.index:pending.index,a:s.kind==='arm'?s.index:pending.index};if(connections.some(z=>z.type===c.type&&z.f===c.f&&z.a===c.a)){startNotice('That component is already installed.');pending=null;return}connections.push(c);pending=null;updatePanel();setPhase('build');startNotice(`<strong>${selected.toUpperCase()} CONNECTED.</strong> Try changing the angle or arm length, or charge your launcher.`)}else{pending=s;startNotice('Choose a socket on the opposite piece.')}render()});
-document.querySelectorAll('[data-part]').forEach(b=>b.onclick=()=>{selected=b.dataset.part;document.querySelectorAll('[data-part]').forEach(x=>x.classList.toggle('selected',x===b));pending=null;startNotice(`<strong>${b.querySelector('strong').textContent} selected.</strong> Click a frame socket, then an arm socket.`);render()});$('armLength').oninput=e=>{armScale=e.target.value/100;$('armVal').textContent=e.target.value+'%';if(phase!=='build')reset(false);render()};$('angle').oninput=e=>{releaseDeg=+e.target.value;$('angleVal').textContent=releaseDeg+'°';if(phase!=='build')reset(false);render()};$('reset').onclick=()=>reset(true);$('charge').onclick=()=>{if(!connections.length){loadDemo()}theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;maxDist=0;setPhase('charged');$('distanceText').textContent='0 ft';startNotice('<strong>Charged!</strong> The arm is pulled back. Press LAUNCH and see what happens.');render()};$('launch').onclick=()=>{if(phase!=='charged')return;phase='launching';omega=0;dummy=null;rag=null;flightStart=0;maxDist=0;setPhase('flying');phase='launching';startNotice('<strong>Launching!</strong> Stored elastic energy and leverage accelerate the arm.');};
+document.querySelectorAll('[data-part]').forEach(b=>b.onclick=()=>{selected=b.dataset.part;document.querySelectorAll('[data-part]').forEach(x=>x.classList.toggle('selected',x===b));pending=null;startNotice(`<strong>${b.querySelector('strong').textContent} selected.</strong> Click a frame socket, then an arm socket.`);render()});$('armLength').oninput=e=>{armScale=e.target.value/100;$('armVal').textContent=e.target.value+'%';if(phase!=='build')reset(false);render()};$('angle').oninput=e=>{releaseDeg=+e.target.value;$('angleVal').textContent=releaseDeg+'°';if(phase!=='build')reset(false);render()};$('reset').onclick=()=>reset(true);$('charge').onclick=()=>{if(!connections.length){loadDemo()}theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;cameraY=0;window.bodyCameraParts=[];maxDist=0;setPhase('charged');$('distanceText').textContent='0 ft';startNotice('<strong>Charged!</strong> The arm is pulled back. Press LAUNCH and see what happens.');render()};$('launch').onclick=()=>{if(phase!=='charged')return;phase='launching';omega=0;dummy=null;rag=null;flightStart=0;maxDist=0;setPhase('flying');phase='launching';startNotice('<strong>Launching!</strong> Stored elastic energy and leverage accelerate the arm.');};
 // Temporary industrial wall. A custom texture can replace these panels later.
 // Upload the supplied image as rusted_slaughter_wall.png beside index.html.
 // If it is missing, retain the procedural industrial wall as a fallback.
@@ -91,19 +91,16 @@ levelSkyImages.slide.src='./Meshy_AI_night_sky_giant_heads.png';
 levelSkyImages.factory.src='./Meshy_AI_cosmic_surreal_entities.png';
 function drawSky(){
  const floor=H*.88,sky=levelSkyImages[currentLevel];
- // Sky is world-fixed in altitude and moves slowly horizontally. A tall
- // sky plane keeps the proper upper background visible on high launches.
- ctx.fillStyle='#070913';ctx.fillRect(0,-5000,W,5000+H);
+ // Draw the distant sky in screen space, preserving the artwork's aspect
+ // ratio. Camera altitude must never stretch it into a world-height plane.
+ ctx.fillStyle='#070913';ctx.fillRect(0,cameraY,W,H);
  if(sky.complete&&sky.naturalWidth>0){
-  // One continuous sky plane per level: never repeat vertically or
-  // horizontally. Pan a cropped source window for subtle parallax.
-  const visibleWidth=sky.naturalWidth*.88;
+  const sourceHeight=sky.naturalHeight*.86; // Hide the lower artwork border.
+  const scale=Math.max(W/sky.naturalWidth,H/sourceHeight);
+  const visibleWidth=W/scale,visibleHeight=H/scale;
   const maxSourceOffset=sky.naturalWidth-visibleWidth;
   const sourceX=Math.max(0,Math.min(maxSourceOffset,maxSourceOffset*.5+camera*.015));
-  // Cut the bottom edge of the artwork (including its dark border).
-  // The building facade covers the lower portion of the sky.
-  const sourceHeight=sky.naturalHeight*.86;
-  ctx.drawImage(sky,sourceX,0,visibleWidth,sourceHeight,0,-7000,W,7000+floor);
+  ctx.drawImage(sky,sourceX,0,visibleWidth,visibleHeight,0,cameraY,W,H);
  }
  // Cement behind the transparent industrial wall (level 2 only).
  if(currentLevel==='factory'){
@@ -647,6 +644,14 @@ limb('hip','chest',20,'#db9b40');limb('chest','neck',11,'#e8b95d');for(const [a,
 for(const [id,x] of Object.entries(n)){if(id==='head'){ctx.fillStyle='#20252b';ctx.beginPath();ctx.arc(x.x,x.y,16,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f3c66c';ctx.beginPath();ctx.arc(x.x,x.y,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#393d40';ctx.beginPath();ctx.arc(x.x-4,x.y-2,2,0,Math.PI*2);ctx.arc(x.x+4,x.y-2,2,0,Math.PI*2);ctx.fill();}else if(!['hip','chest'].includes(id)){ctx.fillStyle='#333f48';ctx.beginPath();ctx.arc(x.x,x.y,Math.min(x.r,5),0,Math.PI*2);ctx.fill();ctx.fillStyle='#8e9a9f';ctx.beginPath();ctx.arc(x.x,x.y,2,0,Math.PI*2);ctx.fill()}}ctx.restore()}
 function drawDummy(x,y,angle=0){ctx.save();ctx.translate(x,y);ctx.rotate(-angle*.3);ctx.lineCap='round';ctx.strokeStyle='#20252b';ctx.lineWidth=14;ctx.beginPath();ctx.moveTo(0,-27);ctx.lineTo(0,-3);ctx.moveTo(-6,-14);ctx.lineTo(-18,3);ctx.moveTo(6,-14);ctx.lineTo(18,3);ctx.moveTo(-5,0);ctx.lineTo(-12,21);ctx.moveTo(5,0);ctx.lineTo(12,21);ctx.stroke();ctx.strokeStyle='#dfa347';ctx.lineWidth=10;ctx.stroke();ctx.fillStyle='#f1bf5d';ctx.strokeStyle='#242d31';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,-42,13,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore()}
 function forces(){let T=0;for(const c of connections){let a=framePoint(c.f),b=armPoint(c.a),dx=a.x-b.x,dy=a.y-b.y,len=Math.hypot(dx,dy)||1,unit={x:dx/len,y:dy/len};let power=0;if(c.type==='rubber')power=Math.max(0,(len-105)*.23);if(c.type==='spring')power=Math.max(0,(len-70)*.48);if(c.type==='piston')power=-Math.max(0,(165-len)*(hydraulicOn?.67:.35));if(c.type==='weight')power=28;const fx=unit.x*power,fy=unit.y*power,rx=b.x-pivot.x,ry=b.y-pivot.y;T+=(rx*fy-ry*fx)*-.0012;}return T}
+function bodyCameraTarget(body,visualParts){
+ const visible=new Map(visualParts.filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)).map(p=>[p.joint,p]));
+ // After shredding, use the actual rendered pieces rather than hidden nodes.
+ const points=body.shredded&&visible.size?[...visible.values()]
+  :Object.entries(body.nodes).map(([joint,node])=>visible.get(joint)||node);
+ const median=values=>{values.sort((a,b)=>a-b);const mid=Math.floor(values.length/2);return values.length%2?values[mid]:(values[mid-1]+values[mid])/2;};
+ return {x:median(points.map(p=>p.x)),y:median(points.map(p=>p.y))};
+}
 function simulate(dt){if(phase==='launching'||phase==='airborne')levelClock+=dt;if(phase==='launching'){
   // The cradle starts BEHIND the pivot (to the left). As the arm swings
   // upward toward the front, its tangential velocity carries the dummy RIGHT.
@@ -667,16 +672,15 @@ function simulate(dt){if(phase==='launching'||phase==='airborne')levelClock+=dt;
     startNotice(`<strong>Released!</strong> The arm swings up from behind the pivot and sends the dummy forward (right). Initial speed ${Math.round(Math.hypot(vx,vy))} px/s.`);
   }
 }
-if(phase==='airborne'&&dummy){updateRagdoll(dt);stepBlood(dt);let head=rag.nodes.head;maxDist=Math.max(maxDist,(Math.max(...Object.values(rag.nodes).map(n=>n.x))-flightStart)*.65);$('distanceText').textContent=Math.floor(maxDist)+' ft';if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Keep the dummy in frame on BOTH axes. Vertical tracking is activated
-// only above the normal playfield, and eases back to ground on descent.
- // Keep the skull at the camera center, including once detached.
- const skull=window.skullCameraTarget;
- const target=skull&&rag.injuries.has('neck:head')||skull&&rag.shredded?skull:rag.nodes.head;
+if(phase==='airborne'&&dummy){updateRagdoll(dt);stepBlood(dt);let head=rag.nodes.head;maxDist=Math.max(maxDist,(Math.max(...Object.values(rag.nodes).map(n=>n.x))-flightStart)*.65);$('distanceText').textContent=Math.floor(maxDist)+' ft';if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Follow the majority of the visible body pieces, ignoring lone outliers.
+ const target=bodyCameraTarget(rag,window.bodyCameraParts||[]);
  const desiredX=Math.max(0,target.x-W*.5);
- const desiredY=target.y-H*.5;
- const tracking=Math.min(1,dt*9);
+ // Only rise for high flight. At ground level the original framing remains
+ // the lowest camera position, so centering debris cannot expose underground.
+ const desiredY=Math.min(0,target.y-H*.45);
+ const tracking=1-Math.exp(-dt*5);
  camera+=(desiredX-camera)*tracking;
- cameraY+=(desiredY-cameraY)*tracking;
+ cameraY=Math.min(0,cameraY+(desiredY-cameraY)*tracking);
  if(rag.settled>1.6 && rag.groundTime>1.5 && bloodDrops.length===0){rag.aftermathTime=(rag.aftermathTime||0)+dt;}else if(rag){rag.aftermathTime=0;}if(rag.aftermathTime>=6){const earned=levelFailed?0:Math.max(0,Math.floor(maxDist*.4+hazardPoints*.1));credits+=earned;localStorage.setItem('slaughterpultCredits',credits);moneyUI();phase='done';setPhase('done');startNotice(`<strong>RESULT: ${Math.floor(maxDist)} ft.</strong> ${levelFailed?'SOFT LANDING — FAIL! No points.':`Score: ${Math.floor(maxDist)+hazardPoints} (${Math.floor(maxDist)} distance + ${hazardPoints} machinery). Earned ${earned}.`} Change the launcher and try again.`)}}}
 
 function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#11151b';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(0,-cameraY);drawSky();drawHazards();drawGore();if(camera<750)catapult();if(dummy){drawRag()}if(phase==='build'||phase==='charged'||phase==='done'){ctx.save();ctx.translate(-camera,0);for(let i=0;i<frameOffsets.length;i++){const p=framePoint(i);ctx.fillStyle=pending?.kind==='frame'&&pending.index===i?'#fff':'#37decc';ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);ctx.fill();ctx.fillStyle='#0c2636';ctx.font='bold 9px system-ui';ctx.fillText('F'+(i+1),p.x+9,p.y-7)}for(let i=0;i<armOffsets.length;i++){const p=armPoint(i);ctx.fillStyle=pending?.kind==='arm'&&pending.index===i?'#fff':'#ffc049';ctx.beginPath();ctx.arc(p.x,p.y,6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#342716';ctx.font='bold 9px system-ui';ctx.fillText('A'+(i+1),p.x+9,p.y-7)}ctx.restore()}ctx.restore()}
