@@ -388,6 +388,125 @@ function positionLevelMachinery(state,w,h){
  }
  previousShred=!!state.shredded;
 }
+const wallDolls=[];
+let dollLastTime=0;
+async function loadWallDolls(){
+ try{
+  const gltf=await new GLTFLoader().loadAsync('./hanging_voodoo_doll.glb');
+  const source=gltf.scene;
+  const bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3());
+  const center=bounds.getCenter(new THREE.Vector3());
+  const scale=78/(size.y||1);
+  for(const [i,x] of [620,1160,2120,3030,3970,5050,6100,7310,8270].entries()){
+   const pivot=new THREE.Group(),doll=source.clone(true);
+   doll.scale.multiplyScalar(scale);
+   // Pivot at the supplied hanging attachment, rather than the body center.
+   doll.position.set(-center.x*scale,-bounds.max.y*scale,-center.z*scale);
+   doll.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
+   pivot.add(doll);pivot.userData={worldX:x,anchor:.55+(i%3)*.055,angle:0,velocity:0,wind:0,gustTimer:0};
+   scene.add(pivot);wallDolls.push(pivot);
+  }
+ }catch(e){console.warn('Wall doll asset unavailable',e);}
+}
+function positionWallDolls(state,w,h){
+ const now=performance.now(),dt=dollLastTime?Math.min(.04,(now-dollLastTime)/1000):1/60;dollLastTime=now;
+ for(const pivot of wallDolls){
+  const u=pivot.userData;
+  pivot.visible=state.level==='factory'&&Math.abs(u.worldX-state.camera-w/2)<w/2+100;
+  // Damped pendulum driven by irregular small gusts. No repeating sine loop.
+  u.gustTimer-=dt;
+  if(u.gustTimer<=0){u.wind=(Math.random()-.5)*.20;u.gustTimer=.55+Math.random()*1.9;}
+  u.velocity+=(u.wind-u.angle*3.4-u.velocity*1.5)*dt;
+  u.angle=THREE.MathUtils.clamp(u.angle+u.velocity*dt,-.10,.10);
+  pivot.rotation.z=u.angle;
+  pivot.position.set(u.worldX-state.camera-w/2,h/2-h*.88+h*u.anchor+(state.cameraY||0),-35);
+ }
+}
+// Templates use the pack's original mesh/UVs, without the display-layout
+// transforms. +Y points handle-to-tip; +X is the leading cutting edge.
+const weaponTemplates={},weaponStations=new Map();
+window.weaponOverlayReady=false;
+async function loadWeapons(){
+ try{
+  const gltf=await new GLTFLoader().loadAsync('./retro__psx-like_horror_melee_weapons_pack.glb');
+  const names={knife:'kitchenKnife_Bloody_',axe:'axe_bloody_',machete:'machete_Bloody_',cleaver:'cleaver_Bloody_'};
+  for(const [kind,prefix] of Object.entries(names)){
+   let source;gltf.scene.traverse(o=>{if(o.isMesh&&o.name.startsWith(prefix))source=o;});
+   if(!source)continue;
+   const geometry=source.geometry.clone();
+   geometry.rotateX(-Math.PI/2); // local Z is length; local Y is thickness
+   if(kind==='cleaver')geometry.rotateZ(-Math.PI/2);
+   if(kind==='axe'||kind==='cleaver'){
+    // Rotate around length rather than reflect winding/normals.
+    geometry.rotateY(Math.PI);
+   }
+   geometry.computeBoundingBox();
+   const box=geometry.boundingBox,center=box.getCenter(new THREE.Vector3());
+   geometry.translate(-center.x,-box.min.y,-center.z);
+   const length=box.max.y-box.min.y;
+   geometry.scale(1/length,1/length,1/length);
+   const material=source.material.clone();material.side=THREE.DoubleSide;
+   weaponTemplates[kind]=new THREE.Mesh(geometry,material);
+  }
+  window.weaponOverlayReady=!!weaponTemplates.knife;
+ }catch(e){console.warn('Weapon pack unavailable; original hazard visuals remain',e);}
+}
+function mountedWeapon(parent,kind,length,x,y,angle,z=52){
+ const template=weaponTemplates[kind]||weaponTemplates.knife;if(!template)return;
+ const mesh=template.clone();mesh.scale.setScalar(length);
+ mesh.position.set(x,y,z);mesh.rotation.z=angle;mesh.frustumCulled=false;
+ parent.add(mesh);return mesh;
+}
+function makeWeaponStation(hazard){
+ const root=new THREE.Group(),rotors=[];
+ if(hazard.kind==='roller'){
+  for(const shift of [-41,41]){
+   const rotor=new THREE.Group();rotor.position.set(shift,106,0);
+   // Each roller's leading edge follows its own counter-rotation.
+   const clockwise=shift<0;
+   for(let i=0;i<8;i++){
+    const angle=i*Math.PI/4;
+    const mount=new THREE.Group();mount.position.set(Math.cos(angle)*32,Math.sin(angle)*32,0);
+    mount.rotation.z=angle-Math.PI/2;
+    if(!clockwise)mount.rotation.y=Math.PI;
+    mountedWeapon(mount,i%2?'axe':'machete',30,0,0,0);rotor.add(mount);
+   }
+   root.add(rotor);rotors.push({rotor,shift});
+  }
+ }else if(hazard.kind==='press'){
+  for(let x=-42,i=0;x<=42;x+=21,i++)mountedWeapon(root,i%2?'cleaver':'knife',30,x,0,i%2?-Math.PI/2:Math.PI);
+ }else if(hazard.kind==='ramp'){
+  for(let x=-hazard.width/2+16,i=0;x<hazard.width/2;x+=28,i++){
+   const y=hazard.y-(x+hazard.width/2)*hazard.slope;
+   mountedWeapon(root,i%3?'knife':'axe',26,x,y,Math.atan(-hazard.slope));
+  }
+ }
+ root.userData.rotors=rotors;scene.add(root);return root;
+}
+function positionWeapons(state,w,h){
+ if(!window.weaponOverlayReady)return;
+ const active=new Set();
+ for(const hazard of state.hazards||[]){
+  if(!['roller','press','ramp'].includes(hazard.kind))continue;
+  active.add(hazard.id);
+  let root=weaponStations.get(hazard.id);
+  if(!root){root=makeWeaponStation(hazard);weaponStations.set(hazard.id,root);}
+  root.visible=Math.abs(hazard.x-state.camera-w/2)<w/2+hazard.width;
+  const floor=h/2-h*.88+(state.cameraY||0);
+  root.position.set(hazard.x-state.camera-w/2,floor,0);
+  if(hazard.kind==='press')root.position.y=h/2-(state.pressBottom+8)+(state.cameraY||0);
+  for(const {rotor,shift} of root.userData.rotors)rotor.rotation.z=(state.levelClock||0)*(shift<0?-2.6:2.6);
+ }
+ for(const [id,root] of weaponStations)if(!active.has(id))root.visible=false;
+ // Main grinder weapons are parented directly to the powered drum.
+ if(grinderDrum&&!grinderDrum.userData.weaponsMounted){
+  for(let i=0;i<12;i++){
+   const a=i*Math.PI/6;
+   mountedWeapon(grinderDrum,i%3?'knife':'axe',25,Math.cos(a)*32,Math.sin(a)*32,a-Math.PI/2,64);
+  }
+  grinderDrum.userData.weaponsMounted=true;
+ }
+}
 // Separate geometry from the supplied skeletal-gore GLB, mapped to simulated
 // detached limbs. Use original mesh geometry, not a stretched copy of the body.
 async function loadGoreAsset(){
@@ -403,7 +522,7 @@ const GORE_MAP={
  chest:['torso1up','brestmuscles','backmuscles','neckmuscles'],
  hip:['torso1low','buttocks'],
  le:['Leftarm','LarmBone'],lh:['LeftForearm','LforearmBone','lefthand'],
- re:['Rightarm','RarmBone'],rh:['RightForearm','RforearmBone'],hand:['Righthand'],
+ re:['Rightarm','RarmBone'],rh:['RightForearm','RforearmBone','Righthand'],
  lk:['L_leg','L_legbone'],lf:['L_lowerleg','L_leglowerBone','L_foot'],
  rk:['Rleg','Rlegbone'],rf:['Rlowerleg','RlowerlegBone','R_foot']
 };
@@ -567,7 +686,7 @@ function buildGorePart(joint){
   group.userData.eyes=eyes;
   group.userData.eyeTime=0;
  }
- if(joint==='hand'){
+ if(joint==='rh'){
   // Animate the actual imported hand only; never add substitute fingers.
   group.userData.crawlClock=0;
   group.userData.crawlStartX=null;
@@ -605,7 +724,7 @@ function positionGore(state,w,h){
  const severedParts={'neck:head':'head','le:lh':'lh','re:rh':'rh','lk:lf':'lf','rk:rf':'rf','ls:le':'le','rs:re':'re','hip:lk':'lk','hip:rk':'rk','hip:waist':'chest'};
  const removed=new Set([...detached].map(x=>severedParts[x]).filter(Boolean));
  // A proximal tear releases the entire distal chain, including its real bones.
- for(const [parent,children] of [['chest',['head','le','lh','re','rh']],['le',['lh']],['re',['rh']],['lk',['lf']],['rk',['rf']],['rh',['hand']]]){
+ for(const [parent,children] of [['chest',['head','le','lh','re','rh']],['le',['lh']],['re',['rh']],['lk',['lf']],['rk',['rf']]]){
   if(removed.has(parent))for(const child of children)removed.add(child);
  }
  const joints=fullShred?Object.keys(GORE_MAP):[...removed];
@@ -613,7 +732,7 @@ function positionGore(state,w,h){
   if(goreParts.some(p=>p.userData.joint===joint)||!goreAsset)continue;
   // Exposed anatomy replaces the removed skin region, never duplicates it.
   const part=buildGorePart(joint);if(!part)continue;
-  const node=state.rag[joint==='hand'?'rh':joint]||state.rag.chest;
+  const node=state.rag[joint]||state.rag.chest;
   // Nearby but varied scatter: inherit the ragdoll's impact momentum,
   // then add limited independent kicks, not long-range explosions.
   part.userData.worldX=node.x;
@@ -630,19 +749,19 @@ function positionGore(state,w,h){
  const floor=h*.88;
  for(const p of goreParts){
   const u=p.userData;
-  const lieAngle=u.lieAngle===null?p.rotation.z:u.lieAngle;
-  const floorExtent=Math.abs(Math.cos(lieAngle))*(u.halfHeight||12)+Math.abs(Math.sin(lieAngle))*(u.halfWidth||12);
-  // A rounded skull rolls on its outer radius; never use its narrow mesh axis.
-  let groundY=floor-Math.max(3,u.joint==='head'?u.radius||15:floorExtent);
-  if(u.joint==='hand'){
-   // Palm faces the floor; fingertips lead the crawl. Never land on the wrist.
+  if(u.joint==='rh'){
+   // Keep the existing forearm/hand fragment; fingertips lead its creeping
+   // direction and its lower surface rests against the floor.
    p.rotation.set(Math.PI/2,0,u.crawlDirection>0?Math.PI/2:-Math.PI/2);
-   const bounds=new THREE.Box3().setFromObject(p);
-   groundY=floor-(p.position.y-bounds.min.y)+2;
   }
-  const contactExtent=Math.max(3,floor-groundY);
+  // Contact uses the rendered mesh bounds, including its actual orientation.
+  // An approximate limb radius left some rotated pieces hovering above ground.
+  const bounds=new THREE.Box3().setFromObject(p);
+  const contactExtent=Math.max(1,p.position.y-bounds.min.y);
+  let groundY=floor-contactExtent+(u.joint==='rh'?2:0);
   const floorDepth=(u.floorDepth||0)*Math.max(0,h-floor-contactExtent-8);
   groundY+=floorDepth;
+  u.floorY=floor+floorDepth;u.contactExtent=contactExtent;
   if(!u.resting){
    u.vy+=780*dt;
    u.vx*=Math.exp(-.34*dt);
@@ -650,8 +769,8 @@ function positionGore(state,w,h){
    // Keep debris within a plausible vicinity of the impact site.
    u.worldX=THREE.MathUtils.clamp(u.worldX,u.originX-165,u.originX+165);
    u.worldY+=u.vy*dt;
-   if(u.joint!=='hand')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
-   if(u.joint!=='hand')p.rotation.x+=u.spin*dt*15;
+   if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
+   if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
    if(u.worldY>=groundY){
     u.worldY=groundY;
     // Keep the orientation earned during the tumble, not a prescribed side pose.
@@ -666,7 +785,7 @@ function positionGore(state,w,h){
    }
   }else{
    u.worldY=groundY;
-   if(u.joint==='hand'&&u.crawlClock!==undefined){
+   if(u.joint==='rh'&&u.crawlClock!==undefined){
     if(u.crawlStartX===null)u.crawlStartX=u.worldX;
     u.crawlClock+=dt;
     const t=u.crawlClock;
@@ -725,7 +844,7 @@ function positionGore(state,w,h){
 
   p.position.set(u.worldX-state.camera-w/2,h/2-u.worldY+(state.cameraY||0),65);
  }
- window.bodyCameraParts=goreParts.map(p=>({joint:p.userData.joint,x:p.userData.worldX,y:p.userData.worldY}));
+ window.bodyCameraParts=goreParts.map(p=>({joint:p.userData.joint,x:p.userData.worldX,y:p.userData.worldY,floorY:p.userData.floorY,extent:p.userData.contactExtent,radius:p.userData.radius}));
 }
 function animate(){
  requestAnimationFrame(animate);
@@ -737,6 +856,8 @@ function animate(){
  camera.left=-w/2;camera.right=w/2;camera.top=h/2;camera.bottom=-h/2;camera.updateProjectionMatrix();
  positionChair(state,w,h);
  positionLevelMachinery(state,w,h);
+ positionWeapons(state,w,h);
+ positionWallDolls(state,w,h);
  positionGore(state,w,h);
  if(model&&window.characterOverlayReady&&!window.seatLoading){
   model.visible=true;
@@ -841,4 +962,4 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadGoreAsset();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadWeapons();loadWallDolls();loadGoreAsset();animate();}

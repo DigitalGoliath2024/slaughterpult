@@ -19,3 +19,14 @@ Until uploaded, the playable 2D ragdoll remains available as a fallback.
 
 ## Controls
 Pick a power component and connect sockets on the frame and arm. Pull Back, then Launch. Adjust release angle and arm length; reset to try again.
+
+## Additional asset credits
+
+- [Retro / PSX-like Horror Melee Weapons Pack](https://sketchfab.com/3d-models/retro-psx-like-horror-melee-weapons-pack-79cae670d515469a947617d18e5a6c89) — turnip_liker — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Original meshes and textures, reoriented, resized, and mounted on moving machinery and boards.
+
+- [Hanging voodoo doll](https://sketchfab.com/3d-models/hanging-voodoo-doll-2ecec7c9b5b946dab7a7e40b76e220fd) — Sophie — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Resized and suspended on wall anchors with procedural damped sway.
+
+Supplied credits reserved for upcoming environment assets (files not yet available on main):
+- [brick textures](https://skfb.ly/6WM8U) — DJMaesen — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- [Horror Bed](https://skfb.ly/6WwZG) — denis_cliofas — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- [Skulls Wall | Tile Texture](https://skfb.ly/ptwyH) — CATholic — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
