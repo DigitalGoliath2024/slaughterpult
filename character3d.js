@@ -457,6 +457,7 @@ function buildGorePart(joint){
  group.userData.joint=joint;
  group.userData.halfHeight=size.y*scale/2;
  group.userData.halfWidth=size.x*scale/2;
+ group.userData.radius=Math.max(size.x,size.y,size.z)*scale*.5;
  // Long limb geometry should lie along the floor, not stand vertically.
  group.userData.lieAngle=(joint==='head'?0:(Math.random()<.5?1:-1)*Math.PI/2);
  group.userData.resting=false;group.userData.bounces=0;
@@ -497,20 +498,23 @@ function positionGore(state,w,h){
   const u=p.userData;
   const lieAngle=u.lieAngle||0;
   const floorExtent=Math.abs(Math.cos(lieAngle))*(u.halfHeight||12)+Math.abs(Math.sin(lieAngle))*(u.halfWidth||12);
-  const groundY=floor-Math.max(3,floorExtent);
+  // A rounded skull rolls on its outer radius; never use its narrow mesh axis.
+  const groundY=floor-Math.max(3,u.joint==='head'?u.radius||15:floorExtent);
   if(!u.resting){
    u.vy+=780*dt;
    u.vx*=Math.exp(-.34*dt);
    u.worldX+=u.vx*dt;
    u.worldY+=u.vy*dt;
-   p.rotation.z+=u.spin*dt*60;
+   p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    p.rotation.x+=u.spin*dt*15;
    if(u.worldY>=groundY){
     u.worldY=groundY;
-    if(u.vy>85&&u.bounces<2){
-     u.vy=-u.vy*.19;u.vx*=.58;u.bounces++;
+    if(u.vy>60&&u.bounces<(u.joint==='head'?4:2)){
+     u.vy=-u.vy*(u.joint==='head'?.34:.19);u.vx*=u.joint==='head'?.79:.58;u.bounces++;
     }else{
-     u.vy=0;u.vx=0;u.resting=true;
+     u.vy=0;
+     if(u.joint==='head'&&Math.abs(u.vx)>9){u.vx*=.88;u.worldY=groundY;}
+     else{u.vx=0;u.resting=true;}
     }
    }
   }else{
