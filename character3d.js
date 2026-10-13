@@ -425,6 +425,8 @@ function positionGore(state,w,h){
    part.userData.resting=false;
    part.userData.halfHeight=dimensions.y*scale*.5;
    part.userData.angle=(Math.random()-.5)*1.3;
+   part.userData.spin=(Math.random()<.5?-1:1)*(.017+Math.random()*.036);
+   part.userData.bounces=0;
    part.rotation.z=part.userData.angle;
    scene.add(part);goreParts.push(part);
   }
@@ -434,21 +436,28 @@ function positionGore(state,w,h){
  for(const p of goreParts){
   const n=state.rag[p.userData.joint];if(!n)continue;
   const halfHeight=p.userData.halfHeight||11;
-  const landed=n.y>=floor-halfHeight-3||state.groundTime>1.35||state.phase==='done';
+  // Ragdoll-wide groundTime cannot land an airborne fragment.
+  // Only its own floor contact starts the settling process.
+  const contactY=floor-halfHeight;
+  const landed=n.y>=contactY-2;
   if(landed&&!p.userData.resting){
    p.userData.resting=true;
    p.userData.restX=n.x;
-   p.userData.restY=n.y;
-   p.rotation.z=0; // pieces lie flat rather than balancing on an end
+   p.userData.restY=contactY;
+   p.userData.bounces=0;
   }
-  if(!p.userData.resting)p.rotation.z+=.012;
+  if(!p.userData.resting){
+   p.rotation.z+=p.userData.spin;
+   p.rotation.x+=p.userData.spin*.35;
+  }else{
+   // A quick damped wobble after impact, then remain flat.
+   p.userData.bounces++;
+   const settle=Math.min(1,p.userData.bounces/32);
+   p.rotation.z*=1-settle*.26;
+   p.rotation.x*=1-settle*.26;
+  }
   const x=p.userData.resting?p.userData.restX:n.x;
-  let y=n.y;
-  if(p.userData.resting){
-   const target=floor-halfHeight;
-   p.userData.restY=Math.min(target,p.userData.restY+3.2);
-   y=p.userData.restY;
-  }
+  const y=p.userData.resting?contactY:Math.min(n.y,contactY);
   p.position.set(x-state.camera-w/2,h/2-y+(state.cameraY||0),55);
  }
 }
