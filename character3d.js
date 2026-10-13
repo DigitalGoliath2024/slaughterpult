@@ -82,7 +82,7 @@ function positionChair(state,w,h){
  if(!seatRoot||!seatReady)return;
  // The bracket origin stays physically on the steel girder tip.
  seatRoot.visible=state.camera<750;
- seatRoot.position.set(state.tip.x-state.camera-w/2-18,h/2-state.tip.y,12);
+ seatRoot.position.set(state.tip.x-state.camera-w/2-18,h/2-state.tip.y+ (state.cameraY||0),12);
  // Rigidly welded to the girder: arm rotation only, no independent seat tilt.
  seatRoot.rotation.z=state.theta-Math.PI; // pitches forward/downward as the girder rises
 }
@@ -322,7 +322,7 @@ function animate(){
   if(rag){
    const tilt=direction(rag.hip,rag.chest)-Math.PI/2;
    model.position.x=rag.hip.x-state.camera-w/2;
-   model.position.y=h/2-rag.hip.y-21;
+   model.position.y=h/2-rag.hip.y+(state.cameraY||0)-21;
    model.rotation.order='YXZ';
    model.rotation.y=Math.PI/2;
    model.rotation.z=tilt;
@@ -341,7 +341,7 @@ function animate(){
    if(!seatCharacterOnChair()){
     // Fallback positioning when the GLB chair fails to load.
     model.position.x=tip.x-state.camera-w/2-7;
-    model.position.y=h/2-tip.y-34;
+    model.position.y=h/2-tip.y+(state.cameraY||0)-34;
     model.rotation.order='YXZ';
     model.rotation.y=Math.PI/2;
     model.rotation.z=phase==='launching'?-theta*.25:0;
@@ -365,7 +365,7 @@ function drawBasket(state,w,h){
  basketCtx.setTransform(dpr,0,0,dpr,0,0);
  basketCtx.clearRect(0,0,w,h);
  if(seatReady||state.rag||!window.characterOverlayReady)return;
- const x=state.tip.x-state.camera,y=state.tip.y;
+ const x=state.tip.x-state.camera,y=state.tip.y-(state.cameraY||0);
  basketCtx.save();basketCtx.translate(x,y);basketCtx.rotate(-state.theta);
  basketCtx.fillStyle='#344a59';basketCtx.strokeStyle='#172b38';basketCtx.lineWidth=4;
  // Front/lower basket wall hides the lower body, leaving upper torso visible.
