@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
-let renderer,scene,camera,model,bones={},base={},ticket=0;
+let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy';
 try {
  renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
@@ -30,6 +30,8 @@ async function load(id){
   const g=await new GLTFLoader().loadAsync(urls[id]);if(mine!==ticket)return;
   if(model)scene.remove(model);
   model=g.scene;scene.add(model);model.updateMatrixWorld(true);
+  // Use bind pose rather than the cowboy's bundled animation; physics owns movement.
+  model.traverse(n=>{if(n.isSkinnedMesh){n.frustumCulled=false;}});
   const box=new THREE.Box3().setFromObject(model),size=new THREE.Vector3();
   box.getSize(size);if(!(size.y>0))throw Error('Empty model');
   model.scale.multiplyScalar(110/size.y);model.updateMatrixWorld(true);
@@ -38,12 +40,14 @@ async function load(id){
   bones={};base={};
   for(const part of parts){const b=bone(part);if(b){bones[part]=b;base[part]=b.quaternion.clone()}}
   if(!bones.Hips)throw Error('Incompatible skeleton');
+  activeId=id;
+  applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
   window.characterOverlayReady=true;
   status.textContent=id==='cowboy'?'Cowboy · 3D active':'Human · 3D active';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
-  status.textContent='3D '+id+' model missing — using 2D ragdoll';
+  status.textContent='Could not load '+id+' · '+(e?.message||'model error');
   window.characterOverlayReady=false;
  }
 }
@@ -53,6 +57,26 @@ const norm=a=>Math.atan2(Math.sin(a),Math.cos(a));
 function rotate(part,angle){
  if(!bones[part])return;
  bones[part].quaternion.copy(base[part]).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),angle));
+}
+// Pose rotations are layered on each character's original bind pose.
+function pose(part,x=0,y=0,z=0){
+ const b=bones[part];if(!b)return;
+ b.quaternion.copy(base[part]);
+ b.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(x,y,z,'XYZ')));
+}
+function applySittingPose(){
+ for(const part of parts)if(bones[part])bones[part].quaternion.copy(base[part]);
+ // Fold thighs forward from the hips and bend knees down toward the cradle.
+ pose('LeftUpLeg',0,0,Math.PI*.49);
+ pose('RightUpLeg',0,0,Math.PI*.49);
+ pose('LeftLeg',0,0,-Math.PI*.52);
+ pose('RightLeg',0,0,-Math.PI*.52);
+ // Relax the torso and let the arms sit naturally, instead of T-pose.
+ pose('Spine',0,0,-.10);
+ pose('LeftArm',0,0,-.65);
+ pose('RightArm',0,0,.65);
+ pose('LeftForeArm',0,0,-.18);
+ pose('RightForeArm',0,0,.18);
 }
 function animate(){
  requestAnimationFrame(animate);
@@ -84,7 +108,7 @@ function animate(){
    model.position.x=tip.x-state.camera-w/2;
    model.position.y=h/2-tip.y+5;
    model.rotation.z=phase==='launching'?-theta*.25:0;
-   for(const part of parts)if(bones[part])bones[part].quaternion.copy(base[part]);
+   applySittingPose();
   }
  }else if(model){model.visible=false;}
  renderer.render(scene,camera);
