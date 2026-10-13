@@ -395,79 +395,85 @@ async function loadGoreAsset(){
   goreAsset.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
  }catch(e){console.warn('Gore asset could not load',e);}
 }
-function positionGore(state,w,h){
- if(!state.shredded||!state.rag){
-  for(const part of goreParts){scene.remove(part);part.geometry.dispose();}
-  goreParts=[];goreWasShredded=false;return;
+// Match named meshes from the supplied skeleton GLB to their actual anatomy.
+const GORE_MAP={
+ head:['skull','L_eye','R_eye','brain'],
+ chest:['torso1up','brestmuscles','backmuscles','neckmuscles'],
+ hip:['torso1low','buttocks'],
+ le:['Leftarm','LarmBone'],lh:['LeftForearm','LforearmBone','lefthand'],
+ re:['Rightarm','RarmBone'],rh:['RightForearm','RforearmBone','Righthand'],
+ lk:['L_leg','L_legbone'],lf:['L_lowerleg','L_leglowerBone','L_foot'],
+ rk:['Rleg','Rlegbone'],rf:['Rlowerleg','RlowerlegBone','R_foot']
+};
+function buildGorePart(joint){
+ if(!goreAsset)return null;
+ goreAsset.updateMatrixWorld(true);
+ const entries=[];goreAsset.traverse(o=>{
+  if(!o.isMesh)return;
+  if(GORE_MAP[joint]?.some(name=>o.name.startsWith(name+'_')||o.name===name))entries.push(o);
+ });
+ if(!entries.length)return null;
+ const group=new THREE.Group(),bounds=new THREE.Box3();
+ for(const src of entries){
+  const geometry=src.geometry.clone();
+  geometry.applyMatrix4(src.matrixWorld);
+  geometry.computeBoundingBox();
+  bounds.union(geometry.boundingBox);
+  const mesh=new THREE.Mesh(geometry,src.material);
+  mesh.frustumCulled=false;group.add(mesh);
  }
- if(!goreWasShredded&&goreAsset){
-  goreAsset.updateMatrixWorld(true);
-  const meshes=[];goreAsset.traverse(o=>{if(o.isMesh)meshes.push(o);});
-  meshes.sort((a,b)=>{
-   const score=o=>/muscle|flesh|meat|tissue|skin/i.test(o.name+' '+(o.material?.name||''))?2:/bone|skel|rib/i.test(o.name+' '+(o.material?.name||''))?0:1;
-   return score(b)-score(a);
-  });
-  const ids=['head','lh','rh','lf','rf','le','re','lk','rk','chest'];
-  for(let i=0;i<Math.min(meshes.length,ids.length);i++){
-   const src=meshes[i];
-   // Each component of the original mesh must have its own centered geometry.
-   // Otherwise the original skeleton's object offsets make pieces hover.
-   const geometry=src.geometry.clone();
-   geometry.applyMatrix4(src.matrixWorld);
-   geometry.computeBoundingBox();
-   const dimensions=geometry.boundingBox.getSize(new THREE.Vector3());
-   const center=geometry.boundingBox.getCenter(new THREE.Vector3());
-   geometry.translate(-center.x,-center.y,-center.z);
-   const part=new THREE.Mesh(geometry,src.material);
-   const scale=29.7/(Math.max(dimensions.x,dimensions.y,dimensions.z)||1);
-   part.scale.setScalar(scale);
-   part.userData.joint=ids[i];
-   part.userData.resting=false;
-   part.userData.halfHeight=dimensions.y*scale*.5;
-   part.userData.angle=(Math.random()-.5)*1.3;
-   part.userData.spin=(Math.random()<.5?-1:1)*(.017+Math.random()*.036);
-   part.userData.bounces=0;
-   part.rotation.z=part.userData.angle;
-   scene.add(part);goreParts.push(part);
+ const center=bounds.getCenter(new THREE.Vector3());
+ const size=bounds.getSize(new THREE.Vector3());
+ for(const mesh of group.children)mesh.geometry.translate(-center.x,-center.y,-center.z);
+ const scale=joint==='head'?29/(Math.max(size.x,size.y,size.z)||1):33/(Math.max(size.x,size.y,size.z)||1);
+ group.scale.setScalar(scale);
+ group.userData.joint=joint;
+ group.userData.halfHeight=size.y*scale/2;
+ group.userData.resting=false;group.userData.bounces=0;
+ group.userData.spin=(Math.random()<.5?-1:1)*(.014+Math.random()*.03);
+ group.rotation.z=(Math.random()-.5)*.5;
+ return group;
+}
+function clearGoreParts(){
+ for(const p of goreParts){
+  scene.remove(p);
+  p.traverse(o=>{if(o.isMesh)o.geometry.dispose();});
+ }
+ goreParts=[];goreWasShredded=false;
+}
+function positionGore(state,w,h){
+ const fullShred=!!state.shredded,headOnly=!!state.headDetached;
+ if((!fullShred&&!headOnly)||!state.rag){if(goreParts.length)clearGoreParts();return;}
+ // Head can break independently without shredding the entire body.
+ if(!goreParts.length&&goreAsset){
+  for(const joint of fullShred?Object.keys(GORE_MAP):['head']){
+   const part=buildGorePart(joint);if(part){scene.add(part);goreParts.push(part);}
   }
  }
- goreWasShredded=true;
+ if(fullShred&&goreParts.length===1){
+  // Upgrade from a detached head to the entire dissected skeleton.
+  for(const joint of Object.keys(GORE_MAP).filter(x=>x!=='head')){
+   const part=buildGorePart(joint);if(part){scene.add(part);goreParts.push(part);}
+  }
+ }
  const floor=h*.88;
  for(const p of goreParts){
   const n=state.rag[p.userData.joint];if(!n)continue;
-  const halfHeight=p.userData.halfHeight||11;
-  // Ragdoll-wide groundTime cannot land an airborne fragment.
-  // Only its own floor contact starts the settling process.
-  const contactY=floor-halfHeight;
-  const landed=n.y>=contactY-2;
+  const groundY=floor-(p.userData.halfHeight||12);
+  const landed=n.y>=groundY-2;
   if(landed&&!p.userData.resting){
-   p.userData.resting=true;
-   p.userData.restX=n.x;
-   p.userData.restY=contactY;
-   p.userData.bounces=0;
+   p.userData.resting=true;p.userData.restX=n.x;p.userData.bounces=0;
   }
-  if(!p.userData.resting){
-   p.rotation.z+=p.userData.spin;
-   p.rotation.x+=p.userData.spin*.35;
-  }else{
-   // A quick damped wobble after impact, then remain flat.
+  if(!p.userData.resting){p.rotation.z+=p.userData.spin;p.rotation.x+=p.userData.spin*.25;}
+  else{
    p.userData.bounces++;
-   const settle=Math.min(1,p.userData.bounces/32);
-   p.rotation.z*=1-settle*.26;
-   p.rotation.x*=1-settle*.26;
+   p.rotation.z*=.88;p.rotation.x*=.88;
   }
   const x=p.userData.resting?p.userData.restX:n.x;
-  const y=p.userData.resting?contactY:Math.min(n.y,contactY);
-  p.position.set(x-state.camera-w/2,h/2-y+(state.cameraY||0),55);
+  const y=p.userData.resting?groundY:Math.min(n.y,groundY);
+  p.position.set(x-state.camera-w/2,h/2-y+(state.cameraY||0),65);
  }
 }
-// Separate visual for a head torn off by a hard impact.
-const detachedHead=new THREE.Mesh(
- new THREE.SphereGeometry(11.5,18,12),
- new THREE.MeshStandardMaterial({color:0xd6a581,roughness:.85})
-);
-detachedHead.visible=false;
-scene.add(detachedHead);
 function animate(){
  requestAnimationFrame(animate);
  if(!renderer||!camera)return;
@@ -479,11 +485,6 @@ function animate(){
  positionChair(state,w,h);
  positionLevelMachinery(state,w,h);
  positionGore(state,w,h);
- detachedHead.visible=!!(state.headDetached&&state.rag&&!state.shredded);
- if(detachedHead.visible){
-  const p=state.rag.head;
-  detachedHead.position.set(p.x-state.camera-w/2,h/2-p.y+(state.cameraY||0),78);
- }
  if(model&&window.characterOverlayReady){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
