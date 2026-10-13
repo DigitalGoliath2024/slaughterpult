@@ -515,14 +515,15 @@ function updateRagdoll(dt){
  const steps=Math.max(1,Math.ceil(dt/(1/120))),h=dt/steps;
  for(let step=0;step<steps;step++){
   let hadImpact=false;
+  const hanging=Object.keys(rag.pinned).length>0&&!rag.shredded;
   for(const [part,n] of Object.entries(rag.nodes)){
    const pin=rag.pinned[part];if(pin){n.x=pin.x;n.y=pin.y;n.px=n.x;n.py=n.y;continue;}
    const grounded=rag.groundTime>0;
-   const drag=grounded?.982:.999;
+   const drag=hanging?(grounded?.94:.965):(grounded?.982:.999);
    const vx=(n.x-n.px)*drag,vy=(n.y-n.py)*drag;
    const incomingSpeed=Math.hypot(vx,vy)/Math.max(h,.00001);
    n.px=n.x;n.py=n.y;
-   n.x+=vx;n.y+=vy+650*h*h*(part==='lh'||part==='rh'?1.55:part==='le'||part==='re'?1.2:1);
+   n.x+=vx;n.y+=vy+650*h*h*(hanging?3:1)*(part==='lh'||part==='rh'?1.55:part==='le'||part==='re'?1.2:1);
    const pinsBefore=Object.keys(rag.pinned).length;
    hazardHit(n.x,n.y,part);
    if(Object.keys(rag.pinned).length>pinsBefore){checkImpactForce(part,incomingSpeed,n.x,n.y,'nail');}
@@ -535,23 +536,8 @@ function updateRagdoll(dt){
     if(downward>2.5){hadImpact=true; if(downward>6 && Math.random()<.055)groundBlood(n.x,Math.min(1.2,downward/12));}
    }
   }
-  // When a torso or leg is impaled, let the free arms hang under gravity.
-  // Apply small impulses, not a hard-coded pose, so they can still swing.
-  const impaled=Object.keys(rag.pinned).length>0;
-  if(impaled&&!rag.shredded){
-   for(const side of [['ls','le','lh'],['rs','re','rh']]){
-    const [shoulder,elbow,hand]=side;
-    if(rag.pinned[elbow]||rag.pinned[hand])continue;
-    const s=rag.nodes[shoulder],e=rag.nodes[elbow],p=rag.nodes[hand];
-    if(s&&e&&p){
-     e.y+=Math.min(2.5,190*h*h*30);
-     p.y+=Math.min(4,310*h*h*30);
-     // Damp upward inertia without locking the arm's lateral swing.
-     if(e.y<e.py)e.py=e.y+(e.py-e.y)*.5;
-     if(p.y<p.py)p.py=p.y+(p.py-p.y)*.5;
-    }
-   }
-  }
+  // Pinned ragdoll gravity is applied at every free joint above. Do not
+  // force an arm pose here; it must be free to swing under its own weight.
   if(hadImpact){impacts++; if(impacts===1){groundBlood(rag.nodes.head.x,.9);bloodBurst(rag.nodes.head.x,floor-10,.42);}}
   for(let iter=0;iter<11;iter++){
    for(const link of rag.links){
@@ -565,6 +551,9 @@ function updateRagdoll(dt){
       (link.a==='ls'&&link.b==='rs')||
       (link.a==='lk'&&link.b==='rk')||
       (link.a==='chest'&&['lk','rk'].includes(link.b));
+    // Anatomical cross-braces can hold the whole body rigidly sideways
+    // during impalement. Let real limbs hang from their primary joints.
+    if(hanging&&brace)continue;
     const compliance=brace?.12:.48;
     const correction=compliance*(dist-link.len)/dist;
     if(!rag.pinned[link.a]){a.x+=dx*correction;a.y+=dy*correction;}
