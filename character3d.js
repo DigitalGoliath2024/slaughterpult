@@ -736,8 +736,10 @@ function animate(){
    // an intact arm or leg mysteriously connected to its detached counterpart.
    const injuries=new Set(state.injuries||[]);
    for(const [edge,part] of [
-    ['le:lh','RightHand'],['re:rh','LeftHand'],
-    ['lk:lf','LeftFoot'],['rk:rf','RightFoot']
+    ['le:lh','LeftHand'],['re:rh','RightHand'],
+    ['lk:lf','LeftFoot'],['rk:rf','RightFoot'],
+    ['ls:le','LeftForeArm'],['rs:re','RightForeArm'],
+    ['hip:lk','LeftUpLeg'],['hip:rk','RightUpLeg']
    ])if(bones[part])bones[part].scale.setScalar(injuries.has(edge)?.001:1);
    if(bones.Head)bones.Head.scale.setScalar(state.headDetached?.001:1);
    if(!state.headDetached)rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
