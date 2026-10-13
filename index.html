@@ -296,7 +296,10 @@ function drawGore(){
  ctx.save();ctx.translate(-camera,0);
  // Back-wall splashes appear smaller and darker with distance.
  // Metal stains are drawn at the equipment surface, NOT as floating circles.
- for(const s of wallStains){
+ // Drip-source stains remain visible even after the transient stain list
+ // trims old entries. A drip can never outlive its visible source mark.
+ const visibleStains=new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)]);
+ for(const s of visibleStains){
   ctx.save();
   if(s.surface){
    const equipment=LEVEL_HAZARDS.find(h=>h.id===s.surface.id);
@@ -312,8 +315,15 @@ function drawGore(){
    ctx.beginPath();ctx.ellipse(-s.size*.35,-2,s.size*.62,Math.max(.6,s.size*.13),0,0,Math.PI*2);ctx.fill();
   }else{
    ctx.translate(s.x,s.y);
-   ctx.fillStyle='rgba(81,9,16,.46)';
-   ctx.beginPath();ctx.ellipse(0,0,s.size*.75,s.size*.55,s.tilt,0,Math.PI*2);ctx.fill();
+   const size=s.dripSource?Math.max(9,s.size*2.2):Math.max(3,s.size);
+   ctx.globalAlpha=s.dripSource?.92:.65;
+   ctx.rotate(s.tilt);
+   ctx.drawImage(bloodSprites[Math.floor(s.seed*bloodSprites.length)%bloodSprites.length],-size,-size,size*2,size*2);
+   if(s.dripSource){
+    ctx.rotate(-s.tilt);
+    ctx.strokeStyle='#7e0a13';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(0,2);ctx.lineTo(s.tilt*3,Math.min(20,H*.88-s.y-3));ctx.stroke();
+   }
   }
   ctx.restore();
  }
@@ -561,7 +571,7 @@ function markWall(x,y,power=1,surface=null){
  // Nearby marks share a drip point; sources survive stain-array trimming
  // and only reset clears them. This keeps long attempts inexpensive.
  const key=(surface?surface.id:'wall')+':'+Math.floor(x/35)+':'+(surface?0:Math.floor(y/40));
- if(!dripSources.has(key))dripSources.set(key,{stain,timer:.25+Math.random()*.9});
+ if(!dripSources.has(key)){stain.dripSource=true;dripSources.set(key,{stain,timer:.25+Math.random()*.9});}
  if(wallStains.length>750)wallStains.splice(0,wallStains.length-750);
 }
 function directionalBlood(x,y,dx,dy,power=1){
