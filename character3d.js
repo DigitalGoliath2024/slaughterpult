@@ -571,7 +571,7 @@ function clearGoreParts(){
 let goreLastTime=0;
 function positionGore(state,w,h){
  const fullShred=!!state.shredded,headOnly=!!state.headDetached;
- if((!fullShred&&!headOnly)||!state.rag){if(goreParts.length)clearGoreParts();goreLastTime=0;return;}
+ if((!fullShred&&!headOnly)||!state.rag){window.skullCameraTarget=null;if(goreParts.length)clearGoreParts();goreLastTime=0;return;}
  const now=performance.now();
  const dt=goreLastTime?Math.min(.035,(now-goreLastTime)/1000):1/60;
  goreLastTime=now;
@@ -678,6 +678,7 @@ function positionGore(state,w,h){
     eye.pupil.scale.y=eye.ball.scale.y;
    }
   }
+  if(u.joint==='head')window.skullCameraTarget={x:u.worldX,y:u.worldY};
   p.position.set(u.worldX-state.camera-w/2,h/2-u.worldY+(state.cameraY||0),65);
  }
 }
