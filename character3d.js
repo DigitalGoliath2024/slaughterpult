@@ -313,7 +313,7 @@ function applySittingPose(){
 }
 
 // Spinning grinder, permanently mounted to a braced steel support.
-let grinderVisual=null,grinderDrum=null,grinderStains=[],previousShred=false;
+let grinderVisual=null,grinderDrum=null,grinderStains=[],previousShred=false;let goreParts=[],goreAsset=null,goreWasShredded=false;
 window.grinderOverlayReady=false;
 async function loadLevelMachinery(){
  try{
@@ -326,7 +326,8 @@ async function loadLevelMachinery(){
   original.rotation.y=-Math.PI/2;
   original.position.y=35;
   original.traverse(n=>{if(n.isMesh)n.frustumCulled=false;});
-  grinderVisual.add(original);
+  // Do not render the imported static grinder on top of the powered drum.
+  // Its geometry is replaced by the single rotating assembly below.
   const metal=new THREE.MeshStandardMaterial({color:0x626d76,metalness:.78,roughness:.42});
   const iron=new THREE.MeshStandardMaterial({color:0x252d33,metalness:.65,roughness:.48});
   const blood=new THREE.MeshStandardMaterial({color:0x790811,roughness:.8,metalness:0,side:THREE.DoubleSide});
@@ -345,12 +346,12 @@ async function loadLevelMachinery(){
   // Rotating roller axis runs across the machine, facing the side camera.
   grinderDrum=new THREE.Group();grinderDrum.position.set(0,10,27);
   const drum=new THREE.Mesh(new THREE.CylinderGeometry(39,39,120,18),iron);
-  drum.rotation.z=Math.PI/2;grinderDrum.add(drum);
+  drum.rotation.x=Math.PI/2;grinderDrum.add(drum);
   for(let i=0;i<12;i++){
    const a=i*Math.PI/6;
-   const tooth=new THREE.Mesh(new THREE.BoxGeometry(121,9,10),metal);
-   tooth.position.set(0,Math.cos(a)*40,Math.sin(a)*40);
-   tooth.rotation.x=a;
+   const tooth=new THREE.Mesh(new THREE.BoxGeometry(10,9,121),metal);
+   tooth.position.set(Math.cos(a)*40,Math.sin(a)*40,0);
+   tooth.rotation.z=a;
    grinderDrum.add(tooth);
   }
   grinderDrum.userData.bloodMaterial=blood;
@@ -366,7 +367,7 @@ function positionLevelMachinery(state,w,h){
  grinderVisual.visible=Math.abs(hazard.x-state.camera-w/2)<w*.85;
  grinderVisual.position.set(hazard.x-state.camera-w/2,h/2-h*.88+(state.cameraY||0)+104,0);
  // Always spin, including while the character is still in the launcher.
- if(grinderDrum)grinderDrum.rotation.x+=.085;
+ if(grinderDrum)grinderDrum.rotation.z-=.085;
  if(state.shredded&&!previousShred&&grinderDrum){
   // Each stain is a separate irregular flat patch parented to the roller:
   // the blood rotates *with* the drum and persists until reset.
@@ -374,8 +375,8 @@ function positionLevelMachinery(state,w,h){
   for(let i=0;i<23;i++){
    const stain=new THREE.Mesh(new THREE.PlaneGeometry(5+Math.random()*15,3+Math.random()*9),mat);
    const a=Math.random()*Math.PI*2;
-   stain.position.set((Math.random()-.5)*110,Math.cos(a)*41,Math.sin(a)*41);
-   stain.rotation.x=a-Math.PI/2;stain.rotation.z=Math.random()*Math.PI;
+   stain.position.set(Math.cos(a)*41,Math.sin(a)*41,(Math.random()-.5)*110);
+   stain.rotation.z=a;stain.rotation.z=Math.random()*Math.PI;
    grinderDrum.add(stain);grinderStains.push(stain);
   }
  }
@@ -384,6 +385,42 @@ function positionLevelMachinery(state,w,h){
   grinderStains=[];
  }
  previousShred=!!state.shredded;
+}
+// Separate geometry from the supplied skeletal-gore GLB, mapped to simulated
+// detached limbs. Use original mesh geometry, not a stretched copy of the body.
+async function loadGoreAsset(){
+ try{
+  const g=await new GLTFLoader().loadAsync('./skeleton_gore_model.glb');
+  goreAsset=g.scene;
+  goreAsset.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
+ }catch(e){console.warn('Gore asset could not load',e);}
+}
+function positionGore(state,w,h){
+ if(!state.shredded||!state.rag){
+  for(const p of goreParts)scene.remove(p);
+  goreParts=[];goreWasShredded=false;return;
+ }
+ if(!goreWasShredded&&goreAsset){
+  const meshes=[];goreAsset.traverse(o=>{if(o.isMesh)meshes.push(o);});
+  const ids=['head','lh','rh','lf','rf','le','re','lk','rk','chest'];
+  for(let i=0;i<Math.min(meshes.length,ids.length);i++){
+   const src=meshes[i];
+   const part=new THREE.Mesh(src.geometry,src.material);
+   const bounds=new THREE.Box3().setFromObject(src);
+   const size=bounds.getSize(new THREE.Vector3());
+   part.scale.setScalar(20/(Math.max(size.x,size.y,size.z)||1));
+   part.userData.joint=ids[i];
+   part.rotation.z=Math.random()*Math.PI*2;
+   scene.add(part);goreParts.push(part);
+  }
+ }
+ goreWasShredded=true;
+ for(const p of goreParts){
+  const n=state.rag[p.userData.joint];
+  if(!n)continue;
+  p.position.set(n.x-state.camera-w/2,h/2-n.y+(state.cameraY||0),55);
+  p.rotation.z+=.035;
+ }
 }
 function animate(){
  requestAnimationFrame(animate);
@@ -395,6 +432,7 @@ function animate(){
  camera.left=-w/2;camera.right=w/2;camera.top=h/2;camera.bottom=-h/2;camera.updateProjectionMatrix();
  positionChair(state,w,h);
  positionLevelMachinery(state,w,h);
+ positionGore(state,w,h);
  if(model&&window.characterOverlayReady){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
@@ -455,4 +493,4 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadGoreAsset();animate();}
