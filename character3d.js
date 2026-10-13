@@ -75,11 +75,11 @@ function pose(part,x=0,y=0,z=0){
 }
 function applySittingPose(){
  for(const part of parts)if(bones[part])bones[part].quaternion.copy(base[part]);
- // Local X pitches thighs forward and folds the knees for a seated side view.
- pose('LeftUpLeg',-1.25,0,0);
- pose('RightUpLeg',-1.25,0,0);
- pose('LeftLeg',1.35,0,0);
- pose('RightLeg',1.35,0,0);
+ // Reverse hip/knee pitch: knees must fold forward, not under the pelvis.
+ pose('LeftUpLeg',1.25,0,0);
+ pose('RightUpLeg',1.25,0,0);
+ pose('LeftLeg',-1.35,0,0);
+ pose('RightLeg',-1.35,0,0);
  pose('Spine',.08,0,0);
  // Bring T-pose arms down, then bend elbows loosely over the lap.
  pose('LeftShoulder',0,0,-.65);
@@ -120,7 +120,7 @@ function animate(){
    rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
   } else {
    model.position.x=tip.x-state.camera-w/2;
-   model.position.y=h/2-tip.y+5;
+   model.position.y=h/2-tip.y-15;
    model.rotation.order='YXZ';
    model.rotation.y=Math.PI/2;
    model.rotation.z=phase==='launching'?-theta*.25:0;
