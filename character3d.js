@@ -402,13 +402,19 @@ function positionGore(state,w,h){
  }
  if(!goreWasShredded&&goreAsset){
   const meshes=[];goreAsset.traverse(o=>{if(o.isMesh)meshes.push(o);});
+  // The GLB contains distinct bone and muscle objects. Prefer fleshy meshes
+  // in the limited fragment slots, rather than using just the first bones.
+  meshes.sort((a,b)=>{
+   const score=o=>/muscle|flesh|meat|tissue|skin/i.test(o.name+' '+(o.material?.name||''))?2:/bone|skel|rib/i.test(o.name+' '+(o.material?.name||''))?0:1;
+   return score(b)-score(a);
+  });
   const ids=['head','lh','rh','lf','rf','le','re','lk','rk','chest'];
   for(let i=0;i<Math.min(meshes.length,ids.length);i++){
    const src=meshes[i];
    const part=new THREE.Mesh(src.geometry,src.material);
    const bounds=new THREE.Box3().setFromObject(src);
    const size=bounds.getSize(new THREE.Vector3());
-   part.scale.setScalar(27/(Math.max(size.x,size.y,size.z)||1));
+   part.scale.setScalar(29.7/(Math.max(size.x,size.y,size.z)||1));
    part.userData.joint=ids[i];part.userData.resting=false;part.userData.lastX=null;part.userData.lastY=null;
    part.rotation.z=Math.random()*Math.PI*2;
    scene.add(part);goreParts.push(part);
@@ -420,10 +426,19 @@ function positionGore(state,w,h){
   if(!n)continue;
   const ground=h*.88;
   // After the limb reaches the floor, freeze its orientation and floor height.
-  const landed=n.y>=ground-24;
-  if(landed&&!p.userData.resting){p.userData.resting=true;p.userData.restY=ground-13;p.userData.restAngle=p.rotation.z;}
-  if(!p.userData.resting){p.userData.restAngle=p.rotation.z+=.018;}
-  p.position.set(n.x-state.camera-w/2,h/2-(p.userData.resting?p.userData.restY:n.y)+(state.cameraY||0),55);
+  // Torso/thigh joint centers can remain above the floor even when the whole
+  // ragdoll is grounded. Stop ALL fragment spins once the body has settled.
+  const landed=n.y>=ground-28 || state.groundTime>1.35 || state.phase==='done';
+  if(landed&&!p.userData.resting){
+   p.userData.resting=true;
+   p.userData.restY=Math.min(ground-13,n.y);
+   p.userData.restX=n.x;
+   p.userData.restAngle=p.rotation.z;
+  }
+  if(!p.userData.resting)p.rotation.z+=.018;
+  const x=p.userData.resting?p.userData.restX:n.x;
+  const y=p.userData.resting?p.userData.restY:n.y;
+  p.position.set(x-state.camera-w/2,h/2-y+(state.cameraY||0),55);
   if(p.userData.resting)p.rotation.z=p.userData.restAngle;
  }
 }
