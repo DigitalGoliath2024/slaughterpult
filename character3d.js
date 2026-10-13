@@ -15,7 +15,7 @@ try {
  camera.position.set(0,0,1000);camera.lookAt(0,0,0);
 } catch(e){status.textContent='3D unavailable — 2D ragdoll active';}
 
-const chairURL='./Meshy_AI_catapult_seat_3d_1013060518_image-to-3d-texture.glb';
+const chairURL='./Meshy_AI_catapult_seat_3d_1013060518_image-to-3d-texture_optimized.glb';
 async function loadChair(){
  try{
   const response=await fetch(chairURL,{method:'HEAD'});
