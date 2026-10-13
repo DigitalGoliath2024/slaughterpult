@@ -1023,7 +1023,7 @@ function jetpackForce(step){
  if(!jetpackMounted||!rag||rag.shredded||rag.softLanding||rag.jetFuel<=0)return null;
  const hip=rag.nodes.waist||rag.nodes.hip,chest=rag.nodes.chest,dx=chest.x-hip.x,dy=chest.y-hip.y,len=Math.hypot(dx,dy)||1;
  rag.jetFuel=Math.max(0,rag.jetFuel-step);const nodes=new Set(['chest']);for(let i=0;i<rag.links.length;i++)for(const link of rag.links)if(!link.broken){if(nodes.has(link.a))nodes.add(link.b);if(nodes.has(link.b))nodes.add(link.a);}
- return {x:dx/len*1680,y:dy/len*1680,spin:1.6,nodes};
+ return {x:dx/len*4200,y:dy/len*4200,spin:.6,nodes};
 }
 function updateRagdoll(dt){
  if(!rag)return;
