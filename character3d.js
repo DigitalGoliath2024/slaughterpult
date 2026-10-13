@@ -4,7 +4,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
 let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={},seatRoot=null,seatReady=false;
 // Chair-space reference: the rider's pelvis sits above the mounting plate.
-const chairHipAnchor=new THREE.Vector3(-10,47,23);
+const chairHipAnchor=new THREE.Vector3(5,59,23); // pelvis forward and higher on cushion, away from backrest
 try {
  renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
@@ -110,7 +110,7 @@ function seatCharacterOnChair(){
   const currentAngle=Math.atan2(v.y,v.x);
   // Chair back stays close to vertical; it follows the arm tilt slightly.
   const desiredAngle=Math.PI/2+THREE.MathUtils.clamp(seatRoot.rotation.z,-.25,.25);
-  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9)+0.32; // further 5.7 degree correction in requested direction
+  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9)+0.42; // further 5.7 degree correction in requested direction
   model.updateMatrixWorld(true);
  }
  // Re-anchor after correcting torso tilt; otherwise the hips drift.
@@ -163,7 +163,7 @@ async function load(id){
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
   window.characterOverlayReady=true;
-  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v33';
+  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v34';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
   status.textContent='Could not load '+id+' · '+(e?.message||'model error');
