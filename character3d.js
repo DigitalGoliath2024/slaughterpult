@@ -22,8 +22,11 @@ function bone(part){
 }
 async function load(id){
  const mine=++ticket;window.characterOverlayReady=false;
- status.textContent='Loading '+id+' model…';
+ status.textContent='Checking '+id+' character file…';
  try {
+  const check=await fetch(urls[id],{method:'HEAD',cache:'no-store'});
+  if(!check.ok)throw new Error('Model file missing: '+urls[id]);
+  status.textContent='Loading '+id+' model…';
   const g=await new GLTFLoader().loadAsync(urls[id]);if(mine!==ticket)return;
   if(model)scene.remove(model);
   model=g.scene;scene.add(model);model.updateMatrixWorld(true);
@@ -40,7 +43,7 @@ async function load(id){
   status.textContent=id==='cowboy'?'Cowboy · 3D active':'Human · 3D active';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
-  status.textContent='2D ragdoll active · 3D model not installed';
+  status.textContent='3D '+id+' model missing — using 2D ragdoll';
   window.characterOverlayReady=false;
  }
 }
