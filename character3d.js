@@ -405,6 +405,70 @@ const GORE_MAP={
  lk:['L_leg','L_legbone'],lf:['L_lowerleg','L_leglowerBone','L_foot'],
  rk:['Rleg','Rlegbone'],rf:['Rlowerleg','RlowerlegBone','R_foot']
 };
+// Extract a clothed region from the actual posed character's skin mesh.
+// Faces are selected by their dominant skeletal influence, so pants and boots
+// come from the loaded avatar rather than procedurally invented parts.
+function buildClothedPart(joint){
+ if(!model)return null;
+ const choices={
+  le:/leftarm|leftupperarm/i,lh:/leftforearm|lefthand/i,
+  re:/rightarm|rightupperarm/i,rh:/rightforearm|righthand/i,
+  lk:/leftupleg|leftthigh/i,lf:/leftleg|leftfoot|leftcalf/i,
+  rk:/rightupleg|rightthigh/i,rf:/rightleg|rightfoot|rightcalf/i
+ };
+ const target=choices[joint];if(!target)return null;
+ model.updateMatrixWorld(true);
+ const group=new THREE.Group(),box=new THREE.Box3();
+ const v=new THREE.Vector3();
+ model.traverse(src=>{
+  if(!src.isSkinnedMesh)return;
+  const geo=src.geometry,idx=geo.index,pos=geo.getAttribute('position');
+  const skinI=geo.getAttribute('skinIndex'),skinW=geo.getAttribute('skinWeight');
+  if(!pos||!skinI||!skinW)return;
+  const verts=[],uvs=[],uv=geo.getAttribute('uv'),norms=[];
+  const faceCount=(idx?idx.count:pos.count)/3;
+  for(let face=0;face<faceCount;face++){
+   const ids=[0,1,2].map(k=>idx?idx.getX(face*3+k):face*3+k);
+   const affinity=ids.map(id=>{
+    let value=0;
+    for(let j=0;j<4;j++){
+     const bone=src.skeleton.bones[skinI.getComponent(id,j)];
+     if(bone&&target.test(bone.name.replace(/^mixamorig[:_]?/i,'')))value+=skinW.getComponent(id,j);
+    }
+    return value;
+   });
+   if((affinity[0]+affinity[1]+affinity[2])/3<.42)continue;
+   for(const id of ids){
+    src.applyBoneTransform(id,v);
+    v.applyMatrix4(src.matrixWorld);
+    verts.push(v.x,v.y,v.z);
+    if(uv)uvs.push(uv.getX(id),uv.getY(id));
+   }
+  }
+  if(!verts.length)return;
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+  if(uvs.length)g.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));
+  g.computeVertexNormals();
+  g.computeBoundingBox();box.union(g.boundingBox);
+  const original=Array.isArray(src.material)?src.material[0]:src.material;
+  const mat=original.clone();mat.side=THREE.DoubleSide;
+  const mesh=new THREE.Mesh(g,mat);mesh.frustumCulled=false;group.add(mesh);
+ });
+ if(!group.children.length||box.isEmpty())return null;
+ const size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+ if(Math.max(size.x,size.y,size.z)<.01)return null;
+ for(const mesh of group.children)mesh.geometry.translate(-center.x,-center.y,-center.z);
+ const scale=33/Math.max(size.x,size.y,size.z);
+ group.scale.setScalar(scale);
+ group.userData.joint=joint;group.userData.halfHeight=size.y*scale/2;
+ group.userData.halfWidth=size.x*scale/2;
+ group.userData.radius=Math.max(size.x,size.y,size.z)*scale*.5;
+ group.userData.lieAngle=null;group.userData.resting=false;group.userData.bounces=0;
+ group.userData.spin=(Math.random()<.5?-1:1)*(.014+Math.random()*.03);
+ group.rotation.z=(Math.random()-.5)*.7;
+ return group;
+}
 function buildGorePart(joint){
  if(!goreAsset)return null;
  goreAsset.updateMatrixWorld(true);
@@ -512,7 +576,9 @@ function positionGore(state,w,h){
  const joints=fullShred?Object.keys(GORE_MAP):['head'];
  for(const joint of joints){
   if(goreParts.some(p=>p.userData.joint===joint)||!goreAsset)continue;
-  const part=buildGorePart(joint);if(!part)continue;
+  // The skull is always exposed. The rest is a different combination each crash.
+  const keepClothes=joint!=='head'&&Math.random()<.55;
+  const part=(keepClothes?buildClothedPart(joint):null)||buildGorePart(joint);if(!part)continue;
   const node=state.rag[joint]||state.rag.chest;
   // Nearby but varied scatter: inherit the ragdoll's impact momentum,
   // then add limited independent kicks, not long-range explosions.
