@@ -694,7 +694,9 @@ function animate(){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
   if(rag && !state.shredded){
-   const tilt=direction(rag.hip,rag.chest)-Math.PI/2;
+   // Root follows pelvis-to-waist, while the spine flexes independently
+   // with waist-to-chest. This is what allows head toward knees.
+   const tilt=direction(rag.hip,rag.waist||rag.chest)-Math.PI/2;
    model.position.x=rag.hip.x-state.camera-w/2;
    model.position.y=h/2-rag.hip.y+(state.cameraY||0)-21;
    // Rotate the facing side-view model around the CAMERA'S Z axis.
@@ -702,6 +704,12 @@ function animate(){
    model.quaternion.setFromAxisAngle(new THREE.Vector3(0,0,1),tilt)
      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2));
    const a=(p,q)=>direction(rag[p],rag[q]);
+   const waistAngle=norm(a('waist','chest')-a('hip','waist'));
+   // Distribute flex across available spine bones; no rigid torso board.
+   const flex=THREE.MathUtils.clamp(waistAngle,-2.7,2.7);
+   if(bones.Spine)rotate('Spine',flex*.60);
+   if(bones.Spine1)rotate('Spine1',flex*.27);
+   if(bones.Spine2)rotate('Spine2',flex*.13);
    rotate('LeftArm',norm(a('ls','le')-tilt+Math.PI/2));
    rotate('RightArm',norm(a('rs','re')-tilt+Math.PI/2));
    rotate('LeftForeArm',norm(a('le','lh')-a('ls','le')));
