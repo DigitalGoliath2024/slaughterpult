@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
 let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={},seatRoot=null,seatReady=false;
+// Chair-space reference: the rider's pelvis sits above the mounting plate.
+const chairHipAnchor=new THREE.Vector3(5,38,29);
 try {
  renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
@@ -77,6 +79,25 @@ function positionChair(state,w,h){
  seatRoot.position.set(state.tip.x-state.camera-w/2-18,h/2-state.tip.y,12);
  // Zero rotation at the loaded angle; rotate with the arm as it fires.
  seatRoot.rotation.z=state.theta-Math.PI;
+}
+
+
+function seatCharacterOnChair(){
+ // Seat and character share the SAME transform every frame. Model origins and
+ // individual skeleton proportions don't matter: match the actual hip bone to
+ // the chair-space pelvis anchor, not an arbitrary pixel offset from arm tip.
+ if(!seatReady||!seatRoot||!model||!bones.Hips)return false;
+ seatRoot.updateMatrixWorld(true);
+ const target=seatRoot.localToWorld(chairHipAnchor.clone());
+ model.rotation.order='YXZ';
+ model.rotation.y=Math.PI/2;
+ model.rotation.z=seatRoot.rotation.z;
+ model.position.set(0,0,0);
+ model.updateMatrixWorld(true);
+ const actual=bones.Hips.getWorldPosition(new THREE.Vector3());
+ model.position.add(target.sub(actual));
+ model.updateMatrixWorld(true);
+ return true;
 }
 
 const parts=['LeftShoulder','RightShoulder','LeftHand','RightHand','Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg','LeftFoot','RightFoot'];
@@ -219,6 +240,7 @@ function animate(){
  if(!w||!h)return;
  if(canvas.width!==Math.round(w*renderer.getPixelRatio())||canvas.height!==Math.round(h*renderer.getPixelRatio()))renderer.setSize(w,h,false);
  camera.left=-w/2;camera.right=w/2;camera.top=h/2;camera.bottom=-h/2;camera.updateProjectionMatrix();
+ positionChair(state,w,h);
  if(model&&window.characterOverlayReady){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
@@ -240,15 +262,17 @@ function animate(){
    rotate('RightLeg',norm(a('rk','rf')-a('hip','rk')));
    rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
   } else {
-   model.position.x=tip.x-state.camera-w/2-7;
-   model.position.y=h/2-tip.y-34;
-   model.rotation.order='YXZ';
-   model.rotation.y=Math.PI/2;
-   model.rotation.z=phase==='launching'?-theta*.25:0;
    applySittingPose();
+   if(!seatCharacterOnChair()){
+    // Fallback positioning when the GLB chair fails to load.
+    model.position.x=tip.x-state.camera-w/2-7;
+    model.position.y=h/2-tip.y-34;
+    model.rotation.order='YXZ';
+    model.rotation.y=Math.PI/2;
+    model.rotation.z=phase==='launching'?-theta*.25:0;
+   }
   }
  }else if(model){model.visible=false;}
- positionChair(state,w,h);
  renderer.render(scene,camera);
  drawBasket(state,w,h);
 }
