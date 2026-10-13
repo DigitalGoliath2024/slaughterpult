@@ -625,7 +625,9 @@ function positionGore(state,w,h){
     u.crawlClock+=dt;
     const t=u.crawlClock;
     // Let the arm/hand lie flat, then inch away in short, slow movements.
-    const targetAngle=u.crawlDirection>0?-Math.PI/2:Math.PI/2;
+    // Original hand extends along its local down-axis. Turn fingertips
+    // toward the travel direction (right = +X, left = -X).
+    const targetAngle=u.crawlDirection>0?Math.PI/2:-Math.PI/2;
     p.rotation.z+=Math.atan2(Math.sin(targetAngle-p.rotation.z),Math.cos(targetAngle-p.rotation.z))*Math.min(1,dt*5);
     const stepping=t>1.5&&t<12&&Math.sin(t*2.5)>-.35;
     if(stepping)u.worldX+=u.crawlDirection*11*dt;
