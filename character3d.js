@@ -388,6 +388,116 @@ function positionLevelMachinery(state,w,h){
  }
  previousShred=!!state.shredded;
 }
+const trampolineTemplates=[],trampolineInstances=new Map();
+window.trampolineOverlayReady=false;
+async function loadTrampolines(){
+ try{
+  const gltf=await new GLTFLoader().loadAsync('./trampoline.glb');
+  gltf.scene.updateMatrixWorld(true);
+  // The supplied file contains three individual trampolines, not one object.
+  for(const name of ['Cube.000','Cube.002','Cylinder.002']){
+   const source=gltf.scene.getObjectByName(name);if(!source)continue;
+   const template=new THREE.Group(),matBounds=new THREE.Box3();
+   source.traverse(o=>{
+    if(!o.isMesh)return;
+    const geometry=o.geometry.clone();geometry.applyMatrix4(o.matrixWorld);
+    geometry.rotateX(.14);geometry.computeBoundingBox();
+    const mesh=new THREE.Mesh(geometry,o.material.clone());mesh.frustumCulled=false;
+    mesh.userData.jumpingMat=o.name.endsWith('_0');
+    if(mesh.userData.jumpingMat)matBounds.union(geometry.boundingBox);
+    template.add(mesh);
+   });
+   if(matBounds.isEmpty())continue;
+   const center=matBounds.getCenter(new THREE.Vector3()),span=matBounds.getSize(new THREE.Vector3());
+   // Mat's upper projected edge is exactly local Y=0. Its X span defines
+   // the same width used by the collision logic, so visuals cannot miss it.
+   for(const mesh of template.children){
+    mesh.geometry.translate(-center.x,-matBounds.max.y,-center.z);
+    mesh.geometry.scale(1/span.x,1/span.x,1/span.x);
+   }
+   trampolineTemplates.push(template);
+  }
+  window.trampolineOverlayReady=trampolineTemplates.length>0;
+ }catch(e){console.warn('Trampoline asset failed; physical fallback pads remain',e);}
+}
+function positionTrampolines(state,w,h){
+ if(!window.trampolineOverlayReady)return;
+ const active=new Set();
+ for(const pad of state.hazards||[]){
+  if(pad.kind!=='trampoline')continue;
+  active.add(pad.id);let root=trampolineInstances.get(pad.id);
+  if(!root){
+   const variant=pad.stage===2?1:pad.stage===3?2:0;
+   root=trampolineTemplates[variant%trampolineTemplates.length].clone(true);
+   root.scale.setScalar(pad.width);root.rotation.z=Math.atan(pad.slope);
+   const support=new THREE.Group(),steel=new THREE.MeshStandardMaterial({color:0x657079,metalness:.65,roughness:.65});
+   for(const side of [-1,1]){
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(3,4,1,6),steel);post.userData.side=side;support.add(post);
+   }
+   root.userData.support=support;scene.add(support);
+   const bounds=new THREE.Box3().setFromObject(root);root.userData.legDepth=-bounds.min.y;
+   scene.add(root);trampolineInstances.set(pad.id,root);
+  }
+  root.visible=state.level==='trampoline'&&Math.abs(pad.x-state.camera-w/2)<w/2+pad.width;
+  root.position.set(pad.x-state.camera-w/2,h/2-(h*.88+pad.offset)+(state.cameraY||0),40);
+  const ground=window.launcherGroundYAt?window.launcherGroundYAt(pad.x):h*.88;
+  const groundScreen=h/2-ground+(state.cameraY||0),support=root.userData.support;
+  support.visible=root.visible;
+  for(const post of support.children){
+   const shift=post.userData.side*pad.width*.42;
+   const footY=root.position.y+shift*pad.slope-root.userData.legDepth;
+   const length=Math.max(0,footY-groundScreen);
+   post.visible=length>1;post.scale.y=length;
+   post.position.set(root.position.x+shift,(footY+groundScreen)/2,25);
+  }
+  const age=(state.levelClock||0)-(pad.flexAt??-100),sag=age>=0&&age<.35?Math.sin(age/.35*Math.PI)*Math.min(12,pad.width*.03)/pad.width:0;
+  for(const mesh of root.children)if(mesh.userData.jumpingMat)mesh.position.y=-sag;
+ }
+ for(const [id,root] of trampolineInstances)if(!active.has(id)){root.visible=false;root.userData.support.visible=false;}
+}
+const cushionTemplates=[],cushionInstances=new Map();
+window.cushionOverlayReady=false;
+async function loadCushions(){
+ const files=['dirty_cushion.glb','cushion.glb','cushion_olddirty.glb','cushion-1.glb'];
+ const results=await Promise.allSettled(files.map(async (file,index)=>{
+  const gltf=await new GLTFLoader().loadAsync('./'+file);
+  const flat=new THREE.Group();flat.add(gltf.scene);
+  let bounds=new THREE.Box3().setFromObject(flat),size=bounds.getSize(new THREE.Vector3());
+  const thin=[size.x,size.y,size.z].indexOf(Math.min(size.x,size.y,size.z));
+  if(thin===2)flat.rotation.x=-Math.PI/2;else if(thin===0)flat.rotation.z=Math.PI/2;
+  bounds.setFromObject(flat);size=bounds.getSize(new THREE.Vector3());
+  if(size.z>size.x)flat.rotateOnWorldAxis(new THREE.Vector3(0,1,0),Math.PI/2);
+  bounds.setFromObject(flat);size=bounds.getSize(new THREE.Vector3());
+  flat.position.sub(bounds.getCenter(new THREE.Vector3()));
+  const normalized=new THREE.Group();normalized.add(flat);normalized.scale.setScalar(1/(size.x||1));
+  const template=new THREE.Group();template.add(normalized);template.userData.aspectHeight=size.y/(size.x||1);
+  template.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});cushionTemplates[index]=template;
+ }));
+ for(const result of results)if(result.status==='rejected')console.warn('Cushion asset failed',result.reason);
+ window.cushionOverlayReady=cushionTemplates.some(Boolean);
+}
+function positionCushions(state,w,h){
+ if(!window.cushionOverlayReady)return;
+ const active=new Set();
+ for(const pillow of state.cushions||[]){
+  active.add(pillow.id);let root=cushionInstances.get(pillow.id);
+  if(!root){
+   const template=cushionTemplates[pillow.variant]||cushionTemplates.find(Boolean);
+   root=template.clone(true);root.scale.set(pillow.width,pillow.height/template.userData.aspectHeight,pillow.width);
+   root.rotation.set(0,pillow.yaw,pillow.roll);
+   const bounds=new THREE.Box3().setFromObject(root),size=bounds.getSize(new THREE.Vector3());
+   root.userData.baseYScale=root.scale.y;root.userData.halfHeight=size.y/2;
+   pillow.contactHeight=size.y;pillow.contactWidth=size.x;
+   scene.add(root);cushionInstances.set(pillow.id,root);
+  }
+  root.visible=Math.abs(pillow.x-state.camera-w/2)<w/2+100;
+  const squash=window.launcherCushionSquash?window.launcherCushionSquash(pillow):1;
+  root.scale.y=root.userData.baseYScale*squash;
+  const ground=window.launcherGroundYAt?window.launcherGroundYAt(pillow.x):h*.88;
+  root.position.set(pillow.x-state.camera-w/2,h/2-ground-pillow.depth+(state.cameraY||0)+root.userData.halfHeight*squash,pillow.depth?90:36);
+ }
+ for(const [id,root] of cushionInstances)if(!active.has(id))root.visible=false;
+}
 const wallDolls=[];
 let dollLastTime=0;
 async function loadWallDolls(){
@@ -863,6 +973,8 @@ function animate(){
  positionLevelMachinery(state,w,h);
  positionWeapons(state,w,h);
  positionWallDolls(state,w,h);
+ positionCushions(state,w,h);
+ positionTrampolines(state,w,h);
  positionGore(state,w,h);
  if(model&&window.characterOverlayReady&&!window.seatLoading){
   model.visible=true;
@@ -967,4 +1079,4 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadWeapons();loadWallDolls();loadGoreAsset();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadWeapons();loadWallDolls();loadCushions();loadTrampolines();loadGoreAsset();animate();}

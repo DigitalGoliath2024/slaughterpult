@@ -30,3 +30,14 @@ Supplied credits reserved for upcoming environment assets (files not yet availab
 - [brick textures](https://skfb.ly/6WM8U) — DJMaesen — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - [Horror Bed](https://skfb.ly/6WwZG) — denis_cliofas — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - [Skulls Wall | Tile Texture](https://skfb.ly/ptwyH) — CATholic — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+## Cushion landing assets — CC BY 4.0
+
+The following models retain their original geometry and materials. Embedded texture images are resized/compressed for browser use. Models are oriented flat, resized, scattered, and compressed on soft landings.
+
+- [dirty cushion](https://skfb.ly/prSFS) — Virtua Con — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- [Cushion](https://skfb.ly/6ToNG) — siddhant — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- [Cushion [OLD][DIRTY]](https://skfb.ly/6XtYH) — Lonit — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- [cushion-1](https://skfb.ly/oUrHw) — Mylom — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+- [Trampoline](https://sketchfab.com/3d-models/trampoline-eb2ae015729e42e4b08420ae9eb11a5f) — VioletBoom — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Three supplied trampoline variants are separated, resized and angled to match physical jumping surfaces; the mat briefly deforms on impact.
