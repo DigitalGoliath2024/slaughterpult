@@ -470,7 +470,7 @@ function buildGorePart(joint){
    const pupil=new THREE.Mesh(new THREE.SphereGeometry(eyeRadius*.29,12,10),pupilMat);
    pupil.position.z=eyeRadius*.99;
    eye.add(ball,colored,pupil);group.add(eye);
-   eyes.push({colored,pupil,radius:eyeRadius});
+   eyes.push({ball,colored,pupil,radius:eyeRadius});
   }
   group.userData.eyes=eyes;
   group.userData.eyeTime=0;
@@ -549,16 +549,25 @@ function positionGore(state,w,h){
   }
   if(u.joint==='head'&&u.eyes){
    u.eyeTime+=dt;
-   // Wake up once stationary; slowly scan side-to-side with an occasional
-   // nervous upward glance, rather than staring straight ahead.
-   const awake=u.resting?Math.min(1,(u.eyeTime-1)*2):0;
-   const lookX=awake*(Math.sin(u.eyeTime*1.35)*.28+Math.sin(u.eyeTime*.57)*.13);
-   const lookY=awake*(Math.sin(u.eyeTime*.91)*.20);
+   // Fast saccades: deliberate looks left, right, up, down and toward viewer.
+   const awake=u.resting?1:0,t=u.eyeTime;
+   const directions=[[.67,.08],[-.67,.1],[0,.62],[0,-.58],[.08,-.05],
+                     [-.48,-.36],[.55,.38],[0,0]];
+   const step=Math.floor(t*2.6)%directions.length;
+   const target=directions[step];
+   const ease=1-Math.exp(-19*dt);
+   u.gazeX=(u.gazeX||0)+(target[0]*awake-(u.gazeX||0))*ease;
+   u.gazeY=(u.gazeY||0)+(target[1]*awake-(u.gazeY||0))*ease;
+   // Blink both eyes quickly every few seconds, including occasional double blinks.
+   const cycle=t%3.15;
+   const blink=awake&&(cycle<.13||cycle>.32&&cycle<.43);
    for(const eye of u.eyes){
-    eye.colored.position.x=lookX*eye.radius;
-    eye.colored.position.y=lookY*eye.radius;
-    eye.pupil.position.x=lookX*eye.radius*1.15;
-    eye.pupil.position.y=lookY*eye.radius*1.15;
+    const x=u.gazeX*eye.radius,y=u.gazeY*eye.radius;
+    eye.colored.position.set(x,y,eye.radius*.77);
+    eye.pupil.position.set(x*1.15,y*1.15,eye.radius*.99);
+    eye.ball.scale.y+=((blink?.09:1)-eye.ball.scale.y)*Math.min(1,dt*35);
+    eye.colored.scale.y=eye.ball.scale.y;
+    eye.pupil.scale.y=eye.ball.scale.y;
    }
   }
   p.position.set(u.worldX-state.camera-w/2,h/2-u.worldY+(state.cameraY||0),65);
