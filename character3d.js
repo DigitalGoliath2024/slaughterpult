@@ -75,11 +75,11 @@ function pose(part,x=0,y=0,z=0){
 }
 function applySittingPose(){
  for(const part of parts)if(bones[part])bones[part].quaternion.copy(base[part]);
- // Reverse hip/knee pitch: knees must fold forward, not under the pelvis.
- pose('LeftUpLeg',1.25,0,0);
- pose('RightUpLeg',1.25,0,0);
- pose('LeftLeg',-1.35,0,0);
- pose('RightLeg',-1.35,0,0);
+ // With our +90-degree side view, negative hip pitch sends knees toward launch (screen right).
+ pose('LeftUpLeg',-1.12,0,0);
+ pose('RightUpLeg',-1.12,0,0);
+ pose('LeftLeg',1.25,0,0);
+ pose('RightLeg',1.25,0,0);
  pose('Spine',.08,0,0);
  // Bring T-pose arms down, then bend elbows loosely over the lap.
  pose('LeftShoulder',0,0,-.65);
@@ -119,8 +119,8 @@ function animate(){
    rotate('RightLeg',norm(a('rk','rf')-a('hip','rk')));
    rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
   } else {
-   model.position.x=tip.x-state.camera-w/2;
-   model.position.y=h/2-tip.y-15;
+   model.position.x=tip.x-state.camera-w/2-7;
+   model.position.y=h/2-tip.y-34;
    model.rotation.order='YXZ';
    model.rotation.y=Math.PI/2;
    model.rotation.z=phase==='launching'?-theta*.25:0;
@@ -128,5 +128,28 @@ function animate(){
   }
  }else if(model){model.visible=false;}
  renderer.render(scene,camera);
+ drawBasket(state,w,h);
+}
+// Foreground basket lip: the seated character should visibly sit INSIDE the
+// launcher rather than having both legs painted over the front wall.
+const basketCanvas=document.createElement('canvas');
+basketCanvas.id='basketForeground';
+basketCanvas.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3';
+canvas.parentElement.insertBefore(basketCanvas,canvas.nextSibling);
+const basketCtx=basketCanvas.getContext('2d');
+function drawBasket(state,w,h){
+ const dpr=Math.min(devicePixelRatio||1,2);
+ const cw=Math.round(w*dpr),ch=Math.round(h*dpr);
+ if(basketCanvas.width!==cw||basketCanvas.height!==ch){basketCanvas.width=cw;basketCanvas.height=ch;}
+ basketCtx.setTransform(dpr,0,0,dpr,0,0);
+ basketCtx.clearRect(0,0,w,h);
+ if(state.rag||!window.characterOverlayReady)return;
+ const x=state.tip.x-state.camera,y=state.tip.y;
+ basketCtx.save();basketCtx.translate(x,y);basketCtx.rotate(-state.theta);
+ basketCtx.fillStyle='#344a59';basketCtx.strokeStyle='#172b38';basketCtx.lineWidth=4;
+ // Front/lower basket wall hides the lower body, leaving upper torso visible.
+ basketCtx.beginPath();basketCtx.moveTo(-30,9);basketCtx.lineTo(21,9);basketCtx.lineTo(12,30);basketCtx.lineTo(-30,30);basketCtx.closePath();
+ basketCtx.fill();basketCtx.stroke();
+ basketCtx.restore();
 }
 if(renderer){load('cowboy');animate();}
