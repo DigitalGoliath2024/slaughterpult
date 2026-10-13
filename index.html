@@ -234,12 +234,26 @@ function bloodBurst(x,y,power=1){
  }
  if(bloodDrops.length>600)bloodDrops.splice(0,bloodDrops.length-600);
 }
+function bloodSurfaceTop(h,x){
+ const floor=H*.88;
+ if(h.kind==='press')return pressBottomY()-12;
+ if(h.kind==='ramp')return rampY(h,x)-6;
+ if(h.kind==='conveyor')return floor-77;
+ if(h.kind==='roller')return floor-167.5;
+ if(h.kind==='grinder'){
+  if(!window.grinderOverlayReady)return floor-90;
+  const dx=Math.max(-38,Math.min(38,x-h.x));
+  return floor-114-Math.sqrt(39*39-dx*dx);
+ }
+ return null;
+}
 function bloodSurfacePosition(stain){
  if(!stain.surface)return {x:stain.x,y:stain.y};
  const h=LEVEL_HAZARDS.find(h=>h.id===stain.surface.id);if(!h)return null;
- const x=Math.max(h.x-h.width/2+3,Math.min(h.x+h.width/2-3,stain.x));
+ const half=h.kind==='grinder'&&window.grinderOverlayReady?38:h.width/2-3;
+ const x=Math.max(h.x-half,Math.min(h.x+half,stain.x));
  const floor=H*.88;
- const y=h.kind==='press'?pressBottomY()+8:h.kind==='ramp'?rampY(h,x):h.kind==='roller'?floor-135:h.kind==='grinder'?floor-105:h.kind==='conveyor'?floor-77:stain.y;
+ const y=h.kind==='press'&&stain.face==='underside'?pressBottomY()+8:(bloodSurfaceTop(h,x)??stain.y);
  return {x,y};
 }
 function stepPersistentDrips(dt){
@@ -269,7 +283,7 @@ function stepBlood(dt){
   for(const obstacle of LEVEL_HAZARDS){
    if(d.drip&&obstacle.id===d.sourceId)continue;
    if(d.x<obstacle.x-obstacle.width/2||d.x>obstacle.x+obstacle.width/2)continue;
-   const surface=obstacle.kind==='ramp'?rampY(obstacle,d.x):obstacle.kind==='conveyor'?floor-77:obstacle.kind==='press'?pressBottomY():obstacle.kind==='roller'?floor-135:obstacle.kind==='grinder'?floor-105:null;
+   const surface=bloodSurfaceTop(obstacle,d.x);
    // Cross the visible surface from the previous position.
    if(surface!==null&&d.vy>0&&oldY<=surface+d.size&&d.y>=surface-d.size){
     markWall(d.x,surface,Math.min(2,d.size/3),obstacle);
@@ -309,8 +323,10 @@ function drawGore(){
    const yy=bloodSurfacePosition(s).y;
    // Compressed, dark wet streaks conform to steel rather than hover.
    ctx.translate(xx,yy);ctx.rotate(equipment.kind==='ramp'?Math.atan(equipment.slope||0):0);
+   const puddleHeight=Math.max(1,s.size*.32);
+   ctx.translate(0,-puddleHeight);
    ctx.fillStyle='rgba(57,4,8,.72)';
-   ctx.beginPath();ctx.ellipse(0,-1,s.size*1.65,Math.max(1,s.size*.32),s.tilt,0,Math.PI*2);ctx.fill();
+   ctx.beginPath();ctx.ellipse(0,0,s.size*1.65,puddleHeight,0,0,Math.PI*2);ctx.fill();
    ctx.fillStyle='rgba(155,18,25,.35)';
    ctx.beginPath();ctx.ellipse(-s.size*.35,-2,s.size*.62,Math.max(.6,s.size*.13),0,0,Math.PI*2);ctx.fill();
   }else{
@@ -457,6 +473,7 @@ function hazardHit(x,y,part=null){
     if(first){
      hitHazards.add(h.id);hazardPoints+=h.points;
      directionalBlood(n.x,n.y,-.3,-1,.75);
+     markWall(n.x,pressBottomY()+8,1.4,h,'underside');
      // Tear at most two joints. Keep the body mostly intact for funny bounces.
      const candidates=[['le','lh'],['re','rh'],['lk','lf'],['rk','rf']];
      let torn=0;
@@ -564,13 +581,13 @@ function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY
 // A machinery strike tears detachable joints loose, transferring an actual
 // outward impulse to each Verlet particle. Detached pieces continue under gravity.
 // Spray decals originate at real particle impacts, never from a square scatter.
-function markWall(x,y,power=1,surface=null){
+function markWall(x,y,power=1,surface=null,face='top'){
  const floor=H*.88;
- wallStains.push({x,y:Math.min(floor-14,Math.max(22,y)),size:(surface?2.4:1.3)+Math.random()*(surface?3.1:2)*power,surface:surface?{kind:surface.kind,id:surface.id,x:surface.x,width:surface.width}:null,seed:Math.random(),tilt:(Math.random()-.5)*.7});
+ wallStains.push({x,face,y:Math.min(floor-14,Math.max(22,y)),size:(surface?2.4:1.3)+Math.random()*(surface?3.1:2)*power,surface:surface?{kind:surface.kind,id:surface.id,x:surface.x,width:surface.width}:null,seed:Math.random(),tilt:(Math.random()-.5)*.7});
  const stain=wallStains[wallStains.length-1];
  // Nearby marks share a drip point; sources survive stain-array trimming
  // and only reset clears them. This keeps long attempts inexpensive.
- const key=(surface?surface.id:'wall')+':'+Math.floor(x/35)+':'+(surface?0:Math.floor(y/40));
+ const key=(surface?surface.id:'wall')+':'+face+':'+Math.floor(x/35)+':'+(surface?0:Math.floor(y/40));
  if(!dripSources.has(key)){stain.dripSource=true;dripSources.set(key,{stain,timer:.25+Math.random()*.9});}
  if(wallStains.length>750)wallStains.splice(0,wallStains.length-750);
 }
