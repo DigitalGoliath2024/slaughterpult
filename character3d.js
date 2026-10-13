@@ -397,13 +397,12 @@ async function loadGoreAsset(){
 }
 function positionGore(state,w,h){
  if(!state.shredded||!state.rag){
-  for(const p of goreParts)scene.remove(p);
+  for(const part of goreParts){scene.remove(part);part.geometry.dispose();}
   goreParts=[];goreWasShredded=false;return;
  }
  if(!goreWasShredded&&goreAsset){
+  goreAsset.updateMatrixWorld(true);
   const meshes=[];goreAsset.traverse(o=>{if(o.isMesh)meshes.push(o);});
-  // The GLB contains distinct bone and muscle objects. Prefer fleshy meshes
-  // in the limited fragment slots, rather than using just the first bones.
   meshes.sort((a,b)=>{
    const score=o=>/muscle|flesh|meat|tissue|skin/i.test(o.name+' '+(o.material?.name||''))?2:/bone|skel|rib/i.test(o.name+' '+(o.material?.name||''))?0:1;
    return score(b)-score(a);
@@ -411,35 +410,46 @@ function positionGore(state,w,h){
   const ids=['head','lh','rh','lf','rf','le','re','lk','rk','chest'];
   for(let i=0;i<Math.min(meshes.length,ids.length);i++){
    const src=meshes[i];
-   const part=new THREE.Mesh(src.geometry,src.material);
-   const bounds=new THREE.Box3().setFromObject(src);
-   const size=bounds.getSize(new THREE.Vector3());
-   part.scale.setScalar(29.7/(Math.max(size.x,size.y,size.z)||1));
-   part.userData.joint=ids[i];part.userData.resting=false;part.userData.lastX=null;part.userData.lastY=null;
-   part.rotation.z=Math.random()*Math.PI*2;
+   // Each component of the original mesh must have its own centered geometry.
+   // Otherwise the original skeleton's object offsets make pieces hover.
+   const geometry=src.geometry.clone();
+   geometry.applyMatrix4(src.matrixWorld);
+   geometry.computeBoundingBox();
+   const dimensions=geometry.boundingBox.getSize(new THREE.Vector3());
+   const center=geometry.boundingBox.getCenter(new THREE.Vector3());
+   geometry.translate(-center.x,-center.y,-center.z);
+   const part=new THREE.Mesh(geometry,src.material);
+   const scale=29.7/(Math.max(dimensions.x,dimensions.y,dimensions.z)||1);
+   part.scale.setScalar(scale);
+   part.userData.joint=ids[i];
+   part.userData.resting=false;
+   part.userData.halfHeight=dimensions.y*scale*.5;
+   part.userData.angle=(Math.random()-.5)*1.3;
+   part.rotation.z=part.userData.angle;
    scene.add(part);goreParts.push(part);
   }
  }
  goreWasShredded=true;
+ const floor=h*.88;
  for(const p of goreParts){
-  const n=state.rag[p.userData.joint];
-  if(!n)continue;
-  const ground=h*.88;
-  // After the limb reaches the floor, freeze its orientation and floor height.
-  // Torso/thigh joint centers can remain above the floor even when the whole
-  // ragdoll is grounded. Stop ALL fragment spins once the body has settled.
-  const landed=n.y>=ground-28 || state.groundTime>1.35 || state.phase==='done';
+  const n=state.rag[p.userData.joint];if(!n)continue;
+  const halfHeight=p.userData.halfHeight||11;
+  const landed=n.y>=floor-halfHeight-3||state.groundTime>1.35||state.phase==='done';
   if(landed&&!p.userData.resting){
    p.userData.resting=true;
-   p.userData.restY=Math.min(ground-13,n.y);
    p.userData.restX=n.x;
-   p.userData.restAngle=p.rotation.z;
+   p.userData.restY=n.y;
+   p.rotation.z=0; // pieces lie flat rather than balancing on an end
   }
-  if(!p.userData.resting)p.rotation.z+=.018;
+  if(!p.userData.resting)p.rotation.z+=.012;
   const x=p.userData.resting?p.userData.restX:n.x;
-  const y=p.userData.resting?p.userData.restY:n.y;
+  let y=n.y;
+  if(p.userData.resting){
+   const target=floor-halfHeight;
+   p.userData.restY=Math.min(target,p.userData.restY+3.2);
+   y=p.userData.restY;
+  }
   p.position.set(x-state.camera-w/2,h/2-y+(state.cameraY||0),55);
-  if(p.userData.resting)p.rotation.z=p.userData.restAngle;
  }
 }
 function animate(){
