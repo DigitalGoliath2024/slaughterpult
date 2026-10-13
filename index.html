@@ -15,7 +15,7 @@ function resize(){const rect=canvas.getBoundingClientRect();W=rect.width;H=rect.
 function armPoint(i,angle=theta){let x=armOffsets[i]*armScale;return {x:pivot.x+x*Math.cos(angle),y:pivot.y-x*Math.sin(angle)};}function framePoint(i){let q=frameOffsets[i];return{x:pivot.x+q[0],y:pivot.y+q[1]};}function cradlePoint(angle=theta){let length=228*armScale;return{x:pivot.x+length*Math.cos(angle),y:pivot.y-length*Math.sin(angle)};}function worldPt(x,y){return{x:x-camera,y:y};}
 function startNotice(html){$('notice').innerHTML=html}function setPhase(p){phase=p;$('phaseText').textContent= p==='build'?'BUILD YOUR LAUNCHER':p==='charged'?'READY TO LAUNCH':p==='flying'?'FLIGHT IN PROGRESS': 'FLIGHT COMPLETE';$('phaseDescription').textContent=p==='build'?'Click one frame socket, then an arm socket to connect a part.':p==='charged'?'Release the arm and see how far your dummy flies.':p==='flying'?'Watch the dummy travel. Distance is measured from launch.':'Change components, charge, and try again.';$('launch').disabled=p!=='charged';$('charge').disabled=p==='flying';}
 function updatePanel(){const div=$('connections');div.innerHTML='';connections.forEach((c,i)=>{const el=document.createElement('div');el.className='connection';let label=c.type==='weight'?'Counterweight':c.type==='piston'?'Push piston':c.type==='spring'?'Tension spring':'Rubber band';el.innerHTML=`<span style="color:${colors[c.type]}">●</span> ${label} · F${c.f+1} → A${c.a+1} <button class="delete" data-index="${i}">✕</button>`;div.appendChild(el)});$('count').textContent=`(${connections.length}/4)`;div.querySelectorAll('.delete').forEach(b=>b.onclick=()=>{connections.splice(+b.dataset.index,1);reset(false);updatePanel()})}
-function reset(clear=true){theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;cameraY=0;maxDist=0;pending=null;particles=[];$('distanceText').textContent='0 ft';if(clear){connections=[];armScale=1;releaseDeg=55;$('armLength').value=100;$('angle').value=55;$('armVal').textContent='100%';$('angleVal').textContent='55°'}setPhase('build');updatePanel();startNotice('<strong>Build mode:</strong> Select a part and connect a frame socket to an arm socket. Then pull back and launch.');render()}
+function reset(clear=true){theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;cameraY=0;maxDist=0;pending=null;particles=[];bloodStains=[];bloodDrops=[];lastBloodImpact=-1;$('distanceText').textContent='0 ft';if(clear){connections=[];armScale=1;releaseDeg=55;$('armLength').value=100;$('angle').value=55;$('armVal').textContent='100%';$('angleVal').textContent='55°'}setPhase('build');updatePanel();startNotice('<strong>Build mode:</strong> Select a part and connect a frame socket to an arm socket. Then pull back and launch.');render()}
 function loadDemo(){connections=[{type:'rubber',f:0,a:0},{type:'spring',f:2,a:1}];updatePanel();startNotice('<strong>Starter machine loaded:</strong> Two power sources are connected. You can change the mounting positions, add components, or pull back and launch.');}
 function socketAt(x,y){let match=null,bestD=20;frameOffsets.forEach((_,i)=>{const p=framePoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'frame',index:i}}});armOffsets.forEach((_,i)=>{const p=armPoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'arm',index:i}}});return match}
 canvas.addEventListener('pointerdown',e=>{if(phase==='flying')return;if(phase==='done')reset(false);const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const s=socketAt(x,y);if(!s)return;if(!pending){pending=s;startNotice(`<strong>Socket selected:</strong> ${s.kind==='frame'?'Frame':'Arm'} ${s.index+1}. Click a socket on the other piece.`)}else if(pending.kind!==s.kind){if(connections.length>=4){startNotice('<strong>Maximum 4 power components.</strong> Remove one before adding another.');pending=null;return}const c={type:selected,f:s.kind==='frame'?s.index:pending.index,a:s.kind==='arm'?s.index:pending.index};if(connections.some(z=>z.type===c.type&&z.f===c.f&&z.a===c.a)){startNotice('That component is already installed.');pending=null;return}connections.push(c);pending=null;updatePanel();setPhase('build');startNotice(`<strong>${selected.toUpperCase()} CONNECTED.</strong> Try changing the angle or arm length, or charge your launcher.`)}else{pending=s;startNotice('Choose a socket on the opposite piece.')}render()});
@@ -28,6 +28,63 @@ function spring(a,b,kind){const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),ang=
 function catapult(){const px=pivot.x-camera,py=pivot.y,ground=H*.88;const feet=[{x:px-135,y:ground-9},{x:px+135,y:ground-9}];ctx.save();ctx.translate(-camera,0);const groundLocal=ground;beam({x:pivot.x-155,y:groundLocal-7},{x:pivot.x+155,y:groundLocal-7},18,'#96663f');beam({x:pivot.x-126,y:groundLocal-15},{x:pivot.x,y:pivot.y},21);beam({x:pivot.x+126,y:groundLocal-15},{x:pivot.x,y:pivot.y},21);beam({x:pivot.x-105,y:groundLocal-12},{x:pivot.x+105,y:groundLocal-12},16,'#a46c44');for(let i=0;i<4;i++){joint({x:pivot.x-133+i*89,y:groundLocal-10},5)}const rear={x:pivot.x-115*armScale*Math.cos(theta),y:pivot.y+115*armScale*Math.sin(theta)};const tip=cradlePoint();beam(rear,tip,19,'#3b4957');beam(rear,tip,11,'#8797a4');beam(rear,tip,5,'#4c5a67');for(let i=0;i<armOffsets.length;i++){let p=armPoint(i);joint(p,3)}for(let i=0;i<frameOffsets.length;i++){let p=framePoint(i);if(p.y>ground-8)p.y=ground-11;joint(p,4)}for(const c of connections){let f=framePoint(c.f),a=armPoint(c.a);if(c.type==='weight'){let p=armPoint(c.a);spring(f,a,'weight');ctx.fillStyle='#76808b';ctx.fillRect(p.x-17,p.y+5,34,34);ctx.strokeStyle='#414953';ctx.strokeRect(p.x-17,p.y+5,34,34)}else spring(f,a,c.type)}joint(pivot,12);if(!window.seatOverlayReady){ctx.save();ctx.translate(tip.x,tip.y);ctx.rotate(-theta);ctx.fillStyle='#394c5a';ctx.strokeStyle='#182b37';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-30,15);ctx.lineTo(-30,-24);ctx.lineTo(12,-24);ctx.lineTo(21,12);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();}if(!dummy&&!window.characterOverlayReady)drawDummy(tip.x,tip.y-23,theta);ctx.restore()}
 // A joint-constrained, segmented 2D test ragdoll. Independent nodes carry inertia,
 // joint lengths are solved iteratively, and the ground collides with every limb.
+// Gore effects live for the entire attempt and reset only on a fresh build.
+let bloodStains=[],bloodDrops=[],fireClock=0,lastBloodImpact=-1;
+function bloodBurst(x,y,power=1){
+ const floor=H*.88;
+ const amount=Math.min(90,Math.round(32*power));
+ for(let i=0;i<amount;i++){
+  const a=Math.random()*Math.PI*2,speed=(35+Math.random()*220)*power;
+  bloodDrops.push({x,y,px:x,py:y,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed-75,
+    r:1.8+Math.random()*3.6,life:1.5+Math.random()*2,shape:Math.random()});
+ }
+ // Immediate irregular impact decal: not tied to projectile lifetime.
+ for(let i=0;i<20*power;i++){
+  bloodStains.push({x:x+(Math.random()-.5)*45*power,
+    y:Math.min(floor-1,y+(Math.random()-.5)*26*power),
+    r:2+Math.random()*8*power,stretch:.4+Math.random()*2.2,
+    rot:Math.random()*Math.PI,shade:Math.random()});
+ }
+ if(bloodStains.length>1800)bloodStains.splice(0,bloodStains.length-1800);
+}
+function stepBlood(dt){
+ const floor=H*.88;
+ for(let i=bloodDrops.length-1;i>=0;i--){
+  const d=bloodDrops[i];d.life-=dt;d.vy+=650*dt;
+  d.px=d.x;d.py=d.y;d.x+=d.vx*dt;d.y+=d.vy*dt;
+  if(d.y>=floor-d.r){
+   d.y=floor-d.r;
+   for(let j=0;j<3;j++)bloodStains.push({x:d.x+(Math.random()-.5)*12,y:floor-1,
+      r:d.r*(1+Math.random()*2),stretch:.45+Math.random()*2.5,
+      rot:Math.random()*Math.PI,shade:Math.random()});
+   bloodDrops.splice(i,1);
+  }else if(d.life<=0)bloodDrops.splice(i,1);
+ }
+ if(bloodStains.length>1800)bloodStains.splice(0,bloodStains.length-1800);
+}
+function drawGore(){
+ ctx.save();ctx.translate(-camera,0);
+ for(const s of bloodStains){ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
+  ctx.fillStyle=s.shade>.5?'rgba(91,4,9,.9)':'rgba(166,11,19,.89)';
+  ctx.beginPath();ctx.ellipse(0,0,s.r*s.stretch,s.r*.55,0,0,Math.PI*2);ctx.fill();ctx.restore();}
+ for(const d of bloodDrops){ctx.strokeStyle='#8b040b';ctx.lineWidth=d.r*.85;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(d.px,d.py);ctx.lineTo(d.x,d.y);ctx.stroke();
+  ctx.fillStyle='#cb121d';ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,Math.PI*2);ctx.fill();}
+ // Fire stays on the flying dummy instead of sitting at a fixed world point.
+ if(rag&&(phase==='airborne'||phase==='done')){
+  fireClock+=.06;
+  for(const id of ['lh','rf']){
+   const p=rag.nodes[id];if(!p)continue;
+   for(let i=0;i<5;i++){
+    const flick=Math.sin(fireClock*3+i*5.4)*4;
+    ctx.fillStyle=i%2?'rgba(255,113,14,.75)':'rgba(255,212,63,.8)';
+    ctx.beginPath();ctx.ellipse(p.x+flick+i-2,p.y-5-i*4,3+i*.7,7+i*1.5,
+      flick*.06,0,Math.PI*2);ctx.fill();
+   }
+  }
+ }
+ ctx.restore();
+}
 const BODY=[['hip',0,0,8],['chest',0,-24,12],['neck',0,-41,5],['head',0,-55,13],['ls',-15,-30,5],['le',-26,-12,5],['lh',-31,6,5],['rs',15,-30,5],['re',26,-12,5],['rh',31,6,5],['lk',-10,25,6],['lf',-13,49,7],['rk',10,25,6],['rf',13,49,7]];
 const LINKS=[['hip','chest',24],['chest','neck',17],['neck','head',14],['chest','ls',17],['ls','le',22],['le','lh',19],['chest','rs',17],['rs','re',22],['re','rh',19],['hip','lk',27],['lk','lf',25],['hip','rk',27],['rk','rf',25],['hip','ls',31],['hip','rs',31],['ls','rs',30],['lk','rk',20],['chest','lk',51],['chest','rk',51]];
 function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY){const xx=x+dx,yy=y+dy;nodes[id]={x:xx,y:yy,px:xx-(vx-dy*spin)*.016,py:yy-(vy+dx*spin)*.016,r};}return {nodes,links:LINKS.map(([a,b])=>({a,b,len:Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y),broken:false})),settled:0,groundTime:0,restTime:0,fx:0};}
@@ -51,10 +108,10 @@ function updateRagdoll(dt){
     n.y=floor-n.r;
     n.py=n.y+Math.max(0,downward)*.12;
     n.px=n.x+vx*.42;
-    if(downward>2.5)hadImpact=true;
+    if(downward>2.5){hadImpact=true; if(downward>4 && bloodStains.length<1800 && Math.random()<.18)bloodBurst(n.x,floor,Math.min(2.4,downward/7));}
    }
   }
-  if(hadImpact)impacts++;
+  if(hadImpact){impacts++; if(impacts===1||impacts%12===0)bloodBurst(rag.nodes.head.x,floor,1.3);}
   for(let iter=0;iter<18;iter++){
    for(const link of rag.links){
     if(link.broken)continue;
@@ -99,13 +156,13 @@ function simulate(dt){if(phase==='launching'){
     const tip=cradlePoint(),speed=omega*150*armScale*.9;
     const vx=Math.max(28,speed*Math.sin(theta));
     const vy=Math.min(-38,speed*Math.cos(theta));
-    dummy={x:tip.x,y:tip.y-22,vx,vy,rot:0,spin:-omega*2};rag=makeRagdoll(dummy.x,dummy.y,vx,vy,-omega*2);impacts=0;
+    dummy={x:tip.x,y:tip.y-22,vx,vy,rot:0,spin:omega*.52};rag=makeRagdoll(dummy.x,dummy.y,vx,vy,omega*.52);impacts=0;
     flightStart=tip.x;
     setPhase('flying');phase='airborne';
     startNotice(`<strong>Released!</strong> The arm swings up from behind the pivot and sends the dummy forward (right). Initial speed ${Math.round(Math.hypot(vx,vy))} px/s.`);
   }
 }
-if(phase==='airborne'&&dummy){updateRagdoll(dt);let head=rag.nodes.head;maxDist=Math.max(maxDist,(Math.max(...Object.values(rag.nodes).map(n=>n.x))-flightStart)*.65);$('distanceText').textContent=Math.floor(maxDist)+' ft';if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Keep the dummy in frame on BOTH axes. Vertical tracking is activated
+if(phase==='airborne'&&dummy){updateRagdoll(dt);stepBlood(dt);let head=rag.nodes.head;maxDist=Math.max(maxDist,(Math.max(...Object.values(rag.nodes).map(n=>n.x))-flightStart)*.65);$('distanceText').textContent=Math.floor(maxDist)+' ft';if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Keep the dummy in frame on BOTH axes. Vertical tracking is activated
 // only above the normal playfield, and eases back to ground on descent.
  const desiredX=Math.max(0,dummy.x-W*.5);
  camera+=(desiredX-camera)*Math.min(1,dt*4);
@@ -113,7 +170,7 @@ if(phase==='airborne'&&dummy){updateRagdoll(dt);let head=rag.nodes.head;maxDist=
  const desiredY=Math.min(0,highest-H*.2);
  cameraY+=(desiredY-cameraY)*Math.min(1,dt*5);if(rag.settled>1.6||dummy.x>10000||frameTime>35){phase='done';setPhase('done');startNotice(`<strong>RESULT: ${Math.floor(maxDist)} ft.</strong> Ragdoll test: ${impacts} ground contacts. Change the launcher and try again.`)}}}
 
-function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#78aac9';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(0,-cameraY);drawSky();if(camera<750)catapult();if(dummy){drawRag()}if(phase==='build'||phase==='charged'||phase==='done'){ctx.save();ctx.translate(-camera,0);for(let i=0;i<frameOffsets.length;i++){const p=framePoint(i);ctx.fillStyle=pending?.kind==='frame'&&pending.index===i?'#fff':'#37decc';ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);ctx.fill();ctx.fillStyle='#0c2636';ctx.font='bold 9px system-ui';ctx.fillText('F'+(i+1),p.x+9,p.y-7)}for(let i=0;i<armOffsets.length;i++){const p=armPoint(i);ctx.fillStyle=pending?.kind==='arm'&&pending.index===i?'#fff':'#ffc049';ctx.beginPath();ctx.arc(p.x,p.y,6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#342716';ctx.font='bold 9px system-ui';ctx.fillText('A'+(i+1),p.x+9,p.y-7)}ctx.restore()}ctx.restore()}
+function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#78aac9';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(0,-cameraY);drawSky();drawGore();if(camera<750)catapult();if(dummy){drawRag()}if(phase==='build'||phase==='charged'||phase==='done'){ctx.save();ctx.translate(-camera,0);for(let i=0;i<frameOffsets.length;i++){const p=framePoint(i);ctx.fillStyle=pending?.kind==='frame'&&pending.index===i?'#fff':'#37decc';ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);ctx.fill();ctx.fillStyle='#0c2636';ctx.font='bold 9px system-ui';ctx.fillText('F'+(i+1),p.x+9,p.y-7)}for(let i=0;i<armOffsets.length;i++){const p=armPoint(i);ctx.fillStyle=pending?.kind==='arm'&&pending.index===i?'#fff':'#ffc049';ctx.beginPath();ctx.arc(p.x,p.y,6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#342716';ctx.font='bold 9px system-ui';ctx.fillText('A'+(i+1),p.x+9,p.y-7)}ctx.restore()}ctx.restore()}
 function tick(now){window.launcherVisualState={W,H,camera,cameraY,phase,theta,tip:cradlePoint(),rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y}])):null};let dt=Math.min(.033,(now-lastTime)/1000||.016);lastTime=now;if(phase==='launching'||phase==='airborne')frameTime+=dt;else frameTime=0;simulate(dt);render();requestAnimationFrame(tick)}resize();loadDemo();setPhase('build');requestAnimationFrame(tick);
 })();
 </script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js"></script></body></html>
