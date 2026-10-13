@@ -30,6 +30,14 @@ document.querySelectorAll('[data-part]').forEach(b=>b.onclick=()=>{selected=b.da
 // Upload the supplied image as rusted_slaughter_wall.png beside index.html.
 // If it is missing, retain the procedural industrial wall as a fallback.
 const industrialWallImage=new Image();
+const factoryWallImage=new Image();
+let factoryWallReady=false;
+factoryWallImage.onload=()=>{factoryWallReady=true;};
+factoryWallImage.src='./Meshy_AI_dirty_alley_building_facade.png';
+const tallWallImage=new Image();
+let tallWallReady=false;
+tallWallImage.onload=()=>{tallWallReady=true;};
+tallWallImage.src='./Meshy_AI_tall_gritty_alley_wall.png';
 let industrialWallReady=false;
 industrialWallImage.onload=()=>{industrialWallReady=true;};
 industrialWallImage.onerror=()=>{industrialWallReady=false;};
@@ -37,14 +45,17 @@ industrialWallImage.src='./rusted_slaughter_wall.png';
 function drawSky(){
  const floor=H*.88;
  ctx.fillStyle='#343b42';ctx.fillRect(0,0,W,floor);
- if(industrialWallReady){
+ const bg=currentLevel==='factory'?(factoryWallReady?factoryWallImage:industrialWallImage):industrialWallImage;
+ const ready=currentLevel==='factory'?(factoryWallReady||industrialWallReady):industrialWallReady;
+ if(ready){
   // Tile the source's metal-panel artwork across the world. Crop its light
   // outer margins, which are not part of the factory wall.
   const tileW=Math.max(680,Math.round(floor*1.92));
   const first=Math.floor(camera/tileW)-1;
   for(let i=first;i<first+Math.ceil(W/tileW)+3;i++){
    const x=i*tileW-camera;
-   ctx.drawImage(industrialWallImage,8,95,1520,670,x,0,tileW,floor);
+   if(bg===industrialWallImage)ctx.drawImage(bg,8,95,bg.naturalWidth-16,Math.max(10,bg.naturalHeight-110),x,0,tileW,floor);
+   else ctx.drawImage(bg,0,0,bg.naturalWidth,bg.naturalHeight,x,0,tileW,floor);
   }
  } else {
  ctx.save();ctx.translate(-(camera*.38)%240,0);
@@ -135,7 +146,7 @@ function stepBlood(dt){
   let splashed=false;
   for(const obstacle of LEVEL_HAZARDS){
    if(d.x<obstacle.x-obstacle.width/2||d.x>obstacle.x+obstacle.width/2)continue;
-   const surface=obstacle.kind==='ramp'?rampY(obstacle,d.x):obstacle.kind==='conveyor'?floor-77:obstacle.kind==='press'?floor-120+(Math.sin(levelClock*4)+1)*33:obstacle.kind==='grinder'?floor-105:null;
+   const surface=obstacle.kind==='ramp'?rampY(obstacle,d.x):obstacle.kind==='conveyor'?floor-77:obstacle.kind==='press'?floor-120+(Math.sin(levelClock*4)+1)*33:obstacle.kind==='roller'?floor-135:obstacle.kind==='grinder'?floor-105:null;
    // Cross the visible surface from the previous position.
    if(surface!==null&&d.vy>0&&oldY<=surface+d.size&&d.y>=surface-d.size){
     markWall(d.x,surface,Math.min(2,d.size/3));
@@ -207,7 +218,15 @@ const COURSES={
   {id:'board2',kind:'ramp',x:1290,width:160,points:120,label:'',y:165,slope:-.30},
   {id:'board3',kind:'ramp',x:1450,width:160,points:120,label:'',y:215,slope:.38},
   {id:'board4',kind:'ramp',x:1610,width:160,points:120,label:'',y:273,slope:-.44},
-  {id:'grinder',kind:'grinder',x:1900,width:160,points:1500,label:'TRASH GRINDER'}
+  {id:'grinder',kind:'grinder',x:1900,width:160,points:1500,label:'TRASH GRINDER'},
+  {id:'belt2',kind:'conveyor',x:2240,width:280,points:350,label:'FEED BELT'},
+  {id:'press2',kind:'press',x:2510,width:130,points:850,label:'STEEL CRUSHER'},
+  {id:'belt3',kind:'conveyor',x:2820,width:310,points:350,label:'TRANSFER BELT'},
+  {id:'roller2',kind:'roller',x:3140,width:180,points:900,label:'TWIN ROLLERS'},
+  {id:'ramp5',kind:'ramp',x:3450,width:220,points:180,label:'SPIKED CHUTE',y:195,slope:.43},
+  {id:'belt4',kind:'conveyor',x:3790,width:370,points:400,label:'FINAL FEED'},
+  {id:'crusher3',kind:'press',x:4080,width:140,points:1100,label:'FINAL CRUSHER'},
+  {id:'roller3',kind:'roller',x:4440,width:200,points:1250,label:'HEAVY ROLLERS'}
  ],
  factory:[
   {id:'mattress',kind:'soft',x:800,width:320,points:0,label:'FAIL ZONE'},
@@ -268,8 +287,18 @@ function hazardHit(x,y,part=null){
   if(h.kind==='press'&&n){
    const pressBottom=floor-120+(Math.sin(levelClock*4)+1)*33;
    if(n.y+n.r>=pressBottom-15&&n.y<floor-42){
+    const speed=Math.hypot(n.x-n.px,n.y-n.py)*60;
     n.y=pressBottom-n.r;n.py=n.y+6;
-    if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;directionalBlood(x,y,-.6,-1.2,1.8);}
+    if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;directionalBlood(x,y,-.6,-1.2,1.8);if(speed>125)tearJoint('neck','head',x,y,speed);}
+   }
+   continue;
+  }
+  if(h.kind==='roller'&&n&&y>floor-155){
+   const cx=h.x,cy=floor-95,dx=x-cx,dy=y-cy;
+   if(Math.hypot(dx,dy)<100){
+    // Powered rollers grab and redirect contacting ragdoll particles.
+    n.px=n.x-(dx<0?6:-4);n.py=n.y+4;
+    if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;directionalBlood(x,y,dx||1,-1,2.6);if(!rag.shredded)shredRagdoll(x,y,part);}
    }
    continue;
   }
@@ -310,6 +339,16 @@ function drawHazards(){
    ctx.fillStyle='#8e9ea5';ctx.fillRect(left,floor-77,h.width,6);
    ctx.strokeStyle='#a8b3b7';ctx.lineWidth=6;for(let x=left+20;x<left+h.width;x+=44){ctx.beginPath();ctx.arc(x,floor-65,9,0,Math.PI*2);ctx.stroke();}
    ctx.strokeStyle='#727e84';ctx.lineWidth=7;for(const x of [left+28,left+h.width-25]){ctx.beginPath();ctx.moveTo(x,floor-51);ctx.lineTo(x,floor);ctx.stroke();}
+  }else if(h.kind==='roller'){
+   ctx.fillStyle='#38454b';ctx.fillRect(h.x-100,floor-164,200,165);
+   ctx.strokeStyle='#9babb1';ctx.lineWidth=7;ctx.strokeRect(h.x-100,floor-164,200,165);
+   for(const shift of [-41,41]){
+    const cy=floor-106;ctx.fillStyle='#65747a';ctx.beginPath();ctx.arc(h.x+shift,cy,44,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#c1c9c8';ctx.lineWidth=5;ctx.stroke();
+    ctx.save();ctx.translate(h.x+shift,cy);ctx.rotate(levelClock*(shift<0?2.6:-2.6));
+    for(let k=0;k<8;k++){ctx.rotate(Math.PI/4);ctx.fillStyle='#aeb8b9';ctx.fillRect(-5,-43,10,27);}
+    ctx.restore();
+   }
   }else if(h.kind==='press'){
    ctx.fillStyle='#52616b';ctx.fillRect(h.x-47,floor-237,94,25);
    for(const x of [h.x-40,h.x+35]){ctx.fillStyle='#86949b';ctx.fillRect(x,floor-215,7,152);}
@@ -323,7 +362,7 @@ function drawHazards(){
    ctx.strokeStyle='#b9babb';ctx.lineWidth=7;ctx.strokeRect(h.x-65,floor-90,130,90);
   }
   if(h.label){ctx.font='bold 13px system-ui';ctx.textAlign='center';ctx.fillStyle='#e5e8e9';
-   ctx.fillText(h.label,h.x,floor-(h.kind==='soft'?43:h.kind==='ramp'?h.y+58:h.kind==='door'?256:h.kind==='conveyor'?105:h.kind==='press'?264:245));}
+   ctx.fillText(h.label,h.x,floor-(h.kind==='soft'?43:h.kind==='ramp'?h.y+58:h.kind==='door'?256:h.kind==='conveyor'?105:h.kind==='press'?264:h.kind==='roller'?192:245));}
  }
  ctx.restore();
 }
