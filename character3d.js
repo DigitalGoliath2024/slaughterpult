@@ -163,7 +163,7 @@ async function load(id){
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
   window.characterOverlayReady=true;
-  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v28';
+  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v29';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
   status.textContent='Could not load '+id+' · '+(e?.message||'model error');
@@ -256,7 +256,7 @@ function calibrateLeftHand(){
  if(!bones.LeftArm||!bones.LeftForeArm||!bones.LeftHand||!bones.Hips)return;
  const hip=jointScreen('Hips');
  // Relaxed hand at the OUTSIDE of the pelvis, above the seat base.
- const target={x:hip.x-7,y:hip.y-8};
+ const target={x:hip.x+9,y:hip.y+12}; // hand on seat armrest, not below seat
  let best=Infinity,choice=null;
  for(const x of [-1.35,-.8,-.3,.25,.8,1.35])
  for(const z of [-1.4,-.7,0,.7,1.4]){
@@ -265,7 +265,8 @@ function calibrateLeftHand(){
   for(const elbowZ of [-.9,0,.9]){
    pose('LeftForeArm',elbowX,0,elbowZ);
    const wrist=jointScreen('LeftHand');
-   const err=(wrist.x-target.x)**2+(wrist.y-target.y)**2;
+   const elbow=jointScreen('LeftForeArm');
+   const err=(wrist.x-target.x)**2+(wrist.y-target.y)**2 + Math.max(0,hip.y-4-elbow.y)**2 * 3;
    if(err<best){best=err;choice={upper:{x,z},lower:{x:elbowX,z:elbowZ}};}
   }
  }
