@@ -14,11 +14,19 @@ try {
  camera=new THREE.OrthographicCamera(-500,500,300,-300,0.1,2000);
  camera.position.set(0,0,1000);camera.lookAt(0,0,0);
 } catch(e){status.textContent='3D unavailable — 2D ragdoll active';}
-const parts=['Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg'];
+const parts=['LeftShoulder','RightShoulder','Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg'];
 const urls={cowboy:'./western_cowboy_rigged.glb',human:'./rigged_t-pose_human_male_w_50_face_blendshapes.glb'};
 function bone(part){
- const rx=new RegExp('(?:^|[:_])'+part+'(?:[_0-9]|$)','i');let found=null;
- model?.traverse(n=>{if(n.isBone&&rx.test(n.name)&&!found)found=n});return found;
+ // Blender/Mixamo names differ: mixamorig:Hips_01 versus mixamorig_Hips_01.
+ // GLTFLoader can sanitize ':' into '_' as well.
+ const wanted=part.toLowerCase();
+ let found=null;
+ model?.traverse(n=>{
+  if(!n.isBone||found)return;
+  let name=n.name.toLowerCase().replace(/^mixamorig[:_]?/,'');
+  if(name===wanted || name.startsWith(wanted+'_') || new RegExp('(?:^|[:_])'+part+'(?:[_0-9]|$)','i').test(n.name))found=n;
+ });
+ return found;
 }
 async function load(id){
  const mine=++ticket;window.characterOverlayReady=false;
@@ -39,7 +47,8 @@ async function load(id){
   model.position.x-=mid.x;model.position.y-=mid.y;
   bones={};base={};
   for(const part of parts){const b=bone(part);if(b){bones[part]=b;base[part]=b.quaternion.clone()}}
-  if(!bones.Hips)throw Error('Incompatible skeleton');
+  if(!bones.Hips){console.warn('Hip bone unmatched; bones found:',Object.keys(bones));}
+  if(Object.keys(bones).length<5)throw Error('Unable to map character joints');
   activeId=id;
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
@@ -66,18 +75,21 @@ function pose(part,x=0,y=0,z=0){
 }
 function applySittingPose(){
  for(const part of parts)if(bones[part])bones[part].quaternion.copy(base[part]);
- // Fold thighs forward from the hips and bend knees down toward the cradle.
- pose('LeftUpLeg',0,0,Math.PI*.49);
- pose('RightUpLeg',0,0,Math.PI*.49);
- pose('LeftLeg',0,0,-Math.PI*.52);
- pose('RightLeg',0,0,-Math.PI*.52);
- // Relax the torso and let the arms sit naturally, instead of T-pose.
- pose('Spine',0,0,-.10);
- pose('LeftArm',0,0,-.65);
- pose('RightArm',0,0,.65);
- pose('LeftForeArm',0,0,-.18);
- pose('RightForeArm',0,0,.18);
+ // Local X pitches thighs forward and folds the knees for a seated side view.
+ pose('LeftUpLeg',-1.25,0,0);
+ pose('RightUpLeg',-1.25,0,0);
+ pose('LeftLeg',1.35,0,0);
+ pose('RightLeg',1.35,0,0);
+ pose('Spine',.08,0,0);
+ // Bring T-pose arms down, then bend elbows loosely over the lap.
+ pose('LeftShoulder',0,0,-.65);
+ pose('RightShoulder',0,0,.65);
+ pose('LeftArm',.35,0,-.68);
+ pose('RightArm',.35,0,.68);
+ pose('LeftForeArm',-.6,0,0);
+ pose('RightForeArm',-.6,0,0);
 }
+
 function animate(){
  requestAnimationFrame(animate);
  if(!renderer||!camera)return;
@@ -93,6 +105,8 @@ function animate(){
    const tilt=direction(rag.hip,rag.chest)-Math.PI/2;
    model.position.x=rag.hip.x-state.camera-w/2;
    model.position.y=h/2-rag.hip.y-21;
+   model.rotation.order='YXZ';
+   model.rotation.y=Math.PI/2;
    model.rotation.z=tilt;
    const a=(p,q)=>direction(rag[p],rag[q]);
    rotate('LeftArm',norm(a('ls','le')-tilt+Math.PI/2));
@@ -107,6 +121,8 @@ function animate(){
   } else {
    model.position.x=tip.x-state.camera-w/2;
    model.position.y=h/2-tip.y+5;
+   model.rotation.order='YXZ';
+   model.rotation.y=Math.PI/2;
    model.rotation.z=phase==='launching'?-theta*.25:0;
    applySittingPose();
   }
