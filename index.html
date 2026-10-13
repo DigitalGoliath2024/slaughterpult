@@ -71,19 +71,8 @@ function drawGore(){
  for(const d of bloodDrops){ctx.strokeStyle='#8b040b';ctx.lineWidth=d.r*.85;ctx.lineCap='round';
   ctx.beginPath();ctx.moveTo(d.px,d.py);ctx.lineTo(d.x,d.y);ctx.stroke();
   ctx.fillStyle='#a00b16';ctx.beginPath();ctx.ellipse(d.x,d.y,d.r*.75,d.r*1.5,0,0,Math.PI*2);ctx.fill();}
- // Fire stays on the flying dummy instead of sitting at a fixed world point.
- if(rag&&(phase==='airborne'||phase==='done')){
-  fireClock+=.06;
-  for(const id of ['lh','rf']){
-   const p=rag.nodes[id];if(!p)continue;
-   for(let i=0;i<5;i++){
-    const flick=Math.sin(fireClock*3+i*5.4)*4;
-    ctx.fillStyle=i%2?'rgba(255,113,14,.75)':'rgba(255,212,63,.8)';
-    ctx.beginPath();ctx.ellipse(p.x+flick+i-2,p.y-5-i*4,3+i*.7,7+i*1.5,
-      flick*.06,0,Math.PI*2);ctx.fill();
-   }
-  }
- }
+ // Fire is hazard-triggered, not a default character effect.
+ // No fire hazards are present in this level, so do not render flames.
  ctx.restore();
 }
 
