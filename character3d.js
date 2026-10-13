@@ -82,9 +82,9 @@ function positionChair(state,w,h){
  if(!seatRoot||!seatReady)return;
  // The bracket origin stays physically on the steel girder tip.
  seatRoot.visible=state.camera<750;
- seatRoot.position.set(state.tip.x-state.camera-w/2-18,h/2-state.tip.y+ (state.cameraY||0),12);
+ seatRoot.position.set(state.tip.x-state.camera-w/2-18,h/2-state.tip.y+(state.cameraY||0),12);
  // Rigidly welded to the girder: arm rotation only, no independent seat tilt.
- seatRoot.rotation.z=state.theta-Math.PI; // pitches forward/downward as the girder rises
+ seatRoot.rotation.z=Math.PI-state.theta;
 }
 
 
@@ -256,7 +256,7 @@ function calibrateLeftHand(){
  if(!bones.LeftArm||!bones.LeftForeArm||!bones.LeftHand||!bones.Hips)return;
  const hip=jointScreen('Hips');
  // Relaxed hand at the OUTSIDE of the pelvis, above the seat base.
- const target={x:hip.x+5,y:hip.y+5}; // keep left wrist alongside the seated hip, above the chair base
+ const target={x:hip.x+9,y:hip.y+12}; // hand on seat armrest, not below seat
  let best=Infinity,choice=null;
  for(const x of [-1.35,-.8,-.3,.25,.8,1.35])
  for(const z of [-1.4,-.7,0,.7,1.4]){
@@ -266,7 +266,7 @@ function calibrateLeftHand(){
    pose('LeftForeArm',elbowX,0,elbowZ);
    const wrist=jointScreen('LeftHand');
    const elbow=jointScreen('LeftForeArm');
-   const err=(wrist.x-target.x)**2+(wrist.y-target.y)**2 + Math.max(0,hip.y-2-elbow.y)**2*4 + Math.max(0,hip.y-8-wrist.y)**2*5;
+   const err=(wrist.x-target.x)**2+(wrist.y-target.y)**2 + Math.max(0,hip.y-4-elbow.y)**2 * 3;
    if(err<best){best=err;choice={upper:{x,z},lower:{x:elbowX,z:elbowZ}};}
   }
  }
