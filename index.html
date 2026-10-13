@@ -42,45 +42,43 @@ let industrialWallReady=false;
 industrialWallImage.onload=()=>{industrialWallReady=true;};
 industrialWallImage.onerror=()=>{industrialWallReady=false;};
 industrialWallImage.src='./rusted_slaughter_wall.png';
+// Sky is in world space ABOVE the wall; the camera exposes it when tracking high launches.
+const levelSkyImages={slide:new Image(),factory:new Image()};
+levelSkyImages.slide.src='./Meshy_AI_night_sky_giant_heads.png';
+levelSkyImages.factory.src='./Meshy_AI_cosmic_surreal_entities.png';
 function drawSky(){
  const floor=H*.88;
- ctx.fillStyle='#343b42';ctx.fillRect(0,0,W,floor);
- const bg=currentLevel==='factory'?industrialWallImage:(factoryWallReady?factoryWallImage:industrialWallImage);
- const ready=currentLevel==='factory'?industrialWallReady:(factoryWallReady||industrialWallReady);
- if(ready){
-  // Tile the source's metal-panel artwork across the world. Crop its light
-  // outer margins, which are not part of the factory wall.
-  const tileW=Math.max(680,Math.round(floor*1.92));
-  const first=Math.floor(camera/tileW)-1;
+ const sky=levelSkyImages[currentLevel];
+ ctx.fillStyle='#080b17';ctx.fillRect(0,-3500,W,3500+H);
+ if(sky.complete&&sky.naturalWidth>0){
+  const tileW=Math.max(W,Math.round(W*1.5));
+  const skyShift=camera*.14;
+  const first=Math.floor(skyShift/tileW)-1;
   for(let i=first;i<first+Math.ceil(W/tileW)+3;i++){
+   ctx.drawImage(sky,i*tileW-skyShift,-3500,tileW,3500);
+  }
+ }
+ // Building frontage is full-size and bottom-anchored. Its pavement must
+ // extend all the way to the bottom of the playfield; don't paint concrete over it.
+ const bg=currentLevel==='factory'?industrialWallImage:(factoryWallReady?factoryWallImage:industrialWallImage);
+ if(bg.complete&&bg.naturalWidth>0){
+  const tileW=Math.max(780,Math.round(H*2.25));
+  const start=Math.floor(camera/tileW)-1;
+  for(let i=start;i<start+Math.ceil(W/tileW)+3;i++){
    const x=i*tileW-camera;
-   if(bg===industrialWallImage)ctx.drawImage(bg,12,102,bg.naturalWidth-24,Math.min(650,bg.naturalHeight-204),x,0,tileW,floor);
-   else ctx.drawImage(bg,0,0,bg.naturalWidth,bg.naturalHeight,x,0,tileW,floor);
+   if(bg===industrialWallImage){
+    ctx.drawImage(bg,12,102,bg.naturalWidth-24,Math.min(650,bg.naturalHeight-204),x,0,tileW,H);
+   }else{
+    ctx.drawImage(bg,0,0,bg.naturalWidth,bg.naturalHeight,x,0,tileW,H);
+   }
   }
- } else {
- ctx.save();ctx.translate(-(camera*.38)%240,0);
- for(let x=-240;x<W+260;x+=240){
-  ctx.fillStyle=x%480===0?'#414950':'#3b4349';
-  ctx.fillRect(x+3,0,234,floor);
-  ctx.fillStyle='#242d33';ctx.fillRect(x+230,0,7,floor);
-  ctx.strokeStyle='#65717a';ctx.lineWidth=2;
-  ctx.beginPath();ctx.moveTo(x+8,63);ctx.lineTo(x+226,63);ctx.moveTo(x+8,floor-90);ctx.lineTo(x+226,floor-90);ctx.stroke();
-  ctx.fillStyle='#879198';
-  for(const yy of [77,floor-103])for(const xx of [18,216]){
-   ctx.beginPath();ctx.arc(x+xx,yy,3,0,2*Math.PI);ctx.fill();
-  }
+ }else{
+  ctx.fillStyle='#45474c';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#293138';ctx.fillRect(0,floor,W,H-floor);
  }
- ctx.restore();
- }
- // A pipe rail and concrete apron sell the backdrop as a factory interior.
- ctx.fillStyle='#222a2e';ctx.fillRect(0,floor-9,W,12);
- ctx.strokeStyle='#89939b';ctx.lineWidth=5;
- ctx.beginPath();ctx.moveTo(0,90);ctx.lineTo(W,90);ctx.stroke();
- const concrete=ctx.createLinearGradient(0,floor,0,H);
- concrete.addColorStop(0,'#656a6b');concrete.addColorStop(1,'#303536');
- ctx.fillStyle=concrete;ctx.fillRect(0,floor,W,H-floor);
- ctx.strokeStyle='#454c4f';ctx.lineWidth=2;
- for(let x=-(camera%170);x<W+170;x+=170){ctx.beginPath();ctx.moveTo(x,floor);ctx.lineTo(x+22,H);ctx.stroke();}
+ // Preserve a subtle physical floor guide without hiding the texture's pavement.
+ ctx.strokeStyle='rgba(35,35,35,.4)';ctx.lineWidth=2;
+ ctx.beginPath();ctx.moveTo(0,floor);ctx.lineTo(W,floor);ctx.stroke();
 }
 function cloud(x,y,s){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.beginPath();ctx.ellipse(0,0,50,14,0,0,Math.PI*2);ctx.ellipse(-20,-9,24,17,0,0,Math.PI*2);ctx.ellipse(17,-11,33,19,0,0,Math.PI*2);ctx.fill();ctx.restore()}
 function beam(a,b,width=12,color='#b77b46'){ctx.save();ctx.lineCap='round';ctx.strokeStyle='#3e312c';ctx.lineWidth=width+5;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();ctx.strokeStyle='rgba(255,217,150,.46)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(a.x,a.y-width*.23);ctx.lineTo(b.x,b.y-width*.23);ctx.stroke();ctx.restore()}
