@@ -97,7 +97,7 @@ function seatCharacterOnChair(){
  const target=seatRoot.localToWorld(chairHipAnchor.clone());
  model.rotation.order='YXZ';
  model.rotation.y=Math.PI/2;
- model.rotation.z=seatRoot.rotation.z;
+ model.rotation.z=seatRoot.rotation.z-0.09; // gentle lean toward screen-left
  model.position.set(0,0,0);
  model.updateMatrixWorld(true);
  const actual=bones.Hips.getWorldPosition(new THREE.Vector3());
@@ -144,6 +144,7 @@ async function load(id){
   activeId=id;
   calibrateSeatBends();
   calibrateArms();
+  calibrateRightHandRest();
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
   window.characterOverlayReady=true;
@@ -206,7 +207,7 @@ function calibrateSeatBends(){
     if(v>score){score=v;winner=sign;}
    }
    seatBends[knee]=winner*1.22;
-  }else seatBends[knee]=-selected*1.22;
+  }else seatBends[knee]=-Math.sign(selectedAngle)*1.22;
   pose(upper,0);pose(knee,0);
  }
 }
@@ -233,6 +234,31 @@ function calibrateArms(){
   pose(upper,0,0,0);
   if(bones[hand])armPose[lower]=side==='Left'?{x:.12,z:0}:{x:-.75,z:0};
  }
+}
+// Find a natural right-arm rest against the seated right thigh by measuring
+// wrist and thigh in the model, rather than guessing joint rotation signs.
+function calibrateRightHandRest(){
+ const upper='RightArm',lower='RightForeArm';
+ if(!bones[upper]||!bones[lower]||!bones.RightHand||!bones.RightUpLeg||!bones.RightLeg)return;
+ for(const [part,angle] of Object.entries(seatBends))pose(part,angle,0,0);
+ const hip=jointScreen('RightUpLeg'),knee=jointScreen('RightLeg');
+ const target={x:hip.x+(knee.x-hip.x)*.52,y:hip.y+(knee.y-hip.y)*.52+5};
+ let best=Infinity,choice=null;
+ for(const x of [-1.35,-.8,-.3,.25,.8,1.35]){
+  for(const z of [-1.4,-.7,0,.7,1.4]){
+   pose(upper,x,0,z);
+   for(const elbowX of [-1.5,-.8,0,.8,1.5]){
+    for(const elbowZ of [-.9,0,.9]){
+     pose(lower,elbowX,0,elbowZ);
+     const wrist=jointScreen('RightHand');
+     const error=(wrist.x-target.x)**2+(wrist.y-target.y)**2;
+     if(error<best){best=error;choice={upper:{x,z},lower:{x:elbowX,z:elbowZ}};}
+    }
+   }
+  }
+ }
+ if(choice){armPose.RightArm=choice.upper;armPose.RightForeArm=choice.lower;}
+ for(const part of [upper,lower,...Object.keys(seatBends)])pose(part,0,0,0);
 }
 function applySittingPose(){
  for(const part of parts)if(bones[part])bones[part].quaternion.copy(base[part]);
