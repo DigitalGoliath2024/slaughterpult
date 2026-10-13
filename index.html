@@ -125,22 +125,35 @@ function stepBlood(dt){
  const floor=H*.88;
  for(let i=bloodDrops.length-1;i>=0;i--){
   const d=bloodDrops[i];
-  d.vy+=780*dt;
-  d.vx*=Math.max(.85,1-dt*.35);
-  d.x+=d.vx*dt;d.y+=d.vy*dt;d.angle+=d.spin*dt;
+  const oldX=d.x,oldY=d.y;
+  d.life=(d.life||0)+dt;
+  d.vy+=790*dt;
+  d.vx*=Math.max(.85,1-dt*.38);
+  d.x+=d.vx*dt;d.y+=d.vy*dt;d.angle=Math.atan2(d.vy,d.vx);
+  if(d.life>5){bloodDrops.splice(i,1);continue;}
   // Splashing droplets leave decals on nail ramps and moving equipment.
   let splashed=false;
   for(const obstacle of LEVEL_HAZARDS){
    if(d.x<obstacle.x-obstacle.width/2||d.x>obstacle.x+obstacle.width/2)continue;
    const surface=obstacle.kind==='ramp'?rampY(obstacle,d.x):obstacle.kind==='conveyor'?floor-77:obstacle.kind==='press'?floor-120+(Math.sin(levelClock*4)+1)*33:obstacle.kind==='grinder'?floor-105:null;
-   if(surface!==null&&d.vy>0&&d.y>=surface-7&&d.y<=surface+12){
-    wallStains.push({x:d.x,y:Math.min(floor-20,surface),size:3+Math.random()*5,seed:Math.random()});
+   // Cross the visible surface from the previous position.
+   if(surface!==null&&d.vy>0&&oldY<=surface+d.size&&d.y>=surface-d.size){
+    markWall(d.x,surface,Math.min(2,d.size/3));
     splashed=true;break;
+   }
+   // A closed metal gate is a vertical collision plane.
+   if(obstacle.kind==='door'&&!gateOpen()&&
+      (oldX-obstacle.x)*(d.x-obstacle.x)<=0&&d.y>floor-205){
+    markWall(obstacle.x,d.y,Math.min(2,d.size/3));splashed=true;break;
    }
   }
   if(splashed){bloodDrops.splice(i,1);if(wallStains.length>1100)wallStains.splice(0,wallStains.length-1100);continue;}
+  // A distant wall receives the highest arcing droplets too.
+  if(d.life>.15&&d.life<2.5&&d.y<floor-38&&Math.random()<dt*.65){
+   markWall(d.x,d.y,Math.min(1.4,d.size/4));
+  }
   if(d.y>=floor-d.size*.5){
-   groundBlood(d.x,.25+d.size*.07);
+   groundBlood(d.x,.4+d.size*.1);
    bloodDrops.splice(i,1);
   }
  }
@@ -175,7 +188,9 @@ function drawGore(){
  }
  for(const d of bloodDrops){
   ctx.save();ctx.translate(d.x,d.y);ctx.rotate(d.angle);
-  const size=d.size;ctx.drawImage(bloodSprites[d.sprite],-size,-size,size*2,size*2);
+  const speed=Math.hypot(d.vx,d.vy);
+  const size=d.size;ctx.scale(1+Math.min(2,speed/280),1);
+  ctx.drawImage(bloodSprites[d.sprite],-size,-size,size*2,size*2);
   ctx.restore();
  }
  ctx.restore();
@@ -220,7 +235,7 @@ function hazardHit(x,y,part=null){
     // Nails catch individual distal joints while the body keeps sliding.
     if(['lh','rh','lf','rf','le','re','lk','rk'].includes(part)&&!rag.pinned[part]&&Math.random()<.012){
      rag.pinned[part]={x:n.x,y:n.y,stress:0};
-     bloodBurst(x,y,.45);groundBlood(x,.4);
+     directionalBlood(x,y,.7,-1,.55);groundBlood(x,.4);
     }
     if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;}
    }
@@ -244,7 +259,7 @@ function hazardHit(x,y,part=null){
    const pressBottom=floor-120+(Math.sin(levelClock*4)+1)*33;
    if(n.y+n.r>=pressBottom-15&&n.y<floor-42){
     n.y=pressBottom-n.r;n.py=n.y+6;
-    if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;bloodBurst(x,y,1.4);markWall(x,y);}
+    if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;directionalBlood(x,y,-.6,-1.2,1.8);}
    }
    continue;
   }
@@ -307,11 +322,23 @@ const LINKS=[['hip','chest',24],['chest','neck',17],['neck','head',14],['chest',
 function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY){const xx=x+dx,yy=y+dy;nodes[id]={x:xx,y:yy,px:xx-(vx-dy*spin)*.016,py:yy-(vy+dx*spin)*.016,r};}return {nodes,links:LINKS.map(([a,b])=>({a,b,len:Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y),broken:false})),settled:0,groundTime:0,restTime:0,fx:0,shredded:false,pinned:{}};}
 // A machinery strike tears detachable joints loose, transferring an actual
 // outward impulse to each Verlet particle. Detached pieces continue under gravity.
-function markWall(x,y){
+// Spray decals originate at real particle impacts, never from a square scatter.
+function markWall(x,y,power=1){
  const floor=H*.88;
- for(let i=0;i<65;i++){
-  wallStains.push({x:x+(Math.random()-.5)*135,y:Math.min(floor-40,Math.max(70,y-75+(Math.random()-.5)*140)),size:2+Math.random()*8,seed:Math.random()});
+ wallStains.push({x,y:Math.min(floor-14,Math.max(22,y)),size:2+Math.random()*5*power,seed:Math.random(),tilt:(Math.random()-.5)*.7});
+ if(wallStains.length>750)wallStains.splice(0,wallStains.length-750);
+}
+function directionalBlood(x,y,dx,dy,power=1){
+ const base=Math.atan2(dy,dx),amount=Math.min(125,Math.round(18+power*20));
+ for(let i=0;i<amount;i++){
+  const angle=base+(Math.random()-.5)*1.7;
+  const velocity=(90+Math.random()*340)*Math.min(2,power);
+  bloodDrops.push({x:x+(Math.random()-.5)*12,y:y+(Math.random()-.5)*12,
+   vx:Math.cos(angle)*velocity,vy:Math.sin(angle)*velocity,
+   size:1.8+Math.random()*5.5,angle:angle,spin:(Math.random()-.5)*10,
+   sprite:Math.floor(Math.random()*bloodSprites.length),life:0});
  }
+ if(bloodDrops.length>850)bloodDrops.splice(0,bloodDrops.length-850);
 }
 function shredRagdoll(x,y,contactPart=null){
  if(!rag||rag.shredded)return;
@@ -326,8 +353,8 @@ function shredRagdoll(x,y,contactPart=null){
   n.px=n.x-Math.cos(angle)*speed*.016;
   n.py=n.y-Math.sin(angle)*speed*.016;
  }
- bloodBurst(x,y,5.5);
- markWall(x,y);
+ directionalBlood(x,y,1,-.85,5.5);
+ directionalBlood(x,y,-.5,-.7,2.4);
 }
 function updateRagdoll(dt){
  if(!rag)return;
