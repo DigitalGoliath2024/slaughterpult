@@ -520,7 +520,8 @@ function checkWaistBend(){
                           upper.x*lower.x+upper.y*lower.y);
  // Forward flexion remains unrestricted. Severe opposite-direction
  // hyperextension under load can tear the waist, without shredding limbs.
- const backBend=angle< -2.35;
+ // Screen-right is the forward-facing direction; negative flex folds forward.
+ const backBend=angle>2.35;
  if(backBend&&Math.hypot(n.chest.x-n.chest.px,n.chest.y-n.chest.py)>1.5){
   if(tearJoint('hip','waist',n.waist.x,n.waist.y,260)){
    rag.waistBroken=true;
