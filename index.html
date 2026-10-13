@@ -15,7 +15,7 @@ function resize(){const rect=canvas.getBoundingClientRect();W=rect.width;H=rect.
 function armPoint(i,angle=theta){let x=armOffsets[i]*armScale;return {x:pivot.x+x*Math.cos(angle),y:pivot.y-x*Math.sin(angle)};}function framePoint(i){let q=frameOffsets[i];return{x:pivot.x+q[0],y:pivot.y+q[1]};}function cradlePoint(angle=theta){let length=228*armScale;return{x:pivot.x+length*Math.cos(angle),y:pivot.y-length*Math.sin(angle)};}function worldPt(x,y){return{x:x-camera,y:y};}
 function startNotice(html){$('notice').innerHTML=html}function setPhase(p){phase=p;$('phaseText').textContent= p==='build'?'BUILD YOUR LAUNCHER':p==='charged'?'READY TO LAUNCH':p==='flying'?'FLIGHT IN PROGRESS': 'FLIGHT COMPLETE';$('phaseDescription').textContent=p==='build'?'Click one frame socket, then an arm socket to connect a part.':p==='charged'?'Release the arm and see how far your dummy flies.':p==='flying'?'Watch the dummy travel. Distance is measured from launch.':'Change components, charge, and try again.';$('launch').disabled=p!=='charged';$('charge').disabled=p==='flying';}
 function updatePanel(){const div=$('connections');div.innerHTML='';connections.forEach((c,i)=>{const el=document.createElement('div');el.className='connection';let label=c.type==='weight'?'Counterweight':c.type==='piston'?'Push piston':c.type==='spring'?'Tension spring':'Rubber band';el.innerHTML=`<span style="color:${colors[c.type]}">●</span> ${label} · F${c.f+1} → A${c.a+1} <button class="delete" data-index="${i}">✕</button>`;div.appendChild(el)});$('count').textContent=`(${connections.length}/4)`;div.querySelectorAll('.delete').forEach(b=>b.onclick=()=>{connections.splice(+b.dataset.index,1);reset(false);updatePanel()})}
-function reset(clear=true){theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;cameraY=0;maxDist=0;pending=null;particles=[];bloodStains=[];bloodDrops=[];lastBloodImpact=-1;window.goreImpactQueue=[];window.goreResetId++;hitHazards.clear();hazardPoints=0;levelFailed=false;$('distanceText').textContent='0 ft';if(clear){connections=[];armScale=1;releaseDeg=55;$('armLength').value=100;$('angle').value=55;$('armVal').textContent='100%';$('angleVal').textContent='55°'}setPhase('build');updatePanel();startNotice('<strong>Build mode:</strong> Select a part and connect a frame socket to an arm socket. Then pull back and launch.');render()}
+function reset(clear=true){theta=3.39;omega=0;dummy=null;rag=null;impacts=0;camera=0;cameraY=0;maxDist=0;pending=null;particles=[];bloodStains=[];wallStains=[];bloodDrops=[];lastBloodImpact=-1;window.goreImpactQueue=[];window.goreResetId++;hitHazards.clear();hazardPoints=0;levelFailed=false;$('distanceText').textContent='0 ft';if(clear){connections=[];armScale=1;releaseDeg=55;$('armLength').value=100;$('angle').value=55;$('armVal').textContent='100%';$('angleVal').textContent='55°'}setPhase('build');updatePanel();startNotice('<strong>Build mode:</strong> Select a part and connect a frame socket to an arm socket. Then pull back and launch.');render()}
 function loadDemo(){connections=[{type:'rubber',f:0,a:0},{type:'spring',f:2,a:1}];updatePanel();startNotice('<strong>Starter machine loaded:</strong> Two power sources are connected. You can change the mounting positions, add components, or pull back and launch.');}
 function socketAt(x,y){let match=null,bestD=20;frameOffsets.forEach((_,i)=>{const p=framePoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'frame',index:i}}});armOffsets.forEach((_,i)=>{const p=armPoint(i),d=Math.hypot(x-p.x,y-p.y);if(d<bestD){bestD=d;match={kind:'arm',index:i}}});return match}
 canvas.addEventListener('pointerdown',e=>{if(phase==='flying')return;if(phase==='done')reset(false);const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const s=socketAt(x,y);if(!s)return;if(!pending){pending=s;startNotice(`<strong>Socket selected:</strong> ${s.kind==='frame'?'Frame':'Arm'} ${s.index+1}. Click a socket on the other piece.`)}else if(pending.kind!==s.kind){if(connections.length>=4){startNotice('<strong>Maximum 4 power components.</strong> Remove one before adding another.');pending=null;return}const c={type:selected,f:s.kind==='frame'?s.index:pending.index,a:s.kind==='arm'?s.index:pending.index};if(connections.some(z=>z.type===c.type&&z.f===c.f&&z.a===c.a)){startNotice('That component is already installed.');pending=null;return}connections.push(c);pending=null;updatePanel();setPhase('build');startNotice(`<strong>${selected.toUpperCase()} CONNECTED.</strong> Try changing the angle or arm length, or charge your launcher.`)}else{pending=s;startNotice('Choose a socket on the opposite piece.')}render()});
@@ -55,7 +55,7 @@ function catapult(){const px=pivot.x-camera,py=pivot.y,ground=H*.88;const feet=[
 // A joint-constrained, segmented 2D test ragdoll. Independent nodes carry inertia,
 // joint lengths are solved iteratively, and the ground collides with every limb.
 // Gore effects live for the entire attempt and reset only on a fresh build.
-let bloodStains=[],bloodDrops=[],fireClock=0,lastBloodImpact=-1;window.goreImpactQueue=[];window.goreResetId=0;
+let bloodStains=[],wallStains=[],bloodDrops=[],fireClock=0,lastBloodImpact=-1;window.goreImpactQueue=[];window.goreResetId=0;
 // Small textured blood sprites have velocity and gravity; only stains persist.
 const bloodSprites=Array.from({length:5},(_,variant)=>{
  const tile=document.createElement('canvas');tile.width=32;tile.height=32;
@@ -109,6 +109,17 @@ function stepBlood(dt){
 }
 function drawGore(){
  ctx.save();ctx.translate(-camera,0);
+ // Persistent wall impact splashes, physically separate from floor stains.
+ for(const s of wallStains){
+  ctx.fillStyle=s.seed>.5?'rgba(90,6,13,.85)':'rgba(149,10,18,.8)';
+  ctx.beginPath();
+  for(let k=0;k<9;k++){
+   const a=k*Math.PI*2/9,rr=s.size*(.68+.35*Math.sin(k*7.2+s.seed*13));
+   if(k===0)ctx.moveTo(s.x+Math.cos(a)*rr,s.y+Math.sin(a)*rr);
+   else ctx.lineTo(s.x+Math.cos(a)*rr,s.y+Math.sin(a)*rr);
+  }
+  ctx.closePath();ctx.fill();
+ }
  for(const s of bloodStains){
   ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
   ctx.fillStyle=s.shade>.5?'#57070d':'#921019';
@@ -173,6 +184,12 @@ const LINKS=[['hip','chest',24],['chest','neck',17],['neck','head',14],['chest',
 function makeRagdoll(x,y,vx,vy,spin){let nodes={};for(const [id,dx,dy,r] of BODY){const xx=x+dx,yy=y+dy;nodes[id]={x:xx,y:yy,px:xx-(vx-dy*spin)*.016,py:yy-(vy+dx*spin)*.016,r};}return {nodes,links:LINKS.map(([a,b])=>({a,b,len:Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y),broken:false})),settled:0,groundTime:0,restTime:0,fx:0,shredded:false};}
 // A machinery strike tears detachable joints loose, transferring an actual
 // outward impulse to each Verlet particle. Detached pieces continue under gravity.
+function markWall(x,y){
+ const floor=H*.88;
+ for(let i=0;i<25;i++){
+  wallStains.push({x:x+(Math.random()-.5)*135,y:Math.min(floor-40,Math.max(70,y-75+(Math.random()-.5)*140)),size:1.5+Math.random()*5,seed:Math.random()});
+ }
+}
 function shredRagdoll(x,y){
  if(!rag||rag.shredded)return;
  rag.shredded=true;rag.shredAt={x,y};
@@ -186,6 +203,7 @@ function shredRagdoll(x,y){
   n.py=n.y-Math.sin(angle)*speed*.016;
  }
  bloodBurst(x,y,3.2);
+ markWall(x,y);
 }
 function updateRagdoll(dt){
  if(!rag)return;
