@@ -403,7 +403,7 @@ const GORE_MAP={
  chest:['torso1up','brestmuscles','backmuscles','neckmuscles'],
  hip:['torso1low','buttocks'],
  le:['Leftarm','LarmBone'],lh:['LeftForearm','LforearmBone','lefthand'],
- re:['Rightarm','RarmBone'],rh:['RightForearm','RforearmBone','Righthand'],
+ re:['Rightarm','RarmBone'],rh:['RightForearm','RforearmBone'],hand:['Righthand'],
  lk:['L_leg','L_legbone'],lf:['L_lowerleg','L_leglowerBone','L_foot'],
  rk:['Rleg','Rlegbone'],rf:['Rlowerleg','RlowerlegBone','R_foot']
 };
@@ -470,6 +470,32 @@ function buildClothedPart(joint){
  group.userData.spin=(Math.random()<.5?-1:1)*(.014+Math.random()*.03);
  group.rotation.z=(Math.random()-.5)*.7;
  return group;
+}
+// Hide complete skin triangles by skeletal region without shrinking parent bones
+// (shrinking a parent also collapses attached descendants and distorts the torso).
+function maskSeveredSkin(regions){
+ const key=[...regions].map(String).join('|');
+ model.traverse(mesh=>{
+  if(!mesh.isSkinnedMesh)return;
+  const geo=mesh.geometry;
+  if(mesh.userData.severMask===key)return;
+  if(!mesh.userData.originalFaces){
+   const pos=geo.getAttribute('position');
+   mesh.userData.originalFaces=geo.index?Array.from(geo.index.array):Array.from({length:pos.count},(_,i)=>i);
+  }
+  const weights=geo.getAttribute('skinWeight'),indices=geo.getAttribute('skinIndex');
+  if(!weights||!indices)return;
+  const faces=mesh.userData.originalFaces,keep=[];
+  for(let f=0;f<faces.length;f+=3){
+   let removed=0;
+   for(let k=0;k<3;k++)for(let j=0;j<4;j++){
+    const name=mesh.skeleton.bones[indices.getComponent(faces[f+k],j)]?.name||'';
+    if([...regions].some(re=>re.test(name)))removed+=weights.getComponent(faces[f+k],j);
+   }
+   if(removed<1.05)keep.push(faces[f],faces[f+1],faces[f+2]);
+  }
+  geo.setIndex(keep);mesh.userData.severMask=key;
+ });
 }
 function buildGorePart(joint){
  if(!goreAsset)return null;
@@ -541,7 +567,7 @@ function buildGorePart(joint){
   group.userData.eyes=eyes;
   group.userData.eyeTime=0;
  }
- if(joint==='rh'){
+ if(joint==='hand'){
   // Animate the actual imported hand only; never add substitute fingers.
   group.userData.crawlClock=0;
   group.userData.crawlStartX=null;
@@ -577,13 +603,17 @@ function positionGore(state,w,h){
  const dt=goreLastTime?Math.min(.035,(now-goreLastTime)/1000):1/60;
  goreLastTime=now;
  const severedParts={'neck:head':'head','le:lh':'lh','re:rh':'rh','lk:lf':'lf','rk:rf':'rf','ls:le':'le','rs:re':'re','hip:lk':'lk','hip:rk':'rk','hip:waist':'chest'};
- const joints=fullShred?Object.keys(GORE_MAP):[...new Set([...detached].map(x=>severedParts[x]).filter(Boolean))];
+ const removed=new Set([...detached].map(x=>severedParts[x]).filter(Boolean));
+ // A proximal tear releases the entire distal chain, including its real bones.
+ for(const [parent,children] of [['chest',['head','le','lh','re','rh']],['le',['lh']],['re',['rh']],['lk',['lf']],['rk',['rf']],['rh',['hand']]]){
+  if(removed.has(parent))for(const child of children)removed.add(child);
+ }
+ const joints=fullShred?Object.keys(GORE_MAP):[...removed];
  for(const joint of joints){
   if(goreParts.some(p=>p.userData.joint===joint)||!goreAsset)continue;
-  // The skull is always exposed. The rest is a different combination each crash.
-  const keepClothes=joint!=='head'&&Math.random()<.55;
-  const part=(keepClothes?buildClothedPart(joint):null)||buildGorePart(joint);if(!part)continue;
-  const node=state.rag[joint]||state.rag.chest;
+  // Exposed anatomy replaces the removed skin region, never duplicates it.
+  const part=buildGorePart(joint);if(!part)continue;
+  const node=state.rag[joint==='hand'?'rh':joint]||state.rag.chest;
   // Nearby but varied scatter: inherit the ragdoll's impact momentum,
   // then add limited independent kicks, not long-range explosions.
   part.userData.worldX=node.x;
@@ -591,6 +621,9 @@ function positionGore(state,w,h){
   part.userData.vx=THREE.MathUtils.clamp((node.vx||0)*.28,-90,90)+(Math.random()-.5)*155;
   part.userData.vy=THREE.MathUtils.clamp((node.vy||0)*.23,-90,100)-45-Math.random()*105;
   part.userData.originX=node.x;
+  // Stable floor depth for this fragment, rather than a fresh random offset
+  // each frame. Collision, resting pose and crawl share the same surface.
+  part.userData.floorDepth=state.level==='factory'?.12+Math.random()*.76:0;
   part.userData.resting=false;
   scene.add(part);goreParts.push(part);
  }
@@ -600,7 +633,16 @@ function positionGore(state,w,h){
   const lieAngle=u.lieAngle===null?p.rotation.z:u.lieAngle;
   const floorExtent=Math.abs(Math.cos(lieAngle))*(u.halfHeight||12)+Math.abs(Math.sin(lieAngle))*(u.halfWidth||12);
   // A rounded skull rolls on its outer radius; never use its narrow mesh axis.
-  const groundY=floor-Math.max(3,u.joint==='head'?u.radius||15:floorExtent);
+  let groundY=floor-Math.max(3,u.joint==='head'?u.radius||15:floorExtent);
+  if(u.joint==='hand'){
+   // Palm faces the floor; fingertips lead the crawl. Never land on the wrist.
+   p.rotation.set(Math.PI/2,0,u.crawlDirection>0?Math.PI/2:-Math.PI/2);
+   const bounds=new THREE.Box3().setFromObject(p);
+   groundY=floor-(p.position.y-bounds.min.y)+2;
+  }
+  const contactExtent=Math.max(3,floor-groundY);
+  const floorDepth=(u.floorDepth||0)*Math.max(0,h-floor-contactExtent-8);
+  groundY+=floorDepth;
   if(!u.resting){
    u.vy+=780*dt;
    u.vx*=Math.exp(-.34*dt);
@@ -608,8 +650,8 @@ function positionGore(state,w,h){
    // Keep debris within a plausible vicinity of the impact site.
    u.worldX=THREE.MathUtils.clamp(u.worldX,u.originX-165,u.originX+165);
    u.worldY+=u.vy*dt;
-   p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
-   p.rotation.x+=u.spin*dt*15;
+   if(u.joint!=='hand')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
+   if(u.joint!=='hand')p.rotation.x+=u.spin*dt*15;
    if(u.worldY>=groundY){
     u.worldY=groundY;
     // Keep the orientation earned during the tumble, not a prescribed side pose.
@@ -624,7 +666,7 @@ function positionGore(state,w,h){
    }
   }else{
    u.worldY=groundY;
-   if(u.joint==='rh'&&u.crawlClock!==undefined){
+   if(u.joint==='hand'&&u.crawlClock!==undefined){
     if(u.crawlStartX===null)u.crawlStartX=u.worldX;
     u.crawlClock+=dt;
     const t=u.crawlClock;
@@ -633,11 +675,11 @@ function positionGore(state,w,h){
     // toward the travel direction (right = +X, left = -X).
     const targetAngle=u.crawlDirection>0?Math.PI/2:-Math.PI/2;
     p.rotation.z+=Math.atan2(Math.sin(targetAngle-p.rotation.z),Math.cos(targetAngle-p.rotation.z))*Math.min(1,dt*5);
-    const stepping=t>1.5&&t<12&&Math.sin(t*2.5)>-.35;
+    const stepping=t>.5&&Math.sin(t*2.5)>-.35;
     if(stepping)u.worldX+=u.crawlDirection*11*dt;
-    u.worldX=THREE.MathUtils.clamp(u.worldX,u.crawlStartX-75,u.crawlStartX+75);
-    p.rotation.x=stepping?.035*Math.sin(t*6):0;
-    u.worldY=groundY-(stepping?Math.max(0,Math.sin(t*6))*1.2:0);
+
+    p.rotation.x=Math.PI/2;
+    u.worldY=groundY;
    }else{
     // Other pieces keep their own landing orientation.
     p.rotation.z=u.lieAngle===null?p.rotation.z:u.lieAngle;
@@ -736,13 +778,16 @@ function animate(){
    // Spawn the corresponding fragment in positionGore instead of leaving
    // an intact arm or leg mysteriously connected to its detached counterpart.
    const injuries=new Set(state.injuries||[]);
-   for(const [edge,part] of [
-    ['le:lh','LeftHand'],['re:rh','RightHand'],
-    ['lk:lf','LeftFoot'],['rk:rf','RightFoot'],
-    ['ls:le','LeftForeArm'],['rs:re','RightForeArm'],
-    ['hip:lk','LeftUpLeg'],['hip:rk','RightUpLeg']
-   ])if(bones[part])bones[part].scale.setScalar(injuries.has(edge)?.001:1);
-   if(bones.Head)bones.Head.scale.setScalar(state.headDetached?.001:1);
+   const hidden=new Set();
+   const regions={
+    'neck:head':/head/i,'le:lh':/leftforearm|lefthand/i,'re:rh':/rightforearm|righthand/i,
+    'ls:le':/leftarm|leftforearm|lefthand/i,'rs:re':/rightarm|rightforearm|righthand/i,
+    'hip:lk':/leftupleg|leftleg|leftfoot|lefttoe/i,'hip:rk':/rightupleg|rightleg|rightfoot|righttoe/i,
+    'lk:lf':/leftleg|leftfoot|lefttoe/i,'rk:rf':/rightleg|rightfoot|righttoe/i,
+    'hip:waist':/spine|neck|head|shoulder|arm|hand/i
+   };
+   for(const edge of injuries)if(regions[edge])hidden.add(regions[edge]);
+   maskSeveredSkin(hidden);
    if(!state.headDetached)rotate('Head',norm(a('neck','head')-tilt-Math.PI/2)*.35);
    // The physics floor is solid; keep the *visible skinned mesh* above it too.
    // Previously its fixed pelvis offset could sink the actual torso through ground.
@@ -759,6 +804,7 @@ function animate(){
    model.visible=false;
   } else {
    if(bones.Head)bones.Head.scale.setScalar(1);
+   maskSeveredSkin(new Set());
    applySittingPose();
    if(!seatCharacterOnChair()){
     // Fallback positioning when the GLB chair fails to load.
