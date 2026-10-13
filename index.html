@@ -74,9 +74,10 @@ function drawSky(){
   :(factoryWallReady?factoryWallImage:null);
  if(bg&&bg.complete&&bg.naturalWidth>0){
   const tileW=currentLevel==='factory'?Math.max(880,Math.round(H*2.2)):Math.max(780,Math.round(H*2.25));
-  const start=Math.floor(camera/tileW)-1;
-  for(let i=start;i<start+Math.ceil(W/tileW)+3;i++){
-   const x=i*tileW-camera;
+  const step=tileW-(currentLevel==='factory'?28:0);
+  const start=Math.floor(camera/step)-1;
+  for(let i=start;i<start+Math.ceil(W/step)+3;i++){
+   const x=i*step-camera;
    if(bg===industrialWallImage){
     ctx.drawImage(bg,12,102,bg.naturalWidth-24,Math.min(650,bg.naturalHeight-204),x,0,tileW,H);
    }else{
