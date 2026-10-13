@@ -413,7 +413,9 @@ function positionLevelMachinery(state,w,h){
   if(!['grinder','roller'].includes(hazard.kind))continue;
   const kind=hazard.kind==='grinder'?'hopper':/(?:roller[135]|roller2)$/.test(hazard.id)?'twin':'spiked';
   const template=machineryTemplates.get(kind);if(!template)continue;
-  const key=state.level+':'+hazard.id;active.add(key);let root=machineryInstances.get(key);
+  const key=state.level+':'+hazard.id;
+  if(Math.abs(hazard.x-state.camera-w/2)>w/2+hazard.width+250)continue;
+  active.add(key);let root=machineryInstances.get(key);
   const width=hazard.kind==='grinder'?hazard.width*1.25:hazard.width;
   const floor=h*.88+(hazard.groundOffset||0);
   if(!root){
@@ -555,7 +557,9 @@ function positionCushions(state,w,h){
   cushionResetSeen=state.goreResetId;
  }
  for(const pillow of state.cushions||[]){
-  active.add(pillow.id);let root=cushionInstances.get(pillow.id);
+  active.add(pillow.id);
+  if(Math.abs(pillow.x-state.camera-w/2)>w/2+160){const old=cushionInstances.get(pillow.id);if(old)old.visible=false;continue;}
+  let root=cushionInstances.get(pillow.id);
   if(!root){
    const template=cushionTemplates[pillow.variant]||cushionTemplates.find(Boolean);
    root=template.clone(true);root.scale.set(pillow.width,pillow.height/template.userData.aspectHeight,pillow.width);
@@ -741,6 +745,7 @@ function positionWeapons(state,w,h){
  if(!window.weaponOverlayReady)return;
  const active=new Set();
  for(const hazard of state.hazards||[]){
+  if(Math.abs(hazard.x-state.camera-w/2)>w/2+hazard.width+250)continue;
   if(!['press','ramp'].includes(hazard.kind))continue;
   active.add(hazard.id);
   let root=weaponStations.get(hazard.id);

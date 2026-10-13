@@ -521,11 +521,50 @@ const COURSES={
   {id:'grinder',kind:'grinder',x:5500,width:240,groundOffset:340,points:3000,label:''}
  ]
 };
-// The knife-machine intake overlaps the end of its preceding feed belt.
-for(const hazards of [COURSES.slide,COURSES.factory])for(const machine of hazards){
+// Pair knives with an unobstructed belt; don't pull them across intervening machines.
+for(const hazards of [COURSES.slide,COURSES.factory])for(const machine of [...hazards]){
  if(machine.kind!=='roller'||!/(?:roller[135]|roller2)$/.test(machine.id))continue;
- const belt=hazards.filter(h=>h.kind==='conveyor'&&h.x<machine.x).sort((a,b)=>b.x-a.x)[0];
- if(belt){machine.feedBelt=belt.id;machine.x=belt.x+belt.width/2+machine.width/2-8;}
+ const belt=hazards.filter(h=>h.kind==='conveyor'&&h.x<machine.x).sort((a,b)=>b.x-a.x)[0];if(!belt)continue;
+ const blockers=hazards.filter(h=>h!==machine&&h!==belt&&!['soft','trampoline'].includes(h.kind)&&h.x>belt.x&&h.x<machine.x);
+ if(!blockers.length){machine.feedBelt=belt.id;machine.x=belt.x+belt.width/2+machine.width/2-8;}
+ else{
+  const left=machine.x-machine.width/2,edge=Math.max(...blockers.map(h=>h.x+h.width/2)),width=Math.min(240,Math.max(120,left-edge-16));
+  const feed={id:machine.id+'-feed',kind:'conveyor',x:left+8-width/2,width,points:400,label:''};hazards.push(feed);machine.feedBelt=feed.id;
+ }
+}
+function machineFootprint(h){
+ if(h.kind==='grinder')return h.width*1.25;
+ if(h.kind==='roller'&&!/(?:roller[135]|roller2)$/.test(h.id))return h.width+140; // Include the supplied axle-support apparatuses.
+ if(h.kind==='press')return Math.max(180,h.width);
+ if(h.kind==='door')return Math.max(70,h.width);
+ return h.width;
+}
+function spaceCourseMachines(hazards){
+ const solid=hazards.filter(h=>!['soft','trampoline'].includes(h.kind)).sort((a,b)=>a.x-b.x);let previous=null;
+ for(const h of solid){
+  if(previous){const joins=h.feedBelt===previous.id&&previous.kind==='conveyor',gap=joins?-8:h.kind==='ramp'&&previous.kind==='ramp'?0:24;
+   const minimum=previous.x+machineFootprint(previous)/2+gap+machineFootprint(h)/2;h.x=Math.max(h.x,minimum);
+  }previous=h;
+ }
+}
+for(const hazards of Object.values(COURSES))spaceCourseMachines(hazards);
+const courseEnds=new Map(),courseSections=new Map();
+function ensureCourseCoverage(level,reach){
+ const hazards=COURSES[level];let end=courseEnds.get(level)??Math.max(...hazards.map(h=>h.x+h.width/2));
+ if(end>=reach)return false;
+ while(end<reach){
+  const section=(courseSections.get(level)||0)+1;courseSections.set(level,section);const start=end+140,offset=level==='trampoline'?340:0;
+  const add=(id,kind,x,width,points,extra={})=>{hazards.push({id:level+'-extension'+section+'-'+id,kind,x:start+x,width,points,label:'',groundOffset:offset,...extra});};
+  add('belt1','conveyor',180,360,400);
+  add('roller1','roller',452,200,1200,{feedBelt:level+'-extension'+section+'-belt1'});
+  add('hopper1','grinder',800,220,1800);
+  add('roller4','roller',1160,230,1500);
+  add('belt2','conveyor',1560,360,450);
+  add('hopper2','grinder',1920,230,2000);
+  if(level!=='trampoline'){add('press','press',2240,150,1400);add('board','ramp',2570,250,350,{y:150+section%3*25,slope:section%2?.32:-.32});}
+  spaceCourseMachines(hazards);end=Math.max(...hazards.map(h=>h.x+machineFootprint(h)/2));
+ }
+ courseEnds.set(level,end);cushionLayouts.delete(level);cushionBins.delete(level);return true;
 }
 let LEVEL_HAZARDS=COURSES.slide;
 // Keep comfortable piles in the ground gaps between dangerous machines.
@@ -621,6 +660,7 @@ function landBloodOnPillow(drop){
  return true;
 }
 function configureTrampolineCourse(){
+ for(const level of Object.keys(COURSES))ensureCourseCoverage(level,20000);
  // The launcher moves with viewport width. Keep its first landing reachable
  // without moving the later directional bounce sequence.
  COURSES.trampoline[0].x=850+Math.max(0,pivot.x-450)*2;
@@ -768,8 +808,8 @@ function hazardHit(x,y,part=null){
    continue;
   }
   if(h.kind==='roller'&&n){
-   const machine=window.machineBloodSurfaces?.[h.id];
-   const cx=h.x,cy=machine?.centerY??floor-95,dx=x-cx,dy=y-cy;
+   const machine=window.machineBloodSurfaces?.[h.id]??{kind:/(?:roller[135]|roller2)$/.test(h.id)?'twin':'spiked',width:h.width,height:h.width*(/(?:roller[135]|roller2)$/.test(h.id)?.733:.326)};
+   const cx=h.x,cy=machine.centerY??floor-machine.height*.5,dx=x-cx,dy=y-cy;
    const touches=machine?.kind==='spiked'
     ?Math.pow(dx/(machine.width*.5+n.r),2)+Math.pow(dy/(machine.height*.5+n.r),2)<1
     :machine?.kind==='twin'?Math.abs(dx)<machine.width*.39&&[floor-machine.height*.79,floor-machine.height*.465].some(rollerY=>Math.abs(y-rollerY)<machine.height*.18+n.r)
@@ -1102,7 +1142,10 @@ function simulate(dt){
   physicsAccumulator=Math.max(0,physicsAccumulator-PHYSICS_STEP);
  }
 }
-function simulateStep(dt){conveyorClock+=dt;stepCushions(dt);if(phase==='launching'||phase==='airborne')levelClock+=dt;if(phase==='launching'){
+function simulateStep(dt){
+ const lead=rag?Math.max(...Object.values(rag.nodes).map(n=>n.x)):pivot.x;
+ ensureCourseCoverage(currentLevel,Math.max(camera+W,lead)+6000);
+ conveyorClock+=dt;stepCushions(dt);if(phase==='launching'||phase==='airborne')levelClock+=dt;if(phase==='launching'){
   // The cradle starts BEHIND the pivot (to the left). As the arm swings
   // upward toward the front, its tangential velocity carries the dummy RIGHT.
   // Keep screen Y positive down, so decreasing theta swings left-side tip up.
@@ -1164,4 +1207,4 @@ function drawJetpackFallback(){
 function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#11151b';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(0,-cameraY);drawSky();drawCushionFallback();drawContactShadows();drawHazards();drawApparatusEffects();drawGore();if(camera<750)catapult();if(dummy){drawRag()}drawJetpackFallback();if(phase==='build'||phase==='charged'||phase==='done'){ctx.save();ctx.translate(-camera,0);for(let i=0;i<frameOffsets.length;i++){const p=framePoint(i);ctx.fillStyle=pending?.kind==='frame'&&pending.index===i?'#fff':'#37decc';ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);ctx.fill();ctx.fillStyle='#0c2636';ctx.font='bold 9px system-ui';ctx.fillText('F'+(i+1),p.x+9,p.y-7)}for(let i=0;i<armOffsets.length;i++){const p=armPoint(i);ctx.fillStyle=pending?.kind==='arm'&&pending.index===i?'#fff':'#ffc049';ctx.beginPath();ctx.arc(p.x,p.y,6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#342716';ctx.font='bold 9px system-ui';ctx.fillText('A'+(i+1),p.x+9,p.y-7)}ctx.restore()}ctx.restore()}
 function tick(now){window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,jetpackMounted,jetFuel:rag?.jetFuel??5,jetActive:!!(jetpackMounted&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,tip:cradlePoint(),hazards:LEVEL_HAZARDS,goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);render();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('setupDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=flight-jet-audio-20261013-16"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=extended-courses-20261013-17"></script></body></html>
