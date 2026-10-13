@@ -95,14 +95,12 @@ function drawSky(){
  // sky plane keeps the proper upper background visible on high launches.
  ctx.fillStyle='#070913';ctx.fillRect(0,-5000,W,5000+H);
  if(sky.complete&&sky.naturalWidth>0){
-  const skyW=Math.max(W*1.7,1100),skyH=skyW*sky.naturalHeight/sky.naturalWidth;
-  const shift=camera*.14;
-  const start=Math.floor(shift/skyW)-1;
-  for(let k=start;k<start+Math.ceil(W/skyW)+3;k++){
-   for(let top=H-skyH;top>-5000;top-=skyH){
-    ctx.drawImage(sky,k*skyW-shift,top,skyW,skyH);
-   }
-  }
+  // One continuous sky plane per level: never repeat vertically or
+  // horizontally. Pan a cropped source window for subtle parallax.
+  const visibleWidth=sky.naturalWidth*.88;
+  const maxSourceOffset=sky.naturalWidth-visibleWidth;
+  const sourceX=Math.max(0,Math.min(maxSourceOffset,maxSourceOffset*.5+camera*.015));
+  ctx.drawImage(sky,sourceX,0,visibleWidth,sky.naturalHeight,0,-7000,W,7000+H);
  }
  // Cement behind the transparent industrial wall (level 2 only).
  if(currentLevel==='factory'){
