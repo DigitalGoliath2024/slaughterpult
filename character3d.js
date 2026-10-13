@@ -110,7 +110,7 @@ function seatCharacterOnChair(){
   const currentAngle=Math.atan2(v.y,v.x);
   // Chair back stays close to vertical; it follows the arm tilt slightly.
   const desiredAngle=Math.PI/2+THREE.MathUtils.clamp(seatRoot.rotation.z,-.25,.25);
-  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9);
+  model.rotation.z=THREE.MathUtils.clamp(desiredAngle-currentAngle,-.9,.9)-0.12; // 7-degree clockwise correction so pelvis rests flat
   model.updateMatrixWorld(true);
  }
  // Re-anchor after correcting torso tilt; otherwise the hips drift.
@@ -163,7 +163,7 @@ async function load(id){
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
   window.characterOverlayReady=true;
-  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v29';
+  status.textContent=({cowboy:'Cowboy',human:'Human',meshy:'Crash Character'}[id]||id)+' · 3D active · pose v30';
  } catch(e){
   console.warn('3D model not loaded; retaining 2D ragdoll',e);
   status.textContent='Could not load '+id+' · '+(e?.message||'model error');
