@@ -532,13 +532,13 @@ function positionGore(state,w,h){
    if(u.worldY>=groundY){
     u.worldY=groundY;
     // Keep the orientation earned during the tumble, not a prescribed side pose.
-    if(u.lieAngle===null)u.lieAngle=p.rotation.z;
+    // Record the eventual resting angle after the final bounce, below.
     if(u.vy>60&&u.bounces<(u.joint==='head'?4:2)){
      u.vy=-u.vy*(u.joint==='head'?.34:.19);u.vx*=u.joint==='head'?.79:.58;u.bounces++;
     }else{
      u.vy=0;
      if(u.joint==='head'&&Math.abs(u.vx)>9){u.vx*=.88;u.worldY=groundY;}
-     else{u.vx=0;u.resting=true;}
+     else{u.vx=0;u.resting=true;u.lieAngle=p.rotation.z;}
     }
    }
   }else{
