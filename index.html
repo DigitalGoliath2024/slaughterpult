@@ -43,41 +43,52 @@ industrialWallImage.onload=()=>{industrialWallReady=true;};
 industrialWallImage.onerror=()=>{industrialWallReady=false;};
 industrialWallImage.src='./rusted_slaughter_wall.png';
 // Sky is in world space ABOVE the wall; the camera exposes it when tracking high launches.
+const cleanFactoryWallImage=new Image();
+cleanFactoryWallImage.src='./rusted_slaughter_wall_nobg.png';
 const levelSkyImages={slide:new Image(),factory:new Image()};
 levelSkyImages.slide.src='./Meshy_AI_night_sky_giant_heads.png';
 levelSkyImages.factory.src='./Meshy_AI_cosmic_surreal_entities.png';
 function drawSky(){
- const floor=H*.88;
- const sky=levelSkyImages[currentLevel];
- ctx.fillStyle='#080b17';ctx.fillRect(0,-3500,W,3500+H);
+ const floor=H*.88,sky=levelSkyImages[currentLevel];
+ // Sky is world-fixed in altitude and moves slowly horizontally. A tall
+ // sky plane keeps the proper upper background visible on high launches.
+ ctx.fillStyle='#070913';ctx.fillRect(0,-5000,W,5000+H);
  if(sky.complete&&sky.naturalWidth>0){
-  const tileW=Math.max(W,Math.round(W*1.5));
-  const skyShift=camera*.14;
-  const first=Math.floor(skyShift/tileW)-1;
-  for(let i=first;i<first+Math.ceil(W/tileW)+3;i++){
-   ctx.drawImage(sky,i*tileW-skyShift,-3500,tileW,3500);
+  const skyW=Math.max(W*1.7,1100),skyH=skyW*sky.naturalHeight/sky.naturalWidth;
+  const shift=camera*.14;
+  const start=Math.floor(shift/skyW)-1;
+  for(let k=start;k<start+Math.ceil(W/skyW)+3;k++){
+   for(let top=H-skyH;top>-5000;top-=skyH){
+    ctx.drawImage(sky,k*skyW-shift,top,skyW,skyH);
+   }
   }
  }
- // Building frontage is full-size and bottom-anchored. Its pavement must
- // extend all the way to the bottom of the playfield; don't paint concrete over it.
- const bg=currentLevel==='factory'?industrialWallImage:(factoryWallReady?factoryWallImage:industrialWallImage);
- if(bg.complete&&bg.naturalWidth>0){
-  const tileW=Math.max(780,Math.round(H*2.25));
+ // Cement behind the transparent industrial wall (level 2 only).
+ if(currentLevel==='factory'){
+  const floorShade=ctx.createLinearGradient(0,floor,0,H);
+  floorShade.addColorStop(0,'#52595c');floorShade.addColorStop(1,'#282d30');
+  ctx.fillStyle=floorShade;ctx.fillRect(0,floor,W,H-floor);
+ }
+ const bg=currentLevel==='factory'
+  ?(cleanFactoryWallImage.complete&&cleanFactoryWallImage.naturalWidth?cleanFactoryWallImage:industrialWallImage)
+  :(factoryWallReady?factoryWallImage:null);
+ if(bg&&bg.complete&&bg.naturalWidth>0){
+  const tileW=currentLevel==='factory'?Math.max(880,Math.round(H*2.2)):Math.max(780,Math.round(H*2.25));
   const start=Math.floor(camera/tileW)-1;
   for(let i=start;i<start+Math.ceil(W/tileW)+3;i++){
    const x=i*tileW-camera;
    if(bg===industrialWallImage){
     ctx.drawImage(bg,12,102,bg.naturalWidth-24,Math.min(650,bg.naturalHeight-204),x,0,tileW,H);
    }else{
-    ctx.drawImage(bg,0,0,bg.naturalWidth,bg.naturalHeight,x,0,tileW,H);
+    // Preserve transparent pixels of the clean factory panel. The cosmic
+    // sky remains visible above its roofline; no opaque rectangle is drawn.
+    ctx.drawImage(bg,x,0,tileW,H);
    }
   }
- }else{
-  ctx.fillStyle='#45474c';ctx.fillRect(0,0,W,H);
-  ctx.fillStyle='#293138';ctx.fillRect(0,floor,W,H-floor);
+ }else if(currentLevel==='slide'){
+  ctx.fillStyle='#31393c';ctx.fillRect(0,floor,W,H-floor);
  }
- // Preserve a subtle physical floor guide without hiding the texture's pavement.
- ctx.strokeStyle='rgba(35,35,35,.4)';ctx.lineWidth=2;
+ ctx.strokeStyle='rgba(20,20,20,.35)';ctx.lineWidth=2;
  ctx.beginPath();ctx.moveTo(0,floor);ctx.lineTo(W,floor);ctx.stroke();
 }
 function cloud(x,y,s){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.beginPath();ctx.ellipse(0,0,50,14,0,0,Math.PI*2);ctx.ellipse(-20,-9,24,17,0,0,Math.PI*2);ctx.ellipse(17,-11,33,19,0,0,Math.PI*2);ctx.fill();ctx.restore()}
