@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
-let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={};
+let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={};
 try {
  renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
@@ -14,7 +14,7 @@ try {
  camera=new THREE.OrthographicCamera(-500,500,300,-300,0.1,2000);
  camera.position.set(0,0,1000);camera.lookAt(0,0,0);
 } catch(e){status.textContent='3D unavailable — 2D ragdoll active';}
-const parts=['LeftShoulder','RightShoulder','Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg','LeftFoot','RightFoot'];
+const parts=['LeftShoulder','RightShoulder','LeftHand','RightHand','Hips','Spine','Spine1','Spine2','Head','Neck','LeftArm','LeftForeArm','RightArm','RightForeArm','LeftUpLeg','LeftLeg','RightUpLeg','RightLeg','LeftFoot','RightFoot'];
 const urls={cowboy:'./western_cowboy_rigged.glb',human:'./rigged_t-pose_human_male_w_50_face_blendshapes.glb',meshy:'./Meshy_AI_scared_crash_characte_All_Animations.glb'};
 function bone(part){
  // Blender/Mixamo names differ: mixamorig:Hips_01 versus mixamorig_Hips_01.
@@ -51,6 +51,7 @@ async function load(id){
   if(Object.keys(bones).length<5)throw Error('Unable to map character joints');
   activeId=id;
   calibrateSeatBends();
+  calibrateArms();
   applySittingPose();
   document.querySelectorAll('[data-character]').forEach(b=>b.classList.toggle('selected',b.dataset.character===id));
   window.characterOverlayReady=true;
@@ -112,16 +113,37 @@ function calibrateSeatBends(){
   pose(upper,0);pose(knee,0);
  }
 }
+// Measure where each wrist points on the 3D model. Choose shoulder/elbow
+// rotations based on actual results, avoiding T-pose arms drifting behind it.
+function calibrateArms(){
+ armPose={};
+ for(const side of ['Left','Right']){
+  const upper=side+'Arm',lower=side+'ForeArm',hand=side+'Hand';
+  if(!bones[upper]||!bones[lower])continue;
+  const shoulder=jointScreen(upper);
+  let best=-Infinity,chosen={x:0,z:0};
+  for(const x of [-1.2,-.6,0,.6,1.2]){
+   for(const z of [-1.4,-.7,0,.7,1.4]){
+    pose(upper,x,0,z);
+    const elbow=jointScreen(lower);
+    const dx=elbow.x-shoulder.x,dy=elbow.y-shoulder.y;
+    // Left hangs down; right is lifted forward to taunt.
+    const score=side==='Left' ? -Math.abs(dx)*.9-dy*2 : dx*1.6+dy*1.2;
+    if(score>best){best=score;chosen={x,z};}
+   }
+  }
+  armPose[upper]=chosen;
+  pose(upper,0,0,0);
+  if(bones[hand])armPose[lower]=side==='Left'?{x:.12,z:0}:{x:-.75,z:0};
+ }
+}
 function applySittingPose(){
  for(const part of parts)if(bones[part])bones[part].quaternion.copy(base[part]);
  for(const [part,angle] of Object.entries(seatBends))pose(part,angle,0,0);
  pose('Spine',.08,0,0);
- pose('LeftShoulder',0,0,-.65);
- pose('RightShoulder',0,0,.65);
- pose('LeftArm',.35,0,-.68);
- pose('RightArm',.35,0,.68);
- pose('LeftForeArm',-.6,0,0);
- pose('RightForeArm',-.6,0,0);
+ // Preserve shoulders in their bind orientation and bend the arms at the
+ // mapped upper-arm joints. Calibrated per loaded character.
+ for(const [part,v] of Object.entries(armPose))pose(part,v.x,0,v.z);
 }
 
 function animate(){
