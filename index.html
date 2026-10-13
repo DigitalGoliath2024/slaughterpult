@@ -48,30 +48,35 @@ function startMapAmbience(){
 function syncMapAmbience(){if(ambienceSound)ambienceSound.volume=mapAmbience[ambienceLevel][1]*(characterVoice&&!characterVoice.paused?.65:1)*(phase==='airborne'?.75:1);}
 document.addEventListener?.('visibilitychange',()=>{if(document.hidden){if(ambienceSound)ambienceSound.pause();}else startMapAmbience();});
 const actionSounds={
+ landing:[['body_landing_on_ceme_#1-1791933948614.mp3',.5],['body_landing_on_ceme_#2-1791933948615.mp3',.5]],
  knife:[['body_in_kniferoller.mp3',.65]],
  bone:[['human_bones_breaking_2.mp3',.7],['human_bones_breaking_3.mp3',.5],['human_bones_breaking_4.mp3',.3]],
  launch:[['catapult_launch_with_#1-1791930256015.mp3',.35],['catapult_launch_with_#2-1791930221469.mp3',.55]],
  squish:[['splat_squish_sound_#1-1791930022493.mp3',.85],['splat_squish_sound_#2-1791930016713.mp3',1],['splat_squish_sound_#2-1791930038748.mp3',.5],['splat_squish_sound_#4-1791930006652.mp3',.7],['splat_squish_sound_#4-1791930030413.mp3',.85]]
 };
-const activeActionSounds=new Set(),lastActionClip=new Map();let squishCooldown=0,boneCooldown=0;
-function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();squishCooldown=boneCooldown=0;}
+const activeActionSounds=new Set(),lastActionClip=new Map();let squishCooldown=0,boneCooldown=0,bodyImpactCooldown=0;
+function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();squishCooldown=boneCooldown=bodyImpactCooldown=0;}
 function playActionSound(kind){
  if((kind==='squish'&&squishCooldown>0)||(kind==='bone'&&boneCooldown>0))return;
  const pool=actionSounds[kind],choices=pool.length>1?pool.filter(([file])=>file!==lastActionClip.get(kind)):pool;
  const [file,volume]=choices[Math.floor(Math.random()*choices.length)];lastActionClip.set(kind,file);
  if(kind==='bone')boneCooldown=.055;
  if(kind==='squish')squishCooldown=.055; // One contact often tears several joints in the same physics step.
- if(activeActionSounds.size>=3){const oldest=activeActionSounds.values().next().value;oldest.pause();activeActionSounds.delete(oldest);}
+ if(activeActionSounds.size>=4){const oldest=activeActionSounds.values().next().value;oldest.pause();activeActionSounds.delete(oldest);}
  const sound=new Audio('./'+encodeURIComponent(file));sound.effectVolume=volume;sound.volume=volume*(characterVoice&&!characterVoice.paused?.65:1);
  activeActionSounds.add(sound);sound.onended=()=>activeActionSounds.delete(sound);sound.onerror=sound.onended;
  sound.play().catch(()=>activeActionSounds.delete(sound));
+}
+function playBodyImpact(speed=200){
+ if(speed<120||bodyImpactCooldown>0||rag?.softLanding)return;
+ bodyImpactCooldown=.16;playActionSound('landing');playActionSound('squish');playActionSound('bone');
 }
 function stopFlightSounds(){for(const sound of [flyingSound,jetEngineSound])if(sound)sound.pause();flyingSound=jetEngineSound=null;}
 function playFlightEffect(file,volume){const sound=new Audio('./audio/effects/'+file);sound.loop=false;sound.volume=volume;sound.play().catch(()=>{});return sound;}
 function startFlightSounds(){stopFlightSounds();playActionSound('launch');flyingSound=playFlightEffect('flying_character_sound.mp3',.5);flyingSound.loop=true;if(jetpackMounted&&rag?.jetFuel>0)jetEngineSound=playFlightEffect('freesound_community-jet-engine-6753.mp3',.28);}
 function syncFlightSounds(){
  syncMapAmbience();
- squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);boneCooldown=Math.max(0,boneCooldown-PHYSICS_STEP);
+ squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);boneCooldown=Math.max(0,boneCooldown-PHYSICS_STEP);bodyImpactCooldown=Math.max(0,bodyImpactCooldown-PHYSICS_STEP);
  for(const sound of activeActionSounds)sound.volume=sound.effectVolume*(characterVoice&&!characterVoice.paused?.65:1)*(activeActionSounds.size>1?.8:1);
  if(!rag||phase!=='airborne'){stopFlightSounds();return;}
  if(rag.voiceLanded&&flyingSound){flyingSound.pause();flyingSound=null;}
@@ -802,21 +807,22 @@ function hazardHit(x,y,part=null){
     }else if(n.y+n.r>surface&&!rag.pinned[part]){
      n.y=surface-n.r;n.py=n.y-1;n.px=n.x-2.6;
     }
-    if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;}
+    if(!hitHazards.has(h.id)){playBodyImpact(Math.hypot(n.x-n.px,n.y-n.py)/PHYSICS_STEP);hitHazards.add(h.id);hazardPoints+=h.points;}
    }
    continue;
   }
   if(h.kind==='door'&&n&&!gateOpen()&&n.y>floor-220){
    n.x=h.x-h.width/2-n.r;n.px=n.x+Math.abs(n.x-n.px)*.25;
    n.py=n.y-3;rag.doorHit=true;
-   if(!hitHazards.has('doorFail')){hitHazards.add('doorFail');levelFailed=true;hazardPoints=0;bloodBurst(n.x,n.y,.7);}
+   if(!hitHazards.has('doorFail')){playBodyImpact();hitHazards.add('doorFail');levelFailed=true;hazardPoints=0;bloodBurst(n.x,n.y,.7);}
    continue;
   }
   if(h.kind==='conveyor'&&n){
    const beltY=floor-72;
    if(n.y+n.r>=beltY-8&&n.y<floor-36){
+    const incomingSpeed=Math.hypot(n.x-n.px,n.y-n.py)/PHYSICS_STEP;
     n.y=beltY-n.r;n.py=n.y;n.px=n.x-CONVEYOR_SPEED*PHYSICS_STEP;
-    if(!levelFailed&&!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;}
+    if(!levelFailed&&!hitHazards.has(h.id)){playBodyImpact(incomingSpeed);hitHazards.add(h.id);hazardPoints+=h.points;}
    }
    continue;
   }
@@ -825,7 +831,7 @@ function hazardHit(x,y,part=null){
    if(n.y+n.r>=pressBottom-15&&n.y<floor-42){
     const first=!hitHazards.has(h.id);
     if(first){
-     playActionSound('squish');hitHazards.add(h.id);hazardPoints+=h.points;
+     playBodyImpact(Math.hypot(n.x-n.px,n.y-n.py)/PHYSICS_STEP);hitHazards.add(h.id);hazardPoints+=h.points;
      directionalBlood(n.x,n.y,-.3,-1,.75);
      markWall(n.x,pressBottomY()+8,1.4,h,'underside');
      // Tear at most two joints. Keep the body mostly intact for funny bounces.
@@ -857,7 +863,7 @@ function hazardHit(x,y,part=null){
    if(touches){
     // Powered rollers grab and redirect contacting ragdoll particles.
     n.px=n.x-(dx<0?6:-4);n.py=n.y+4;
-    if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;directionalBlood(x,y,dx||1,-1,2.6);if(!rag.shredded)shredRagdoll(x,y,part,machine?.kind==='twin'?{x:h.x+h.width*.5+10,y:floor-45}:null);}
+    if(!hitHazards.has(h.id)){playBodyImpact();hitHazards.add(h.id);hazardPoints+=h.points;directionalBlood(x,y,dx||1,-1,2.6);if(!rag.shredded)shredRagdoll(x,y,part,machine?.kind==='twin'?{x:h.x+h.width*.5+10,y:floor-45}:null);else if(machine.kind==='twin')playActionSound('knife');}
    }
    continue;
   }
@@ -866,7 +872,7 @@ function hazardHit(x,y,part=null){
   if(h.kind==='soft'){
    if(!rag.shredded){hitHazards.add(h.id);registerSoftLanding(x);}
   }else if(h.kind==='grinder'&&part&&!rag.shredded&&!levelFailed){
-   hitHazards.add(h.id);hazardPoints+=h.points;shredRagdoll(x,y,part);
+   playBodyImpact();hitHazards.add(h.id);hazardPoints+=h.points;shredRagdoll(x,y,part);
   }
  }
 }
@@ -1012,6 +1018,7 @@ function tearJoint(a,b,x,y,force){
  return true;
 }
 function checkImpactForce(part,speed,x,y,type){
+ if(rag&&!rag.softLanding)playBodyImpact(speed);
  if(!rag||rag.shredded||rag.softLanding||rag.impactCooldown>0)return;
  const severity=speed*(type==='nail'?1.15:type==='press'?1.25:1);
  if(severity<125)return;
@@ -1153,6 +1160,16 @@ function updateRagdoll(dt){
  // In some overlapping poses the solver never fully converges; cap ground jitter.
  rag.settled=(rag.restTime>1.1 || (rag.groundTime>7 && hip.y>groundYAt(hip.x)-110))?2:0;
 }
+function stepTorsoBleeding(dt){
+ if(!rag)return;
+ rag.torsoBleedTimer=Math.max(0,(rag.torsoBleedTimer||0)-dt);if(rag.torsoBleedTimer>0)return;
+ const torso=rag.nodes.chest;
+ if(torso.y<supportYAt(torso.x)-torso.r-24||Math.hypot(torso.x-torso.px,torso.y-torso.py)/PHYSICS_STEP>120)return;
+ rag.torsoBleedTimer=.45+Math.random()*.45;
+ if(bloodDrops.length>600)return;
+ const side=Math.random()<.5?-1:1;
+ for(let i=0;i<3;i++)bloodDrops.push({x:torso.x+side*torso.r*.45,y:torso.y-torso.r*.4,vx:side*(24+Math.random()*42),vy:-35-Math.random()*45,size:1.3+Math.random()*1.5,angle:-Math.PI/2,spin:(Math.random()-.5)*3,sprite:Math.floor(Math.random()*bloodSprites.length),life:0});
+}
 function drawRag(){if(window.characterOverlayReady||!rag)return;ctx.save();ctx.translate(-camera,0);const n=rag.nodes;const limb=(a,b,width,color)=>{let p=n[a],q=n[b];ctx.lineCap='round';ctx.strokeStyle='#20252b';ctx.lineWidth=width+3;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke()};
 limb('hip','chest',20,'#db9b40');limb('chest','neck',11,'#e8b95d');for(const [a,b] of [['chest','ls'],['ls','le'],['le','lh'],['chest','rs'],['rs','re'],['re','rh'],['hip','lk'],['lk','lf'],['hip','rk'],['rk','rf']])limb(a,b, a==='hip'||a==='chest'?11:9,a[0]==='l'?'#e4b559':'#e7aa42');
 for(const [id,x] of Object.entries(n)){if(id==='head'){ctx.fillStyle='#20252b';ctx.beginPath();ctx.arc(x.x,x.y,16,0,Math.PI*2);ctx.fill();ctx.fillStyle='#f3c66c';ctx.beginPath();ctx.arc(x.x,x.y,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#393d40';ctx.beginPath();ctx.arc(x.x-4,x.y-2,2,0,Math.PI*2);ctx.arc(x.x+4,x.y-2,2,0,Math.PI*2);ctx.fill();}else if(!['hip','chest'].includes(id)){ctx.fillStyle='#333f48';ctx.beginPath();ctx.arc(x.x,x.y,Math.min(x.r,5),0,Math.PI*2);ctx.fill();ctx.fillStyle='#8e9a9f';ctx.beginPath();ctx.arc(x.x,x.y,2,0,Math.PI*2);ctx.fill()}}ctx.restore()}
@@ -1220,7 +1237,7 @@ function simulateStep(dt){
     startNotice(`<strong>Released!</strong> The arm swings up from behind the pivot and sends the dummy forward (right). Initial speed ${Math.round(Math.hypot(vx,vy))} px/s.`);
   }
 }
-if(phase==='airborne'&&dummy){updateRagdoll(dt);stepBlood(dt);let head=rag.nodes.head;maxDist=Math.max(maxDist,(bodyDistanceX(rag)-flightStart)*FEET_PER_PIXEL);$('distanceText').textContent=Math.floor(maxDist)+' ft';$('scoreTop').textContent=String(levelFailed?0:Math.floor(maxDist)+hazardPoints);if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Follow the majority of the visible body pieces, ignoring lone outliers.
+if(phase==='airborne'&&dummy){updateRagdoll(dt);stepTorsoBleeding(dt);stepBlood(dt);let head=rag.nodes.head;maxDist=Math.max(maxDist,(bodyDistanceX(rag)-flightStart)*FEET_PER_PIXEL);$('distanceText').textContent=Math.floor(maxDist)+' ft';$('scoreTop').textContent=String(levelFailed?0:Math.floor(maxDist)+hazardPoints);if(maxDist>best){best=maxDist;$('bestTop').textContent=Math.floor(best)+' ft'}// Follow the majority of the visible body pieces, ignoring lone outliers.
  const target=bodyCameraTarget(rag,window.bodyCameraParts||[]);
  followBodyCamera(target,dt);
  if(rag.settled>1.6 && rag.groundTime>1.5){rag.aftermathTime=(rag.aftermathTime||0)+dt;}else if(rag){rag.aftermathTime=0;}if(rag.aftermathTime>=6&&!rag.resultAwarded){rag.resultAwarded=true;offerRanking();startNotice(`<strong>RESULT: ${Math.floor(maxDist)} ft.</strong> ${levelFailed?'SOFT LANDING — FAIL! No points.':`Score: ${Math.floor(maxDist)+hazardPoints} (${Math.floor(maxDist)} distance + ${hazardPoints} machinery).`} Animation continues — press RESET when ready.`)}}}
