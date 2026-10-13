@@ -4,7 +4,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
 let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={},seatRoot=null,seatReady=false;
 // Chair-space reference: the rider's pelvis sits above the mounting plate.
-const chairHipAnchor=new THREE.Vector3(5,59,23); // pelvis forward and higher on cushion, away from backrest
+const chairHipAnchor=new THREE.Vector3(-9,69,23); // seat pelvis farther back and higher against cushion
 try {
  renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
