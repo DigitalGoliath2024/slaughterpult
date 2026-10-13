@@ -419,23 +419,33 @@ function buildGorePart(joint){
   geometry.applyMatrix4(src.matrixWorld);
   geometry.computeBoundingBox();
   bounds.union(geometry.boundingBox);
-  // The source asset includes separate bone and muscle geometry, but some
-  // imported materials are neutral gray. Preserve texture maps while assigning
-  // anatomical color where a diffuse texture is absent.
-  const muscle=/muscle|brest|back|buttock|forearm|^leftarm|^rightarm|^l_leg|^rleg|lowerleg/i.test(src.name)&&!/bone/i.test(src.name);
-  const bone=/bone|skull|torso|foot/i.test(src.name);
-  const mat=Array.isArray(src.material)?src.material.map(m=>m.clone()):src.material.clone();
-  const tint=m=>{
-   if(!m.map){
-    m.color.set(muscle?0xa83a43:bone?0xd9cbb7:0xa65b59);
-    m.roughness=.91;
-   }else{
-    m.color.set(0xffffff); // don't gray-out genuine diffuse textures
+  // Override gray imported materials explicitly. Preserve surface detail from
+  // maps but do not allow a grayscale base-color texture to wash the gore gray.
+  const name=src.name.toLowerCase();
+  const isBone=/bone|skull|torso|foot|hand|rib|eye/.test(name)&&!/muscle/.test(name);
+  const isMuscle=/muscle|brest|back|buttock|forearm|leftarm|rightarm|l_leg|rleg|lowerleg|brain/.test(name)&&!isBone;
+  const mat=new THREE.MeshStandardMaterial({
+   color:isBone?0xf2e9d8:isMuscle?0xbb2935:0x8e242b,
+   roughness:.87,metalness:0,side:THREE.DoubleSide,
+   vertexColors:false
+  });
+  // Thin translucent red surface patches give bone and meat fragments blood marks.
+  // Use deterministic mesh attributes rather than random billboard squares.
+  const pos=geometry.getAttribute('position');
+  if(pos){
+   const tintColors=[];
+   for(let j=0;j<pos.count;j++){
+    const x=pos.getX(j),y=pos.getY(j),z=pos.getZ(j);
+    const stain=Math.sin(x*9.7+y*13.1+z*7.3)*Math.cos(x*15.7-z*11.9);
+    const bloody=stain>.46;
+    const base=new THREE.Color(isBone?0xf2e9d8:isMuscle?0xbb2935:0x8e242b);
+    if(bloody)base.lerp(new THREE.Color(0x71050d),isBone?.88:.45);
+    tintColors.push(base.r,base.g,base.b);
    }
-   m.side=THREE.DoubleSide;
-   m.needsUpdate=true;
-  };
-  if(Array.isArray(mat))mat.forEach(tint);else tint(mat);
+   geometry.setAttribute('color',new THREE.Float32BufferAttribute(tintColors,3));
+   mat.color.set(0xffffff);
+   mat.vertexColors=true;
+  }
   const mesh=new THREE.Mesh(geometry,mat);
   mesh.frustumCulled=false;group.add(mesh);
  }
