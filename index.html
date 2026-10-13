@@ -36,15 +36,18 @@ const $=id=>document.getElementById(id);let selected='rubber',pending=null,conne
 let characterVoice=null,voiceGeneration=0;const lastVoiceClip=new Map();
 let flyingSound=null,jetEngineSound=null;
 const actionSounds={
+ knife:[['body_in_kniferoller.mp3',.65]],
+ bone:[['human_bones_breaking_2.mp3',.7],['human_bones_breaking_3.mp3',.5],['human_bones_breaking_4.mp3',.3]],
  launch:[['catapult_launch_with_#1-1791930256015.mp3',.35],['catapult_launch_with_#2-1791930221469.mp3',.55]],
  squish:[['splat_squish_sound_#1-1791930022493.mp3',.85],['splat_squish_sound_#2-1791930016713.mp3',1],['splat_squish_sound_#2-1791930038748.mp3',.5],['splat_squish_sound_#4-1791930006652.mp3',.7],['splat_squish_sound_#4-1791930030413.mp3',.85]]
 };
-const activeActionSounds=new Set(),lastActionClip=new Map();let squishCooldown=0;
-function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();squishCooldown=0;}
+const activeActionSounds=new Set(),lastActionClip=new Map();let squishCooldown=0,boneCooldown=0;
+function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();squishCooldown=boneCooldown=0;}
 function playActionSound(kind){
- if(kind==='squish'&&squishCooldown>0)return;
- const pool=actionSounds[kind],choices=pool.filter(([file])=>file!==lastActionClip.get(kind));
+ if((kind==='squish'&&squishCooldown>0)||(kind==='bone'&&boneCooldown>0))return;
+ const pool=actionSounds[kind],choices=pool.length>1?pool.filter(([file])=>file!==lastActionClip.get(kind)):pool;
  const [file,volume]=choices[Math.floor(Math.random()*choices.length)];lastActionClip.set(kind,file);
+ if(kind==='bone')boneCooldown=.055;
  if(kind==='squish')squishCooldown=.055; // One contact often tears several joints in the same physics step.
  if(activeActionSounds.size>=3){const oldest=activeActionSounds.values().next().value;oldest.pause();activeActionSounds.delete(oldest);}
  const sound=new Audio('./'+encodeURIComponent(file));sound.effectVolume=volume;sound.volume=volume*(characterVoice&&!characterVoice.paused?.65:1);
@@ -55,7 +58,7 @@ function stopFlightSounds(){for(const sound of [flyingSound,jetEngineSound])if(s
 function playFlightEffect(file,volume){const sound=new Audio('./audio/effects/'+file);sound.loop=false;sound.volume=volume;sound.play().catch(()=>{});return sound;}
 function startFlightSounds(){stopFlightSounds();playActionSound('launch');flyingSound=playFlightEffect('flying_character_sound.mp3',.22);flyingSound.loop=true;if(jetpackMounted&&rag?.jetFuel>0)jetEngineSound=playFlightEffect('freesound_community-jet-engine-6753.mp3',.28);}
 function syncFlightSounds(){
- squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);
+ squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);boneCooldown=Math.max(0,boneCooldown-PHYSICS_STEP);
  for(const sound of activeActionSounds)sound.volume=sound.effectVolume*(characterVoice&&!characterVoice.paused?.65:1)*(activeActionSounds.size>1?.8:1);
  if(!rag||phase!=='airborne'){stopFlightSounds();return;}
  if(rag.voiceLanded&&flyingSound){flyingSound.pause();flyingSound=null;}
@@ -968,7 +971,7 @@ function directionalBlood(x,y,dx,dy,power=1){
 }
 function shredRagdoll(x,y,contactPart=null,outlet=null){
  if(!rag||rag.shredded)return;
- playActionSound('squish');rag.shredded=true;rag.shredAt={x,y};rag.shredOutlet=outlet;
+ playActionSound('squish');playActionSound('bone');if(outlet)playActionSound('knife');rag.shredded=true;rag.shredAt={x,y};rag.shredOutlet=outlet;
  const joints=new Set(['neck:head','ls:le','le:lh','rs:re','re:rh','hip:lk','lk:lf','hip:rk','rk:rf']);
  // The crusher/grinder tears every constraint so no invisible links pull the fragments together.
  for(const link of rag.links)link.broken=true;
@@ -988,7 +991,7 @@ function tearJoint(a,b,x,y,force){
  if(!rag)return false;
  const link=rag.links.find(l=>!l.broken&&((l.a===a&&l.b===b)||(l.a===b&&l.b===a)));
  if(!link)return false;
- playActionSound('squish');link.broken=true;rag.injuries.add(a+':'+b);
+ playActionSound('squish');playActionSound('bone');link.broken=true;rag.injuries.add(a+':'+b);
  if(a==='hip'&&b==='waist')rag.waistBroken=true;
  const node=rag.nodes[b]||rag.nodes[a];
  if(node){const kick=Math.min(11,Math.max(3,force*.012));node.px=node.x-kick*(physicsRandom()>.5?1:-1);node.py=node.y-3;}
