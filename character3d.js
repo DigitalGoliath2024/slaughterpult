@@ -315,78 +315,80 @@ function applySittingPose(){
 }
 
 // Spinning grinder, permanently mounted to a braced steel support.
-let grinderVisual=null,grinderDrum=null,grinderStains=[],previousShred=false;let goreParts=[],goreAsset=null,goreWasShredded=false;
-window.grinderOverlayReady=false;
+let grinderDrum=null;let goreParts=[],goreAsset=null,goreWasShredded=false;
+const machineryTemplates=new Map(),machineryInstances=new Map();
+window.grinderOverlayReady=false;window.rollerOverlayReady=false;
+function buildMachineTemplate(source,kind){
+ source.updateMatrixWorld(true);
+ const bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+ const template=new THREE.Group();
+ source.traverse(o=>{
+  if(!o.isMesh)return;
+  const geometry=o.geometry.clone();geometry.applyMatrix4(o.matrixWorld);geometry.translate(-center.x,-center.y,-center.z);geometry.scale(1/size.x,1/size.x,1/size.x);
+  const material=Array.isArray(o.material)?o.material.map(m=>m.clone()):o.material.clone();
+  const mesh=new THREE.Mesh(geometry,material);mesh.frustumCulled=false;
+  const moving=kind==='twin'?/^pCylinder[12]_/.test(o.name):kind==='hopper'?/^Object_(10|13)$/.test(o.name):true;
+  if(moving){
+   geometry.computeBoundingBox();const pivotCenter=geometry.boundingBox.getCenter(new THREE.Vector3());
+   geometry.translate(-pivotCenter.x,-pivotCenter.y,-pivotCenter.z);
+   const rotor=new THREE.Group();rotor.position.copy(pivotCenter);rotor.add(mesh);
+   rotor.userData.motorAxis=kind==='hopper'?'z':'x';rotor.userData.motorSign=/Object_13|pCylinder2_/.test(o.name)?1:-1;
+   template.add(rotor);
+  }else template.add(mesh);
+ });
+ template.userData.kind=kind;template.userData.heightRatio=size.y/size.x;return template;
+}
 async function loadLevelMachinery(){
- try{
-  const g=await new GLTFLoader().loadAsync('./trash_grinder.glb');
-  grinderVisual=new THREE.Group();
-  const original=g.scene;
-  const box=new THREE.Box3().setFromObject(original);
-  const span=box.getSize(new THREE.Vector3());
-  original.scale.multiplyScalar(195/(Math.max(span.x,span.y,span.z)||1));
-  original.rotation.y=-Math.PI/2;
-  original.position.y=35;
-  original.traverse(n=>{if(n.isMesh)n.frustumCulled=false;});
-  // Do not render the imported static grinder on top of the powered drum.
-  // Its geometry is replaced by the single rotating assembly below.
-  const metal=new THREE.MeshStandardMaterial({color:0x626d76,metalness:.78,roughness:.42});
-  const iron=new THREE.MeshStandardMaterial({color:0x252d33,metalness:.65,roughness:.48});
-  const blood=new THREE.MeshStandardMaterial({color:0x790811,roughness:.8,metalness:0,side:THREE.DoubleSide});
-  function beam(w,h,d,x,y,z,material){
-   const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);
-   m.position.set(x,y,z);grinderVisual.add(m);return m;
-  }
-  // Frame ends at ground, steel uprights support both ends of the drum axle.
-  beam(200,12,42,0,-99,0,metal);
-  for(const x of [-72,72]){
-   beam(12,106,20,x,-47,0,metal);
-   beam(22,19,28,x,5,0,iron);
-   const brace=beam(9,122,13,x*.60,-49,-12,metal);
-   brace.rotation.z=(x<0?-.38:.38);
-  }
-  // Rotating roller axis runs across the machine, facing the side camera.
-  grinderDrum=new THREE.Group();grinderDrum.position.set(0,10,27);
-  const drum=new THREE.Mesh(new THREE.CylinderGeometry(39,39,120,18),iron);
-  drum.rotation.x=Math.PI/2;grinderDrum.add(drum);
-  for(let i=0;i<12;i++){
-   const a=i*Math.PI/6;
-   const tooth=new THREE.Mesh(new THREE.BoxGeometry(10,9,121),metal);
-   tooth.position.set(Math.cos(a)*40,Math.sin(a)*40,0);
-   tooth.rotation.z=a;
-   grinderDrum.add(tooth);
-  }
-  grinderDrum.userData.bloodMaterial=blood;
-  grinderVisual.add(grinderDrum);
-  scene.add(grinderVisual);
-  window.grinderOverlayReady=true;
- }catch(e){console.warn('Grinder asset failed; fallback remains visible',e);}
+ const assets=[['spiked','trash_grinder.glb'],['twin','twist_the_knife.glb'],['hopper','toy__grinder_ugc_a_000_1x1.glb']];
+ const results=await Promise.allSettled(assets.map(async([kind,file])=>{const gltf=await new GLTFLoader().loadAsync('./'+file);machineryTemplates.set(kind,buildMachineTemplate(gltf.scene,kind));}));
+ for(const result of results)if(result.status==='rejected')console.warn('Uploaded machinery could not load',result.reason);
+ window.grinderOverlayReady=machineryTemplates.has('hopper')&&machineryTemplates.has('spiked');
+ window.rollerOverlayReady=machineryTemplates.has('twin')&&machineryTemplates.has('spiked');
 }
 function positionLevelMachinery(state,w,h){
- if(!grinderVisual)return;
- const hazard=state.hazards?.find(item=>item.id==='grinder');
- if(!hazard){grinderVisual.visible=false;return;}
- grinderVisual.visible=Math.abs(hazard.x-state.camera-w/2)<w*.85;
- grinderVisual.position.set(hazard.x-state.camera-w/2,h/2-(h*.88+(hazard.groundOffset||0))+(state.cameraY||0)+104,0);
- // Always spin, including while the character is still in the launcher.
- if(grinderDrum)grinderDrum.rotation.z=-(state.machineryClock||0)*5.1;
- if(state.shredded&&!previousShred&&grinderDrum){
-  // Each stain is a separate irregular flat patch parented to the roller:
-  // the blood rotates *with* the drum and persists until reset.
-  const mat=grinderDrum.userData.bloodMaterial;
-  for(let i=0;i<23;i++){
-   const stain=new THREE.Mesh(new THREE.PlaneGeometry(5+Math.random()*15,3+Math.random()*9),mat);
-   const a=Math.random()*Math.PI*2;
-   stain.position.set(Math.cos(a)*41,Math.sin(a)*41,(Math.random()-.5)*110);
-   stain.rotation.z=a;stain.rotation.z=Math.random()*Math.PI;
-   grinderDrum.add(stain);grinderStains.push(stain);
+ const active=new Set();window.machineBloodSurfaces={};window.apparatusVents=[];
+ for(const hazard of state.hazards||[]){
+  if(!['grinder','roller'].includes(hazard.kind))continue;
+  const kind=hazard.kind==='grinder'?'hopper':/(?:roller[135]|roller2)$/.test(hazard.id)?'twin':'spiked';
+  const template=machineryTemplates.get(kind);if(!template)continue;
+  const key=state.level+':'+hazard.id;active.add(key);let root=machineryInstances.get(key);
+  const width=hazard.kind==='grinder'?hazard.width*1.25:hazard.width;
+  const floor=h*.88+(hazard.groundOffset||0);
+  if(!root){
+   root=template.clone(true);root.scale.setScalar(width);
+   const support=new THREE.Group();
+   root.userData.support=support;scene.add(support);scene.add(root);machineryInstances.set(key,root);
+  }
+  root.visible=Math.abs(hazard.x-state.camera-w/2)<w/2+width;
+  const height=template.userData.heightRatio*width;
+  const centerY=kind==='spiked'?floor-106:floor-height/2;
+  root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),35);
+  window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,centerY,height,width,kind};
+  if(!root.userData.cutters&&window.weaponOverlayReady){
+   const cutter=['axe','machete','knife'][Math.floor(hazard.x/100)%3];
+   for(const motor of root.children.filter(p=>p.userData.motorAxis)){
+    const box=new THREE.Box3().setFromObject(motor.children[0]),radius=Math.min(.14,template.userData.heightRatio*.32);
+    for(let row=-1;row<=1;row++)for(let i=0;i<6;i++){
+     const a=i*Math.PI/3;
+     const blade=mountedWeapon(motor,cutter,.065,row*.12,Math.cos(a)*radius,0,Math.sin(a)*radius);
+     if(blade){if(motor.userData.motorAxis==='x')blade.rotation.set(a,Math.PI/2,0);else {blade.position.set(Math.cos(a)*.065,Math.sin(a)*.065,row*.035);blade.rotation.z=a-Math.PI/2;}}
+    }
+   }
+   root.userData.cutters=true;
+  }
+  const clock=state.machineryClock||0;
+  for(const part of root.children)if(part.userData.motorAxis)part.rotation[part.userData.motorAxis]=clock*2.6*part.userData.motorSign;
+  const support=root.userData.support;support.visible=root.visible;
+  if(kind==='spiked'&&!support.children.length&&apparatusTemplates.length){
+   for(const side of [-1,1]){const post=apparatusTemplates[(Math.abs(hazard.x)+ (side>0?1:0))%apparatusTemplates.length].clone(true);post.userData.side=side;post.rotation.y=side<0?Math.PI:0;post.scale.setScalar(106);support.add(post);}
+  }
+  for(const post of support.children){
+   post.position.set(root.position.x+post.userData.side*width*.48,root.position.y,35);
+   post.updateMatrixWorld(true);const mouth=post.localToWorld(new THREE.Vector3(post.userData.outlet.x,post.userData.outlet.y,post.userData.outlet.z));
+   window.apparatusVents.push({id:key+':'+post.userData.side,x:mouth.x+state.camera+w/2,y:h/2-mouth.y+(state.cameraY||0),dir:post.userData.side,type:post.userData.side<0?'fire':'steam'});
   }
  }
- if(!state.shredded&&previousShred&&grinderDrum){
-  for(const stain of grinderStains){grinderDrum.remove(stain);stain.geometry.dispose();}
-  grinderStains=[];
- }
- previousShred=!!state.shredded;
+ for(const [key,root] of machineryInstances)if(!active.has(key)){root.visible=false;root.userData.support.visible=false;}
 }
 const trampolineTemplates=[],trampolineInstances=new Map();
 window.trampolineOverlayReady=false;
@@ -396,7 +398,10 @@ async function loadTrampolines(){
   gltf.scene.updateMatrixWorld(true);
   // The supplied file contains three individual trampolines, not one object.
   for(const name of ['Cube.000','Cube.002','Cylinder.002']){
-   const source=gltf.scene.getObjectByName(name);if(!source)continue;
+   let source;
+   const normalized=name.replace(/[^a-z0-9]/gi,'').toLowerCase();
+   gltf.scene.traverse(node=>{if(node.name.replace(/[^a-z0-9]/gi,'').toLowerCase()===normalized)source=node;});
+   if(!source)continue;
    const template=new THREE.Group(),matBounds=new THREE.Box3();
    source.traverse(o=>{
     if(!o.isMesh)return;
@@ -417,7 +422,8 @@ async function loadTrampolines(){
    }
    trampolineTemplates.push(template);
   }
-  window.trampolineOverlayReady=trampolineTemplates.length>0;
+  if(trampolineTemplates.length!==3)throw Error('Expected three supplied trampoline variants; found '+trampolineTemplates.length);
+  window.trampolineOverlayReady=true;
  }catch(e){console.warn('Trampoline asset failed; physical fallback pads remain',e);}
 }
 function positionTrampolines(state,w,h){
@@ -455,7 +461,7 @@ function positionTrampolines(state,w,h){
  }
  for(const [id,root] of trampolineInstances)if(!active.has(id)){root.visible=false;root.userData.support.visible=false;}
 }
-const cushionTemplates=[],cushionInstances=new Map();
+const cushionTemplates=[],cushionInstances=new Map();let cushionResetSeen=-1;
 window.cushionOverlayReady=false;
 async function loadCushions(){
  const files=['dirty_cushion.glb','cushion.glb','cushion_olddirty.glb','cushion-1.glb'];
@@ -479,12 +485,17 @@ async function loadCushions(){
 function positionCushions(state,w,h){
  if(!window.cushionOverlayReady)return;
  const active=new Set();
+ if(cushionResetSeen!==state.goreResetId){
+  for(const root of cushionInstances.values())root.traverse(mesh=>{if(mesh.isMesh)for(const mat of Array.isArray(mesh.material)?mesh.material:[mesh.material]){if(mat.userData.pillowPaint){mat.map.dispose();mat.map=mat.userData.pillowOriginalMap;mat.color.copy(mat.userData.pillowOriginalColor);delete mat.userData.pillowPaint;mat.needsUpdate=true;}}});
+  cushionResetSeen=state.goreResetId;
+ }
  for(const pillow of state.cushions||[]){
   active.add(pillow.id);let root=cushionInstances.get(pillow.id);
   if(!root){
    const template=cushionTemplates[pillow.variant]||cushionTemplates.find(Boolean);
    root=template.clone(true);root.scale.set(pillow.width,pillow.height/template.userData.aspectHeight,pillow.width);
    root.rotation.set(0,pillow.yaw,pillow.roll);
+   root.traverse(mesh=>{if(mesh.isMesh){const materials=(Array.isArray(mesh.material)?mesh.material:[mesh.material]).map(original=>{const mat=original.clone();mat.userData.pillowOriginalMap=original.map;mat.userData.pillowOriginalColor=original.color.clone();return mat;});mesh.material=Array.isArray(mesh.material)?materials:materials[0];}});
    const bounds=new THREE.Box3().setFromObject(root),size=bounds.getSize(new THREE.Vector3());
    root.userData.baseYScale=root.scale.y;root.userData.halfHeight=size.y/2;
    pillow.contactHeight=size.y;pillow.contactWidth=size.x;
@@ -492,11 +503,79 @@ function positionCushions(state,w,h){
   }
   root.visible=Math.abs(pillow.x-state.camera-w/2)<w/2+100;
   const squash=window.launcherCushionSquash?window.launcherCushionSquash(pillow):1;
-  root.scale.y=root.userData.baseYScale*squash;
+  root.scale.y=root.userData.baseYScale*squash;root.rotation.z=pillow.roll+Math.max(-.035,Math.min(.035,(pillow.slideV||0)*.003));
   const ground=window.launcherGroundYAt?window.launcherGroundYAt(pillow.x):h*.88;
-  root.position.set(pillow.x-state.camera-w/2,h/2-ground-pillow.depth+(state.cameraY||0)+root.userData.halfHeight*squash,pillow.depth?90:36);
+  root.position.set(pillow.x+(pillow.dx||0)-state.camera-w/2,h/2-ground-pillow.depth+(pillow.stack||0)+(state.cameraY||0)+root.userData.halfHeight*squash,pillow.depth?90:36);
  }
  for(const [id,root] of cushionInstances)if(!active.has(id))root.visible=false;
+ for(const impact of window.pillowBloodImpacts||[]){
+  const root=cushionInstances.get(impact.id);if(!root)continue;
+  root.updateMatrixWorld(true);
+  const pillow=state.cushions.find(p=>p.id===impact.id);if(!pillow)continue;
+  const ray=new THREE.Raycaster(new THREE.Vector3(impact.x-state.camera-w/2,root.position.y+100,root.position.z),new THREE.Vector3(0,-1,0));
+  const hit=ray.intersectObject(root,true).find(h=>h.uv);if(!hit)continue;
+  const mat=Array.isArray(hit.object.material)?hit.object.material[hit.face.materialIndex]:hit.object.material;
+  paintPillowSkin(mat,hit.uv,impact.power);
+ }
+ window.pillowBloodImpacts=[];
+}
+function paintPillowSkin(material,uv,power){
+ let paint=material.userData.pillowPaint;
+ if(!paint){
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=512;const ctx=canvas.getContext('2d');
+  const source=material.userData.pillowOriginalMap;
+  if(source?.image)ctx.drawImage(source.image,0,0,512,512);else{ctx.fillStyle='#'+material.color.getHexString();ctx.fillRect(0,0,512,512);}
+  const texture=new THREE.CanvasTexture(canvas);texture.flipY=source?.flipY??false;texture.colorSpace=THREE.SRGBColorSpace;
+  material.map=texture;material.color.set(0xffffff);material.needsUpdate=true;
+  paint={canvas,ctx};material.userData.pillowPaint=paint;
+ }
+ const x=uv.x*512,y=uv.y*512,r=5+power*8,ctx=paint.ctx;
+ ctx.fillStyle='rgba(101,5,14,.87)';ctx.beginPath();
+ for(let i=0;i<12;i++){const a=i*Math.PI/6,rr=r*(.6+Math.random()*.5);const xx=x+Math.cos(a)*rr,yy=y+Math.sin(a)*rr*.65;i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy);}ctx.closePath();ctx.fill();
+ for(let i=0;i<5;i++){ctx.beginPath();ctx.arc(x+(Math.random()-.5)*r*4,y+(Math.random()-.5)*r*3,1+Math.random()*2,0,Math.PI*2);ctx.fill();}
+ material.map.needsUpdate=true;
+}
+const backdropMachines=[],apparatusTemplates=[];
+async function loadBackdropMachines(){
+ try{
+  const gltf=await new GLTFLoader().loadAsync('./free_pack_-_steampunk_machinery._low_poly.glb');gltf.scene.updateMatrixWorld(true);
+  for(const name of ['stationbullet001','stationdrug001','stationhealth001']){
+   let source;gltf.scene.traverse(o=>{if(o.name.replace(/[^a-z0-9]/gi,'').toLowerCase()===name)source=o;});if(!source)continue;
+   const bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3()),points=[];
+   source.traverse(o=>{if(o.isMesh){const pos=o.geometry.attributes.position;for(let i=0;i<pos.count;i++)points.push(new THREE.Vector3().fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld));}});
+   const top=points.filter(v=>v.y>bounds.max.y-size.y*.15),left=Math.min(...top.map(v=>v.x));
+   const rim=top.filter(v=>v.x<left+size.x*.045),port=rim.reduce((v,p)=>v.add(p),new THREE.Vector3()).multiplyScalar(1/rim.length);
+   const scale=1/(port.y-bounds.min.y),root=new THREE.Group();
+   source.traverse(o=>{if(o.isMesh){const geometry=o.geometry.clone();geometry.applyMatrix4(o.matrixWorld);geometry.translate(-port.x,-port.y,-port.z);geometry.scale(scale,scale,scale);root.add(new THREE.Mesh(geometry,o.material));}});
+   const lower=points.filter(v=>v.y<bounds.min.y+size.y*.35),outX=Math.min(...lower.map(v=>v.x)),outlet=lower.filter(v=>v.x<outX+size.x*.04).reduce((v,p)=>v.add(p),new THREE.Vector3());
+   outlet.multiplyScalar(1/lower.filter(v=>v.x<outX+size.x*.04).length).sub(port).multiplyScalar(scale);
+   root.userData.outlet=outlet;apparatusTemplates.push(root);
+  }
+ }catch(e){console.warn('Steampunk backdrop pack unavailable',e);}
+}
+function positionBackdropMachines(state,w,h){
+ for(const root of backdropMachines){
+  const x=root.userData.worldX,ground=window.launcherGroundYAt?window.launcherGroundYAt(x):h*.88;
+  root.visible=['factory','trampoline'].includes(state.level)&&Math.abs(x-state.camera-w/2)<w/2+200;
+  root.position.set(x-state.camera-w/2,h/2-ground+(state.cameraY||0),-70);
+ }
+}
+let sceneryBed=null;
+async function loadSceneryBed(){
+ try{
+  const gltf=await new GLTFLoader().loadAsync('./horror_bed.glb');
+  const source=gltf.scene,remove=[];source.traverse(o=>{if(/^Floor(?:_|$)/i.test(o.name))remove.push(o);});for(const node of remove)node.parent?.remove(node);
+  const bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+  source.position.set(-center.x,-bounds.min.y,-center.z);
+  const normalized=new THREE.Group();normalized.add(source);normalized.scale.setScalar(185/(size.x||1));
+  sceneryBed=new THREE.Group();sceneryBed.add(normalized);sceneryBed.rotation.y=-.12;scene.add(sceneryBed);
+ }catch(e){console.warn('Horror bed scenery unavailable',e);}
+}
+function positionSceneryBed(state,w,h){
+ if(!sceneryBed)return;
+ const x=state.level==='trampoline'?1390:1100,ground=window.launcherGroundYAt?window.launcherGroundYAt(x):h*.88;
+ sceneryBed.visible=['factory','trampoline'].includes(state.level)&&Math.abs(x-state.camera-w/2)<w/2+200;
+ sceneryBed.position.set(x-state.camera-w/2,h/2-ground+(state.cameraY||0),-55);
 }
 const wallDolls=[];
 let dollLastTime=0;
@@ -522,7 +601,7 @@ function positionWallDolls(state,w,h){
  const now=performance.now(),dt=dollLastTime?Math.min(.04,(now-dollLastTime)/1000):1/60;dollLastTime=now;
  for(const pivot of wallDolls){
   const u=pivot.userData;
-  pivot.visible=state.level==='factory'&&Math.abs(u.worldX-state.camera-w/2)<w/2+100;
+  pivot.visible=['factory','trampoline'].includes(state.level)&&Math.abs(u.worldX-state.camera-w/2)<w/2+100;
   // Damped pendulum driven by irregular small gusts. No repeating sine loop.
   u.gustTimer-=dt;
   if(u.gustTimer<=0){u.wind=(Math.random()-.5)*.20;u.gustTimer=.55+Math.random()*1.9;}
@@ -597,7 +676,7 @@ function positionWeapons(state,w,h){
  if(!window.weaponOverlayReady)return;
  const active=new Set();
  for(const hazard of state.hazards||[]){
-  if(!['roller','press','ramp'].includes(hazard.kind))continue;
+  if(!['press','ramp'].includes(hazard.kind))continue;
   active.add(hazard.id);
   let root=weaponStations.get(hazard.id);
   if(!root){root=makeWeaponStation(hazard);weaponStations.set(hazard.id,root);}
@@ -862,7 +941,7 @@ function positionGore(state,w,h){
   scene.add(part);goreParts.push(part);
  }
  for(const p of goreParts){
-  const floor=window.launcherGroundYAt?window.launcherGroundYAt(p.userData.worldX):h*.88;
+  const floor=window.launcherSupportYAt?window.launcherSupportYAt(p.userData.worldX):h*.88;
   const u=p.userData;
   if(u.joint==='rh'){
    // Keep the existing forearm/hand fragment; fingertips lead its creeping
@@ -887,6 +966,7 @@ function positionGore(state,w,h){
    if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
    if(u.worldY>=groundY){
+    if(!u.pillowImpact&&window.launcherCushionContact?.(u.worldX)){window.launcherCushionImpact?.(u.worldX,u.vy,Math.sign(u.vx));u.pillowImpact=true;}
     u.worldY=groundY;
     // Keep the orientation earned during the tumble, not a prescribed side pose.
     // Record the eventual resting angle after the final bounce, below.
@@ -973,6 +1053,8 @@ function animate(){
  positionLevelMachinery(state,w,h);
  positionWeapons(state,w,h);
  positionWallDolls(state,w,h);
+ positionSceneryBed(state,w,h);
+ positionBackdropMachines(state,w,h);
  positionCushions(state,w,h);
  positionTrampolines(state,w,h);
  positionGore(state,w,h);
@@ -1079,4 +1161,4 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadWeapons();loadWallDolls();loadCushions();loadTrampolines();loadGoreAsset();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();animate();}
