@@ -604,6 +604,47 @@ async function loadCushions(){
  for(const result of results)if(result.status==='rejected')console.warn('Cushion asset failed',result.reason);
  window.cushionOverlayReady=cushionTemplates.some(Boolean);
 }
+const scenerySignTemplates=[],scenerySignInstances=new Map();let pizzaSignTemplate=null,wetFloorTemplate=null;
+function prepareScenerySign(source,sideFacing=false,neon=true){
+ const flat=new THREE.Group();source.updateWorldMatrix(true,true);
+ source.traverse(o=>{if(!o.isMesh)return;const geometry=o.geometry.clone();geometry.applyMatrix4(o.matrixWorld);if(sideFacing)geometry.rotateY(Math.PI/2);const materials=(Array.isArray(o.material)?o.material:[o.material]).map(original=>{const mat=original.clone();mat.side=THREE.DoubleSide;if(neon&&mat.emissive&&mat.emissive.getHex()!==0)mat.emissiveIntensity=Math.max(1.8,mat.emissiveIntensity||1);return mat;});const mesh=new THREE.Mesh(geometry,Array.isArray(o.material)?materials:materials[0]);flat.add(mesh);});
+ const box=new THREE.Box3().setFromObject(flat),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+ for(const mesh of flat.children){mesh.geometry.translate(-center.x,-center.y,-center.z);mesh.geometry.scale(1/size.x,1/size.x,1/size.x);}flat.userData.heightRatio=size.y/size.x;return flat;
+}
+async function loadScenerySigns(){
+ const jobs=[['neon_signs.glb','pack'],['neon_sign.glb','single'],['pizza_time_neon_sign.glb','pizza'],['low_poly_wet_floor_sign__kaygan_zemin_tabelas.glb','wet']];
+ await Promise.allSettled(jobs.map(async([file,kind])=>{try{const gltf=await new GLTFLoader().loadAsync('./'+file);gltf.scene.updateMatrixWorld(true);
+ if(kind==='pack'){const group=gltf.scene.getObjectByName('GLTF_SceneRootNode');for(const source of group?.children||[])scenerySignTemplates.push(prepareScenerySign(source,true));}
+ else if(kind==='single')scenerySignTemplates.push(prepareScenerySign(gltf.scene));
+ else if(kind==='pizza')pizzaSignTemplate=prepareScenerySign(gltf.scene);
+ else wetFloorTemplate=prepareScenerySign(gltf.scene,false,false);
+ }catch(error){console.warn('Scenery sign unavailable',file,error);}}));
+}
+function positionScenerySigns(state,w,h){
+ const active=new Set(),random=n=>{const v=Math.sin(n*12.9898+78.233)*43758.5453;return v-Math.floor(v);};
+ const place=(key,template,x,y,width,depth,yaw=0)=>{if(!template||Math.abs(x)>w/2+180)return;active.add(key);let root=scenerySignInstances.get(key);if(!root){root=template.clone(true);if(key.includes(':pizza:')){const steel=new THREE.MeshStandardMaterial({color:0x78858c,metalness:.8,roughness:.4});for(const side of [-1,1]){const clamp=new THREE.Mesh(new THREE.BoxGeometry(.035,.12,.04),steel);clamp.position.set(side*.42,template.userData.heightRatio*.4,-.025);root.add(clamp);}}scene.add(root);scenerySignInstances.set(key,root);}root.scale.setScalar(width);root.rotation.y=yaw;root.position.set(x,h/2-y+(state.cameraY||0),depth);root.visible=true;return root;};
+ if(['slide','factory'].includes(state.level)&&scenerySignTemplates.length){
+  const factory=state.level==='factory',image=factory?window.factoryBackdropDimensions:null,tileWidth=factory&&image?h*.88*image.width/(image.height*.85):Math.max(factory?880:780,Math.round(h*(factory?2.2:2.25))),step=tileWidth-(factory?28:0),pan=state.camera*.55,start=Math.floor(pan/step)-1;
+  for(let i=start;i<start+Math.ceil(w/step)+3;i++)for(let slot=0;slot<2;slot++){
+   const seed=i*31+slot*97+(factory?51:0);if(random(seed)<.38)continue;
+   const index=Math.floor(random(seed+8)*scenerySignTemplates.length),u=slot? .76:.30,v=factory?(slot?.31:.43):(slot?.35:.445);
+   place(state.level+':neon:'+i+':'+slot,scenerySignTemplates[index],i*step-pan+tileWidth*u-w/2,h*v,Math.min(125,tileWidth*.075),-600);
+  }
+ }
+ if(state.level==='trampoline'&&pizzaSignTemplate){
+  const floor=h*.88+250,height=Math.max(620,h*1.2)-70,start=Math.floor((state.camera-200)/1350);
+  for(let i=start;i<start+Math.ceil(w/1350)+3;i++){if(i<0||random(i+100)<.25)continue;const x=i*1350+250+random(i+7)*330;place('trampoline:pizza:'+i,pizzaSignTemplate,x-state.camera-w/2,floor-height*.55,125,-430);}
+ }
+ if(wetFloorTemplate){
+  const used=new Set();for(const pillow of state.cushions||[]){const bin=Math.floor(pillow.x/650);if(used.has(bin)||pillow.stack||!pillow.depth||random(bin+177)<.35)continue;used.add(bin);
+   const ground=window.launcherGroundYAt?.(pillow.x)??h*.88,signHeight=52,width=signHeight/wetFloorTemplate.userData.heightRatio;
+   const root=place(state.level+':wet:'+bin,wetFloorTemplate,pillow.x-state.camera-w/2,ground+pillow.depth-signHeight/2,width,95,(random(bin+71)-.5)*.65);
+   if(root){root.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(root);root.position.y+=(h/2-ground-pillow.depth+(state.cameraY||0))-bounds.min.y;}
+  }
+ }
+ for(const [key,root] of scenerySignInstances)if(!active.has(key))root.visible=false;
+}
+
 function positionCushions(state,w,h){
  if(!window.cushionOverlayReady)return;
  const active=new Set();
@@ -1367,6 +1408,7 @@ function animate(){
  positionSceneryBed(state,w,h);
  positionBackdropMachines(state,w,h);
  positionCushions(state,w,h);
+ positionScenerySigns(state,w,h);
  positionTrampolines(state,w,h);
  positionGore(state,w,h);
  if(model&&window.characterOverlayReady&&!window.seatLoading){
@@ -1454,5 +1496,5 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();loadIndustrialBeams();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();loadIndustrialBeams();loadScenerySigns();animate();}
 

@@ -173,6 +173,34 @@
       "author": "TheSighet",
       "source": "https://skfb.ly/oQuYE",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": "neon_signs.glb",
+      "author": "Shalmon",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://skfb.ly/6XBKP",
+      "title": "Neon Signs"
+    },
+    {
+      "file": "neon_sign.glb",
+      "author": "urbanmasque",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://skfb.ly/6Tn9z",
+      "title": "Neon Sign"
+    },
+    {
+      "file": "pizza_time_neon_sign.glb",
+      "author": "Kirkieb",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://skfb.ly/otxqN",
+      "title": "Pizza Time! Neon Sign"
+    },
+    {
+      "file": "low_poly_wet_floor_sign__kaygan_zemin_tabelas.glb",
+      "author": "Renend Studio",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://skfb.ly/pMGHx",
+      "title": "Low Poly Wet Floor Sign / Kaygan Zemin Tabelas\u0131"
     }
   ],
   "uploaded_files": [
@@ -254,7 +282,11 @@
     "level3_brick_3.jpg",
     "level3_skulls.jpg",
     "level4_factory_background.png",
+    "low_poly_wet_floor_sign__kaygan_zemin_tabelas.glb",
+    "neon_sign.glb",
+    "neon_signs.glb",
     "old_rocket.glb",
+    "pizza_time_neon_sign.glb",
     "retro__psx-like_horror_melee_weapons_pack.glb",
     "rigged_t-pose_human_male_w_50_face_blendshapes.glb",
     "rocket_sound.mp3",
@@ -376,6 +408,34 @@
       "author": "TheSighet",
       "source": "https://skfb.ly/oQuYE",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "title": "Neon Signs",
+      "author": "Shalmon",
+      "source": "https://skfb.ly/6XBKP",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "file": "neon_signs.glb"
+    },
+    {
+      "title": "Neon Sign",
+      "author": "urbanmasque",
+      "source": "https://skfb.ly/6Tn9z",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "file": "neon_sign.glb"
+    },
+    {
+      "title": "Low Poly Wet Floor Sign / Kaygan Zemin Tabelas\u0131",
+      "author": "Renend Studio",
+      "source": "https://skfb.ly/pMGHx",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "file": "low_poly_wet_floor_sign__kaygan_zemin_tabelas.glb"
+    },
+    {
+      "title": "Pizza Time! Neon Sign",
+      "author": "Kirkieb",
+      "source": "https://skfb.ly/otxqN",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "file": "pizza_time_neon_sign.glb"
     }
   ]
 }

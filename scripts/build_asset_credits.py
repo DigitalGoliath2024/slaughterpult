@@ -20,7 +20,8 @@ manifest['supplied_assets']=supplied_assets
 manifest['fonts']=[{'name':'Creepster','source':'https://fonts.google.com/specimen/Creepster','license':'SIL Open Font License'},{'name':'Barlow Condensed','source':'https://fonts.google.com/specimen/Barlow+Condensed','license':'SIL Open Font License'}]
 (root/'ASSET_CREDITS.json').write_text(json.dumps(manifest,indent=2)+'\n')
 rows=[]
-for m in models:
+credited_sources={m.get('source') for m in models}
+for m in models+[c for c in supplied_assets if c.get('source') not in credited_sources]:
  if not m.get('source'):continue
  author=m.get('author','Unknown');match=re.match(r'(.*?) \((https?://[^)]+)\)$',author);authorhtml=html.escape(match[1]) if match else html.escape(author)
  if match:authorhtml='<a href="'+html.escape(match[2],quote=True)+'" target="_blank" rel="noopener">'+authorhtml+'</a>'
