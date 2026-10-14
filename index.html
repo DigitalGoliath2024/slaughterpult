@@ -74,6 +74,26 @@ function playActionSound(kind){
  activeActionSounds.add(sound);sound.onended=()=>activeActionSounds.delete(sound);sound.onerror=sound.onended;
  sound.play().catch(()=>activeActionSounds.delete(sound));
 }
+let boingAudioContext=null,lastBoing=-1;
+function prepareBoingAudio(){
+ const AudioContext=window.AudioContext||window.webkitAudioContext;if(!AudioContext)return;
+ boingAudioContext=boingAudioContext||new AudioContext();if(boingAudioContext.state==='suspended')boingAudioContext.resume().catch(()=>{});
+}
+function playTrampolineBoing(){
+ prepareBoingAudio();if(!boingAudioContext)return;
+ const options=[0,1,2].filter(i=>i!==lastBoing),variant=options[Math.floor(Math.random()*options.length)];lastBoing=variant;
+ const audio=boingAudioContext,now=audio.currentTime,duration=[.65,.78,.88][variant];
+ const tone=audio.createOscillator(),wobble=audio.createOscillator(),bend=audio.createGain(),envelope=audio.createGain(),level=audio.createGain();
+ tone.type='triangle';tone.frequency.setValueAtTime([280,350,230][variant],now);tone.frequency.exponentialRampToValueAtTime([65,80,55][variant],now+duration*.8);
+ wobble.frequency.value=[17,21,14][variant];bend.gain.setValueAtTime([65,80,50][variant],now);bend.gain.exponentialRampToValueAtTime(.1,now+duration);
+ wobble.connect(bend);bend.connect(tone.frequency);tone.connect(envelope);envelope.connect(level);level.connect(audio.destination);
+ envelope.gain.setValueAtTime(0,now);envelope.gain.linearRampToValueAtTime(.6,now+.008);envelope.gain.exponentialRampToValueAtTime(.001,now+duration);
+ if(activeActionSounds.size>=2){const old=[...activeActionSounds].find(sound=>sound.effectKind!=='landing');if(old){old.pause();activeActionSounds.delete(old);}else {tone.disconnect();wobble.disconnect();bend.disconnect();envelope.disconnect();level.disconnect();return;}}
+ let stopped=false;const sound={effectKind:'boing',effectVolume:.45,set volume(value){level.gain.value=value;},pause(){if(stopped)return;stopped=true;tone.stop();wobble.stop();}};
+ sound.volume=.45*(characterVoice&&!characterVoice.paused?.65:1);activeActionSounds.add(sound);impactQuietTime=0;
+ tone.onended=()=>{activeActionSounds.delete(sound);tone.disconnect();wobble.disconnect();bend.disconnect();envelope.disconnect();level.disconnect();};
+ tone.start(now);wobble.start(now);tone.stop(now+duration);wobble.stop(now+duration);
+}
 function playBodyImpact(speed=200){
  if(speed<120||bodyImpactCooldown>0||rag?.softLanding)return;
  bodyImpactCooldown=.7;stopCharacterVoice();playActionSound('landing');playActionSound('squish');
@@ -177,7 +197,7 @@ canvas.addEventListener('pointerdown',e=>{
 $('removeAttachment').onclick=()=>removeAttachment(selectedAttachment);
 document.querySelectorAll('[data-part]').forEach(button=>button.onclick=()=>{selected=button.dataset.part;pending=null;closeAttachmentAction();document.querySelectorAll('[data-part]').forEach(b=>{b.classList.toggle('selected',b===button);b.setAttribute('aria-pressed',String(b===button));});startNotice(button.textContent.trim()+' selected. Connect a frame socket to an arm socket.');});
 $('jetpackToggle').onclick=()=>{if(!['build','charged'].includes(phase))reset(false);jetpackMounted=!jetpackMounted;$('jetpackToggle').classList.toggle('selected',jetpackMounted);$('jetpackToggle').setAttribute('aria-pressed',String(jetpackMounted));};
-$('setupButton').onclick=()=>$('setupDialog').showModal();$('startGame').onclick=()=>{$('setupDialog').close();ambienceEnabled=true;startMapAmbience();playCharacterVoice('before');};
+$('setupButton').onclick=()=>$('setupDialog').showModal();$('startGame').onclick=()=>{$('setupDialog').close();ambienceEnabled=true;prepareBoingAudio();startMapAmbience();playCharacterVoice('before');};
 $('armLength').oninput=e=>{if(!e.target.checkValidity())return;armScale=e.target.value/100;$('armVal').textContent=e.target.value+'%';if(phase!=='build')reset(false);render()};$('angle').oninput=e=>{if(!e.target.checkValidity())return;releaseDeg=+e.target.value;$('angleVal').textContent=releaseDeg+'°';if(phase!=='build')reset(false);render()};$('reset').onclick=()=>{reset(true);playCharacterVoice('before');};$('charge').onclick=()=>{if(!connections.length){loadDemo()}reset(false);setPhase('charged');$('distanceText').textContent='0 ft';startNotice('<strong>Charged!</strong> The arm is pulled back. Press LAUNCH and see what happens.');render()};$('launch').onclick=()=>{if(phase!=='charged')return;phase='launching';omega=0;dummy=null;rag=null;flightStart=0;maxDist=0;setPhase('flying');phase='launching';startNotice('<strong>Launching!</strong> Stored elastic energy and leverage accelerate the arm.');};
 // Temporary industrial wall. A custom texture can replace these panels later.
 // Upload the supplied image as rusted_slaughter_wall.png beside index.html.
@@ -776,7 +796,7 @@ function bounceTrampolines(step){
   n.y-=shift;n.px=n.x-kickX*step;n.py=n.y-kickY*step;
  }
  rag.pinned={};rag.groundTime=0;rag.restTime=0;rag.settled=0;
- rag.bounceCooldown=.45;rag.trampolineStage=pad.stage;pad.flexAt=levelClock;
+ rag.bounceCooldown=.45;rag.trampolineStage=pad.stage;pad.flexAt=levelClock;playTrampolineBoing();
  if(!hitHazards.has(pad.id)){hitHazards.add(pad.id);hazardPoints+=pad.points;}
  startNotice('<strong>BOUNCE '+pad.stage+'/4!</strong> '+(pad.stage===3?'Back toward the final launch pad.':pad.stage===4?'Long launch — aim for the grinder!':'Keep following the trampoline route.'));
 }
