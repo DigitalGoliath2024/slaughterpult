@@ -88,3 +88,5 @@ Impact blood uses spatial bins for machinery and all pillow depths, so each drop
 Desktop launch buttons and tuning controls use larger text and targets. The header speaker opens independent master, character voice, impact/effect, rocket/jetpack, flight wind and music/ambiance sliders, plus mute and restore defaults. Settings apply to playing sounds immediately, retain existing balance and ducking, and persist in browser storage.
 
 Pistons act as fast launch rams: a strong initial push tapers to zero over 0.55 seconds, with full pressure up to 340px separation and a stroke taper ending at 420px. Mounting still supplies signed leverage. Boost pistons double ram force; hydraulic assist multiplies it by 1.9. Bands and springs retain their existing tuning.
+
+Piston-equipped launches mix one of the two supplied ram clips quietly with the catapult launch sound, with no immediate repeat and one ram voice per launch. The supplied installation clip plays when a regular or boost piston is connected. Both follow effects/master volume and mute.
