@@ -646,7 +646,7 @@ function positionTrafficProps(state,w,h){
  for(let bin=start;bin<start+Math.ceil(w/780)+3;bin++){
   for(let i=0;i<2;i++){
    const key='traffic:'+bin+':'+i,kind=i===0?['fold','gate','rail','jersey'][bin%4]:'cone',template=trafficTemplates.get(kind);if(!template)continue;
-   const height=kind==='cone'?62:kind==='jersey'?66:74;
+   const height=kind==='cone'?124:kind==='jersey'?66:74;
    const origin=roadsidePropPosition(state,bin*780+450+i*120,template.userData.widthRatio*height/2);if(origin===null)continue;
    if(Math.abs(origin-state.camera-w/2)>w/2+350)continue;window.launcherClearCushionsForProp?.(origin,template.userData.widthRatio*height/2);active.add(key);let root=trafficInstances.get(key);
    if(!root){root=template.clone(true);root.userData={...root.userData,dx:0,vx:0,angle:0,spin:0,knocked:false};root.scale.setScalar(height);const angles=[-.6,.35,Math.PI-.45,.65,-.25,Math.PI+.55];root.rotation.y=angles[(bin*2+i)%angles.length];scene.add(root);trafficInstances.set(key,root);}
@@ -1379,7 +1379,7 @@ function positionGore(state,w,h){
  }
  window.bodyCameraParts=goreParts.map(p=>({joint:p.userData.joint,x:p.userData.worldX,y:p.userData.worldY,resting:!!p.userData.resting,floorY:p.userData.floorY,extent:p.userData.contactExtent,radius:p.userData.radius}));
 }
-const balconyPotTemplates=[],balconyPotInstances=new Map();
+const balconyPotTemplates=[],balconyPotInstances=new Map();let balconyPotLastTime=0,balconyPotReset=-1,balconyPotPrevious=new Map();
 async function loadBalconyPots(){
  await Promise.allSettled(['flower_pot.glb','pot_flower_261120.glb'].map(async(file,index)=>{
   try{const gltf=await new GLTFLoader().register(trafficMaterialCompatibility).loadAsync('./'+file);gltf.scene.updateMatrixWorld(true);const flat=new THREE.Group();
@@ -1390,22 +1390,51 @@ async function loadBalconyPots(){
  }));
 }
 function positionBalconyPots(state,w,h){
- const active=new Set();
+ const now=performance.now()/1000,dt=Math.min(.1,Math.max(0,balconyPotLastTime?now-balconyPotLastTime:0));balconyPotLastTime=now;
+ if(balconyPotReset!==state.goreResetId){for(const root of balconyPotInstances.values())scene.remove(root);balconyPotInstances.clear();balconyPotPrevious.clear();balconyPotReset=state.goreResetId;}
+ const active=new Set(),contacts=[];
+ if(state.phase==='airborne'){
+  if(state.rag&&!state.shredded)for(const [joint,node] of Object.entries(state.rag))contacts.push({key:'body:'+joint,...node,radius:8});
+  for(const part of window.bodyCameraParts||[])contacts.push({key:'part:'+part.joint,...part,radius:Math.min(16,part.radius||8)});
+ }
  for(const balcony of state.hazards||[]){
   if(!balcony.balcony||Math.abs(balcony.x-state.camera-w/2)>w/2+balcony.width)continue;
   const count=balcony.width>=180?2:1;
   for(let i=0;i<count;i++){
    const key=balcony.id+':pot:'+i,seed=[...balcony.id].reduce((n,c)=>n+c.charCodeAt(0),0),variant=(seed+i)%2,template=balconyPotTemplates[variant]||balconyPotTemplates[1-variant];if(!template)continue;
-   active.add(key);let root=balconyPotInstances.get(key);if(!root){root=template.clone(true);root.userData.variant=variant;scene.add(root);balconyPotInstances.set(key,root);}
+   active.add(key);let root=balconyPotInstances.get(key);
+   if(!root){root=template.clone(true);root.userData={variant,knocked:false,angle:0};scene.add(root);balconyPotInstances.set(key,root);}
+   const data=root.userData;if(data.knocked)continue;
    const height=Math.max(24,Math.min(38,h*.048)),offset=count===1?0:(i===0?-.27:.27)*balcony.width;
    root.scale.setScalar(height);root.rotation.y=(seed*.37+i*1.7)%(Math.PI*2);
-   // Their bottom rests on the steel beam, at the same wall depth. Keep
-   // decoration separate from the beam's collision bounds and blood decals.
-   const top=balcony.balconyY-(balcony.beamThickness||10)/2;
-   root.position.set(balcony.x+offset-state.camera-w/2,h/2-top+(state.cameraY||0),-570);root.visible=true;
+   const top=balcony.balconyY-(balcony.beamThickness||10)/2,x=balcony.x+offset;
+   root.position.set(x-state.camera-w/2,h/2-top+(state.cameraY||0),-570);root.visible=true;root.updateMatrixWorld(true);
+   const bounds=new THREE.Box3().setFromObject(root),halfWidth=(bounds.max.x-bounds.min.x)/2;
+   for(const contact of contacts){
+    const previous=balconyPotPrevious.get(contact.key)||{x:contact.x-(contact.vx||0)*dt,y:contact.y-(contact.vy||0)*dt};
+    // Subtract each frame's perch position so scrolling never invents a hit.
+    const a={x:previous.x-(data.homeX??x),y:previous.y-(data.homeY??top)},b={x:contact.x-x,y:contact.y-top},r=contact.radius;
+    if(!trafficSegmentHit(a,b,{left:-halfWidth-r,right:halfWidth+r,top:-height-r,bottom:r}))continue;
+    const vx=contact.vx??(dt?(contact.x-previous.x)/dt:0),vy=contact.vy??(dt?(contact.y-previous.y)/dt:0);if(Math.hypot(vx,vy)<20)continue;
+    const direction=vx<0?-1:1;Object.assign(data,{knocked:true,worldX:x,worldY:top,vx:direction*Math.max(90,Math.min(340,Math.abs(vx)*.35)),vy:Math.min(-65,vy*.2-70),spin:-direction*(3+Math.min(7,Math.abs(vx)/90)),angle:0,resting:false});break;
+   }
+   data.homeX=x;data.homeY=top;
   }
  }
- for(const [key,root] of balconyPotInstances)if(!active.has(key))root.visible=false;
+ for(const [key,root] of balconyPotInstances){const data=root.userData;
+  if(data.knocked&&state.level==='slide'){
+   active.add(key);
+   for(let remaining=dt;remaining>0;){const step=Math.min(1/120,remaining);remaining-=step;if(!data.resting){
+    data.vy+=650*step;data.worldX+=data.vx*step;data.worldY+=data.vy*step;data.angle+=data.spin*step;
+    const ground=window.launcherGroundYAt?.(data.worldX)??h*.88;
+    if(data.worldY>=ground){data.worldY=ground;data.vy=0;data.vx*=Math.exp(-5*step);data.spin*=Math.exp(-7*step);data.angle+=(Math.sign(data.angle||1)*Math.PI/2-data.angle)*Math.min(1,step*12);if(Math.abs(data.vx)<3&&Math.abs(data.spin)<.1)data.resting=true;}
+   }}
+   root.rotation.z=data.angle;root.position.set(data.worldX-state.camera-w/2,h/2-data.worldY+(state.cameraY||0),-570);
+   const ground=window.launcherGroundYAt?.(data.worldX)??h*.88;if(data.worldY>=ground){root.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(root);root.position.y+=h/2-ground+(state.cameraY||0)-bounds.min.y;}
+   root.visible=Math.abs(data.worldX-state.camera-w/2)<w/2+100;
+  }else if(!active.has(key))root.visible=false;
+ }
+ balconyPotPrevious=new Map(contacts.map(contact=>[contact.key,{x:contact.x,y:contact.y}]));
 }
 const parkFencePosts=new Map();
 const industrialBeamTemplates=new Map(),industrialBeamInstances=new Map(),boardBeamSupports=new Map(),beamBackdropInstances=new Map();window.industrialBeamOverlayReady=false;
@@ -1541,7 +1570,6 @@ function animate(){
  positionNailBoards(state,w,h);
  positionLevelMachinery(state,w,h);
  positionIndustrialBeams(state,w,h);
- positionBalconyPots(state,w,h);
  positionWeapons(state,w,h);
  positionWallDolls(state,w,h);
  positionSceneryBed(state,w,h);
@@ -1552,6 +1580,7 @@ function animate(){
  positionCrows(state,w,h);
  positionTrampolines(state,w,h);
  positionGore(state,w,h);
+ positionBalconyPots(state,w,h);
  if(model&&window.characterOverlayReady&&!window.seatLoading){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
