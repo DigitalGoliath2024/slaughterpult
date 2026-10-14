@@ -434,7 +434,7 @@ for(let i=0;i<14;i++){const a=i*Math.PI*2/13,r=.78+.15*Math.sin(i*4.2);const x=M
 const lipBloodGeometry=new THREE.ShapeGeometry(lipBloodShape);
 const lipBloodMaterial=new THREE.MeshBasicMaterial({color:0x870b16,transparent:true,opacity:.9,depthWrite:false});
 function positionMachineLipBlood(root,template,hazard,state,width,centerY){
- if(!root.userData.lipBlood){root.userData.lipBlood=new Map();root.userData.lipFront=new THREE.Box3().setFromObject(template).max.z+.006;}
+ if(!root.userData.lipBlood){root.userData.lipBlood=new Map();root.userData.lipFront=new THREE.Box3().setFromObject(template).max.z+.006;root.userData.projectedLipFront=new THREE.Box3().setFromObject(root).max.z-root.position.z+.5;}
  const marks=root.userData.lipBlood;
  if(root.userData.bloodReset!==state.goreResetId){for(const mesh of marks.values())root.remove(mesh);marks.clear();root.userData.bloodReset=state.goreResetId;}
  const active=new Set(),scale=root.scale.x;
@@ -445,6 +445,7 @@ function positionMachineLipBlood(root,template,hazard,state,width,centerY){
   const bloodY=state.machineLipBlood&&Number.isFinite(stain.y)?stain.y:centerY;
   mesh.position.set(x/scale,(centerY-bloodY)/scale,root.userData.lipFront);
   mesh.scale.set(stain.size*1.65/scale,Math.max(1,stain.size*.32)/scale,1);mesh.visible=true;
+  if(template.userData.kind==='twin'){root.updateMatrixWorld(true);mesh.position.copy(root.worldToLocal(new THREE.Vector3(root.position.x+x,root.position.y+centerY-bloodY,root.position.z+root.userData.projectedLipFront)));mesh.quaternion.copy(root.quaternion).invert();}
   if(Number.isFinite(stain.drumAngle)){const angle=stain.drumAngle,radius=template.userData.heightRatio/2+.004;mesh.position.set(x/scale,Math.cos(angle)*radius,Math.sin(angle)*radius);mesh.rotation.x=angle-Math.PI/2;}
  }
  for(const [id,mesh] of marks)if(!active.has(id)){root.remove(mesh);marks.delete(id);}
@@ -473,7 +474,7 @@ function positionLevelMachinery(state,w,h){
   const centerY=kind==='spiked'?floor-106:floor-height/2;
   root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),35);
   window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,bloodTop:kind==='hopper'&&template.userData.bloodHeightRatio?floor-template.userData.bloodHeightRatio*width/root.userData.facingWidth:undefined,centerY,height,width,kind,feedBelt:hazard.feedBelt};
-  if(kind==='hopper'||kind==='spiked')positionMachineLipBlood(root,template,hazard,state,width,centerY);
+  if(kind==='hopper'||kind==='spiked'||kind==='twin')positionMachineLipBlood(root,template,hazard,state,width,centerY);
   if(!root.userData.cutters&&window.weaponOverlayReady){
    const cutter=hazard.impactLauncher?'bat':['axe','machete','knife'][Math.floor(hazard.x/100)%3];
    for(const motor of root.children.filter(p=>p.userData.motorAxis)){
@@ -497,6 +498,7 @@ function positionLevelMachinery(state,w,h){
    post.updateMatrixWorld(true);const mouth=post.localToWorld(new THREE.Vector3(post.userData.outlet.x,post.userData.outlet.y,post.userData.outlet.z));
    window.apparatusVents.push({id:key+':'+post.userData.side,x:mouth.x+state.camera+w/2,y:h/2-mouth.y+(state.cameraY||0),dir:post.userData.side,type:hazard.impactLauncher?'steam':post.userData.side<0?'fire':'steam'});
   }
+  if(hazard.attachedWall){root.updateMatrixWorld(true);support.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(root);bounds.union(new THREE.Box3().setFromObject(support));window.machineBloodSurfaces[hazard.id].hitBounds={left:bounds.min.x+state.camera+w/2,right:bounds.max.x+state.camera+w/2,top:h/2-bounds.max.y+(state.cameraY||0),bottom:h/2-bounds.min.y+(state.cameraY||0)};}
  }
  for(const [key,root] of machineryInstances)if(!active.has(key)){root.visible=false;root.userData.support.visible=false;}
 }
@@ -817,6 +819,7 @@ async function loadGoreAsset(){
   const g=await new GLTFLoader().loadAsync('./skeleton_gore_model.glb');
   goreAsset=g.scene;
   goreAsset.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
+  warmGoreParts();
  }catch(e){console.warn('Gore asset could not load',e);}
 }
 // Match named meshes from the supplied skeleton GLB to their actual anatomy.
@@ -950,14 +953,14 @@ function buildGorePart(joint){
   // Use deterministic mesh attributes rather than random billboard squares.
   const pos=geometry.getAttribute('position');
   if(pos){
-   const tintColors=[];
+   const tintColors=new Float32Array(pos.count*3),base=new THREE.Color(),bloodColor=new THREE.Color(0x71050d);
    for(let j=0;j<pos.count;j++){
     const x=pos.getX(j),y=pos.getY(j),z=pos.getZ(j);
     const stain=Math.sin(x*9.7+y*13.1+z*7.3)*Math.cos(x*15.7-z*11.9);
     const bloody=stain>.46;
-    const base=new THREE.Color(isBone?0xf2e9d8:isMuscle?0xbb2935:0x8e242b);
-    if(bloody)base.lerp(new THREE.Color(0x71050d),isBone?.88:.45);
-    tintColors.push(base.r,base.g,base.b);
+    base.set(isBone?0xf2e9d8:isMuscle?0xbb2935:0x8e242b);
+    if(bloody)base.lerp(bloodColor,isBone?.88:.45);
+    tintColors[j*3]=base.r;tintColors[j*3+1]=base.g;tintColors[j*3+2]=base.b;
    }
    geometry.setAttribute('color',new THREE.Float32BufferAttribute(tintColors,3));
    mat.color.set(0xffffff);
@@ -1016,17 +1019,26 @@ function clearGoreParts(){
   scene.remove(p);
   p.traverse(o=>{if(o.isMesh)o.geometry.dispose();});
  }
- goreParts=[];goreWasShredded=false;window.bodyCameraParts=[];
+ goreParts=[];goreWasShredded=false;window.bodyCameraParts=[];warmGoreParts();
 }
 // Detached gore is a separate ballistic simulation; physics nodes may be pinned
 // to equipment or finish at rest above the floor and must not suspend visuals.
 let goreLastTime=0;
+const readyGoreParts=new Map();
+let goreWarmTimer=null;
+function warmGoreParts(){
+ if(!goreAsset||goreWarmTimer!==null)return;
+ const next=Object.keys(GORE_MAP).find(joint=>!readyGoreParts.has(joint)&&!goreParts.some(p=>p.userData.joint===joint));
+ if(!next)return;
+ goreWarmTimer=setTimeout(()=>{goreWarmTimer=null;const part=buildGorePart(next);readyGoreParts.set(next,part);warmGoreParts();},0);
+}
 function positionGore(state,w,h){
  const fullShred=!!state.shredded,headOnly=!!state.headDetached;
  const detached=new Set(state.injuries||[]);
  if((!fullShred&&!headOnly&&!detached.size)||!state.rag){window.bodyCameraParts=[];if(goreParts.length)clearGoreParts();goreLastTime=0;return;}
  const now=performance.now();
- const dt=goreLastTime?Math.min(.035,(now-goreLastTime)/1000):1/60;
+ const elapsed=goreLastTime?Math.min(.25,Math.max(0,(now-goreLastTime)/1000)):1/60;
+ const steps=Math.max(1,Math.ceil(elapsed/(1/120))),dt=elapsed/steps;
  goreLastTime=now;
  const severedParts={'neck:head':'head','le:lh':'lh','re:rh':'rh','lk:lf':'lf','rk:rf':'rf','ls:le':'le','rs:re':'re','hip:lk':'lk','hip:rk':'rk','hip:waist':'chest'};
  const removed=new Set([...detached].map(x=>severedParts[x]).filter(Boolean));
@@ -1038,7 +1050,7 @@ function positionGore(state,w,h){
  for(const joint of joints){
   if(goreParts.some(p=>p.userData.joint===joint)||!goreAsset)continue;
   // Exposed anatomy replaces the removed skin region, never duplicates it.
-  const part=buildGorePart(joint);if(!part)continue;
+  const part=readyGoreParts.get(joint)||buildGorePart(joint);readyGoreParts.delete(joint);if(!part)continue;
   const node=state.rag[joint]||state.rag.chest;
   // Nearby but varied scatter: inherit the ragdoll's impact momentum,
   // then add limited independent kicks, not long-range explosions.
@@ -1054,7 +1066,7 @@ function positionGore(state,w,h){
   part.userData.resting=false;
   scene.add(part);goreParts.push(part);
  }
- for(const p of goreParts){
+ for(let step=0;step<steps;step++)for(const p of goreParts){
   const floor=window.launcherSupportYAt?window.launcherSupportYAt(p.userData.worldX):h*.88;
   const u=p.userData;
   if(u.joint==='rh'){
