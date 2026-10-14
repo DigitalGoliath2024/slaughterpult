@@ -112,3 +112,7 @@ Qualifying runs prompt once after settling, or on reset/course selection/Exit to
 Database permissions allow public reading and validated new inserts, with no public updates/deletes or client-supplied timestamps. Historical month values are validated for legacy imports. This casual leaderboard uses client-reported scores; it does not verify gameplay server-side or prevent fabricated score requests.
 
 Creator-supplied source links and credits are retained in `ASSET_CREDIT_OVERRIDES.json`. The credits generator applies them to matching uploaded files (or embedded titles), retains pending asset credits, and preserves them on deployment. These additions do not enable or place new assets in the game.
+
+The supplied `board_with_nails_in_blood.glb` now renders on every existing nail ramp, replacing drawn planks and substitute weapon meshes while retaining the authored ramp position, slope and collision logic. Original model textures are preserved; its board surface is aligned to the simulated ramp and nails extend to the existing tip height. DISMHa_Ha attribution is included.
+
+The launcher now has a lit 3D steel frame with I-section legs and arm, foot plates, triangular gussets, hex bolts, pivot bearing and mounting collars. It uses the same pivot, arm scale and theta as the existing simulation; the uploaded cradle remains attached as before. Attachments and sockets remain functional. Non-WebGL fallback beams also use steel colors. No physics or course placement was changed.

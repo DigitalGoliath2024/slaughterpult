@@ -159,6 +159,13 @@
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
       "source": "https://sketchfab.com/3d-models/western-cowboy-rigged-160bf043b71c458984c81c717b7483c9",
       "title": "Western Cowboy (Rigged)"
+    },
+    {
+      "author": "DISMHa_Ha",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://skfb.ly/oATtL",
+      "title": "Board with nails in blood",
+      "file": "board_with_nails_in_blood.glb"
     }
   ],
   "uploaded_files": [
@@ -177,6 +184,7 @@
     "blood_dripping_1.mp3",
     "blood_dripping_2.mp3",
     "blood_splatter (1).glb",
+    "board_with_nails_in_blood.glb",
     "body_in_kniferoller.mp3",
     "body_landing_on_ceme_1-1791933948614.mp3",
     "body_landing_on_ceme_2-1791933948615.mp3",

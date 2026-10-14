@@ -791,7 +791,7 @@ function positionWeapons(state,w,h){
  const active=new Set();
  for(const hazard of state.hazards||[]){
   if(Math.abs(hazard.x-state.camera-w/2)>w/2+hazard.width+250)continue;
-  if(!['press','ramp'].includes(hazard.kind))continue;
+  if(!['press','ramp'].includes(hazard.kind)||hazard.kind==='ramp'&&window.nailBoardOverlayReady)continue;
   active.add(hazard.id);
   let root=weaponStations.get(hazard.id);
   if(!root){root=makeWeaponStation(hazard);weaponStations.set(hazard.id,root);}
@@ -1198,6 +1198,61 @@ function positionGore(state,w,h){
  }
  window.bodyCameraParts=goreParts.map(p=>({joint:p.userData.joint,x:p.userData.worldX,y:p.userData.worldY,resting:!!p.userData.resting,floorY:p.userData.floorY,extent:p.userData.contactExtent,radius:p.userData.radius}));
 }
+let steelFrame=null,steelArm=null,nailBoardTemplate=null;
+const nailBoardInstances=new Map();window.nailBoardOverlayReady=false;window.catapultFrameReady=false;
+function positionSteelCatapult(state,w,h){
+ if(!state.pivot)return;
+ const floorDistance=h*.88-state.pivot.y;
+ if(!steelFrame||steelFrame.userData.floorDistance!==floorDistance){
+  if(steelFrame){scene.remove(steelFrame);steelFrame.traverse(o=>{if(o.isMesh)o.geometry.dispose();});}
+  steelFrame=new THREE.Group();steelFrame.userData.floorDistance=floorDistance;
+  const steel=new THREE.MeshStandardMaterial({color:0x52616a,metalness:.65,roughness:.48}),edge=new THREE.MeshStandardMaterial({color:0x9eabb0,metalness:.72,roughness:.35}),dark=new THREE.MeshStandardMaterial({color:0x252e33,metalness:.55,roughness:.62});
+  function block(parent,length,height,depth,x,y,z,mat=steel){const mesh=new THREE.Mesh(new THREE.BoxGeometry(length,height,depth),mat);mesh.position.set(x,y,z);parent.add(mesh);return mesh;}
+  function girder(parent,x1,y1,x2,y2,width=18,z=-12){const length=Math.hypot(x2-x1,y2-y1),beam=new THREE.Group();beam.position.set((x1+x2)/2,(y1+y2)/2,z);beam.rotation.z=Math.atan2(y2-y1,x2-x1);block(beam,length,width-4,8,0,0,0);block(beam,length,3,25,0,width/2,0,edge);block(beam,length,3,25,0,-width/2,0,edge);parent.add(beam);return beam;}
+  function bolt(parent,x,y,z,r=4){const mesh=new THREE.Mesh(new THREE.CylinderGeometry(r,r,3,6),edge);mesh.rotation.x=Math.PI/2;mesh.position.set(x,y,z);parent.add(mesh);}
+  girder(steelFrame,-155,-floorDistance+9,155,-floorDistance+9,20);
+  for(const side of [-1,1]){
+   girder(steelFrame,side*126,-floorDistance+17,0,0,22);
+   block(steelFrame,68,7,58,side*126,-floorDistance+3,-12,dark);
+   for(const x of [side*126-22,side*126+22])bolt(steelFrame,x,-floorDistance+10,18,4);
+   // Welded triangular gussets brace the leg-to-base and pivot joints.
+   const shape=new THREE.Shape();shape.moveTo(side*126,-floorDistance+20);shape.lineTo(side*94,-floorDistance+20);shape.lineTo(side*107,-floorDistance+52);shape.closePath();
+   const plate=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:4,bevelEnabled:false}),dark);plate.position.z=6;steelFrame.add(plate);
+   bolt(steelFrame,side*111,-floorDistance+29,12);bolt(steelFrame,side*12,-12,10);
+  }
+  girder(steelFrame,-105,-floorDistance+27,105,-floorDistance+27,14,-4);
+  block(steelFrame,48,40,22,0,-5,-13,dark);
+  const collar=new THREE.Mesh(new THREE.CylinderGeometry(18,18,34,24),edge);collar.rotation.x=Math.PI/2;collar.position.z=0;steelFrame.add(collar);
+  const hub=new THREE.Mesh(new THREE.CylinderGeometry(11,11,5,16),dark);hub.rotation.x=Math.PI/2;hub.position.z=20;steelFrame.add(hub);bolt(steelFrame,0,0,24,6);
+  steelArm=new THREE.Group();steelArm.position.z=-4;
+  block(steelArm,343,13,9,56.5,0,0,steel);block(steelArm,343,3,26,56.5,8,0,edge);block(steelArm,343,3,26,56.5,-8,0,edge);
+  for(const x of [-110,-75,-40,35,70,110,150,195])bolt(steelArm,x,0,15,3);
+  steelFrame.add(steelArm);scene.add(steelFrame);window.catapultFrameReady=true;
+ }
+ steelFrame.visible=state.camera<750;steelFrame.position.set(state.pivot.x-state.camera-w/2,h/2-state.pivot.y+(state.cameraY||0),-10);
+ steelArm.rotation.z=state.theta;steelArm.scale.x=state.armScale||1;
+}
+async function loadNailBoard(){
+ try{
+  const gltf=await new GLTFLoader().loadAsync('./board_with_nails_in_blood.glb');gltf.scene.updateMatrixWorld(true);
+  const rotation=new THREE.Matrix4().makeRotationZ(-Math.PI/2),template=new THREE.Group();let boardBounds=null;
+  gltf.scene.traverse(source=>{if(!source.isMesh)return;const geometry=source.geometry.clone();geometry.applyMatrix4(source.matrixWorld);geometry.applyMatrix4(rotation);geometry.computeBoundingBox();if(/board_low/i.test(source.name))boardBounds=geometry.boundingBox.clone();const mesh=new THREE.Mesh(geometry,source.material);template.add(mesh);});
+  if(!boardBounds)throw Error('Uploaded board mesh is missing');
+  const center=boardBounds.getCenter(new THREE.Vector3()),length=boardBounds.max.x-boardBounds.min.x;
+  for(const mesh of template.children){mesh.geometry.translate(-center.x,-boardBounds.max.y,-center.z);mesh.geometry.scale(1/length,1/length,1/length);}
+  const bounds=new THREE.Box3().setFromObject(template);template.userData.nailHeight=Math.max(.01,bounds.max.y);nailBoardTemplate=template;window.nailBoardOverlayReady=true;
+ }catch(e){console.warn('Uploaded nail board could not load',e);}
+}
+function positionNailBoards(state,w,h){
+ if(!nailBoardTemplate)return;const active=new Set();
+ for(const hazard of state.hazards||[]){if(hazard.kind!=='ramp'||Math.abs(hazard.x-state.camera-w/2)>w/2+hazard.width+150)continue;
+  const key=state.level+':'+hazard.id;active.add(key);let root=nailBoardInstances.get(key);if(!root){root=nailBoardTemplate.clone(true);nailBoardInstances.set(key,root);scene.add(root);}
+  const slope=hazard.slope||0,length=hazard.width*Math.sqrt(1+slope*slope),centerY=h*.88-hazard.y+hazard.width*.5*slope;
+  root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),28);root.rotation.z=-Math.atan(slope);root.scale.set(length,26/nailBoardTemplate.userData.nailHeight,length);root.visible=true;
+ }
+ for(const [key,root] of nailBoardInstances)if(!active.has(key))root.visible=false;
+}
+
 function animate(){
  requestAnimationFrame(animate);
  if(!renderer||!camera)return;
@@ -1206,7 +1261,9 @@ function animate(){
  if(!w||!h)return;
  if(canvas.width!==Math.round(w*renderer.getPixelRatio())||canvas.height!==Math.round(h*renderer.getPixelRatio()))renderer.setSize(w,h,false);
  camera.left=-w/2;camera.right=w/2;camera.top=h/2;camera.bottom=-h/2;camera.updateProjectionMatrix();
+ positionSteelCatapult(state,w,h);
  positionChair(state,w,h);
+ positionNailBoards(state,w,h);
  positionLevelMachinery(state,w,h);
  positionWeapons(state,w,h);
  positionWallDolls(state,w,h);
@@ -1300,5 +1357,5 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();animate();}
 
