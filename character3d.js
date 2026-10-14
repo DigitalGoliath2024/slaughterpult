@@ -846,6 +846,72 @@ function positionSceneryBed(state,w,h){
  sceneryBed.visible=['factory','trampoline','circus'].includes(state.level)&&Math.abs(x-state.camera-w/2)<w/2+200;
  sceneryBed.position.set(x-state.camera-w/2,h/2-ground+(state.cameraY||0),-55);
 }
+
+let carcassTemplate=null,carcassRail=null,carcassLastTime=0,carcassReset=-1;
+const carcassInstances=new Map();let carcassPrevious=new Map();
+async function loadCarcasses(){
+ try{
+  const gltf=await new GLTFLoader().loadAsync('./pig_carcass.glb');gltf.scene.updateMatrixWorld(true);
+  const flat=new THREE.Group();
+  gltf.scene.traverse(mesh=>{if(mesh.isMesh){const geometry=mesh.geometry.clone();geometry.applyMatrix4(mesh.matrixWorld);flat.add(new THREE.Mesh(geometry,mesh.material));}});
+  const box=new THREE.Box3().setFromObject(flat),center=box.getCenter(new THREE.Vector3()),height=box.max.y-box.min.y;
+  if(height<=0)throw Error('Empty carcass model');
+  for(const mesh of flat.children){mesh.geometry.translate(-center.x,-center.y,-center.z);mesh.geometry.scale(1/height,1/height,1/height);}
+  carcassTemplate=flat;
+ }catch(error){console.warn('Carcass asset unavailable',error);}
+}
+function positionCarcasses(state,w,h){
+ const now=performance.now()/1000,dt=Math.min(.05,Math.max(0,carcassLastTime?now-carcassLastTime:0));carcassLastTime=now;
+ if(carcassReset!==state.goreResetId){for(const item of carcassInstances.values()){scene.remove(item.body);scene.remove(item.hook);item.hook.geometry.dispose();}carcassInstances.clear();carcassPrevious.clear();carcassReset=state.goreResetId;}
+ if(state.level!=='factory'||!carcassTemplate){if(carcassRail)carcassRail.visible=false;for(const item of carcassInstances.values()){item.body.visible=false;item.hook.visible=false;}carcassPrevious.clear();return;}
+ if(!carcassRail){carcassRail=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1,0,0),new THREE.Vector3(1,0,0)]),carcassHookMaterial);scene.add(carcassRail);}
+ carcassRail.visible=true;carcassRail.scale.x=w/2+100;carcassRail.position.set(0,h/2-h*.18+(state.cameraY||0),-40);
+ const random=n=>{const v=Math.sin(n*12.9898+78.233)*43758.5453;return v-Math.floor(v);},contacts=[];
+ if(state.phase==='airborne'){
+  if(state.rag&&!state.shredded)for(const [joint,node] of Object.entries(state.rag))contacts.push({key:'body:'+joint,...node,radius:9});
+  for(const part of window.bodyCameraParts||[])contacts.push({key:'part:'+part.joint,...part,radius:Math.min(18,part.radius||9)});
+ }
+ const end=Math.max(20000,...(state.hazards||[]).map(item=>item.x+item.width/2));
+ const start=Math.max(0,Math.floor((state.camera-250)/520));
+ for(let bin=start;bin<=Math.min(Math.ceil(end/520),start+Math.ceil(w/520)+2);bin++){
+  if(random(bin+405)<.24)continue;
+  const x=700+bin*520+random(bin+88)*180;if(x>end)continue;
+  let item=carcassInstances.get(bin);
+  if(!item){
+   const body=carcassTemplate.clone(true),size=115+random(bin+19)*35;body.scale.setScalar(size);body.rotation.y=(random(bin+33)-.5)*.7;
+   const points=[new THREE.Vector3(0,28,0),new THREE.Vector3(0,5,0),new THREE.Vector3(7,0,0),new THREE.Vector3(12,5,0),new THREE.Vector3(9,11,0)];
+   const hook=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),carcassHookMaterial);
+   item={body,hook,size,x,y:0,knocked:false,resting:false,angle:0};scene.add(body);scene.add(hook);carcassInstances.set(bin,item);
+  }
+  item.homeX=x;item.homeY=h*.18+28+item.size/2;
+ }
+ for(const [bin,item] of carcassInstances){
+  const {body,hook,size}=item;
+  hook.position.set(item.homeX-state.camera-w/2,h/2-(h*.18+28)+(state.cameraY||0),-40);hook.visible=Math.abs(item.homeX-state.camera-w/2)<w/2+120;
+  if(!item.knocked){
+   item.x=item.homeX;item.y=item.homeY;item.angle=Math.sin(now*.7+bin)*.035;
+   for(const contact of contacts){
+    const previous=carcassPrevious.get(contact.key)||{x:contact.x-(contact.vx||0)*dt,y:contact.y-(contact.vy||0)*dt};
+    const r=contact.radius;if(!trafficSegmentHit(previous,contact,{left:item.x-size*.28-r,right:item.x+size*.28+r,top:item.y-size/2-r,bottom:item.y+size/2+r}))continue;
+    const vx=contact.vx??0,vy=contact.vy??0;if(Math.hypot(vx,vy)<25)continue;
+    item.knocked=true;item.vx=Math.max(-320,Math.min(320,vx*.25));item.vy=Math.min(100,vy*.2);item.spin=(vx<0?1:-1)*2;
+    window.launcherCarcassScore?.('factory:carcass:'+bin,item.x,item.y);break;
+   }
+  }
+  if(item.knocked&&!item.resting){
+   item.vy+=650*dt;item.x+=item.vx*dt;item.y+=item.vy*dt;item.angle+=item.spin*dt;
+  }
+  body.rotation.z=item.angle;body.position.set(item.x-state.camera-w/2,h/2-item.y+(state.cameraY||0),-35);
+  if(item.knocked){
+   const ground=window.launcherGroundYAt?.(item.x)??h*.88;body.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(body),floor=h/2-ground+(state.cameraY||0);
+   if(bounds.min.y<=floor){body.position.y+=floor-bounds.min.y;item.y=h/2+(state.cameraY||0)-body.position.y;item.vy=0;item.vx=0;item.spin=0;item.resting=true;}
+  }
+  body.visible=Math.abs(item.x-state.camera-w/2)<w/2+size;
+ }
+ carcassPrevious=new Map(contacts.map(contact=>[contact.key,{x:contact.x,y:contact.y}]));
+}
+const carcassHookMaterial=new THREE.LineBasicMaterial({color:0x899398});
+
 const wallDolls=[];
 let dollLastTime=0;
 async function loadWallDolls(){
@@ -1577,6 +1643,7 @@ function animate(){
  positionIndustrialBeams(state,w,h);
  positionWeapons(state,w,h);
  positionWallDolls(state,w,h);
+ positionCarcasses(state,w,h);
  positionSceneryBed(state,w,h);
  positionBackdropMachines(state,w,h);
  positionScenerySigns(state,w,h);
@@ -1686,7 +1753,7 @@ if(renderer){
  Promise.allSettled([loadChair(),load('cowboy')]).then(()=>queueSceneAssets([
   loadIndustrialBeams,loadLevelMachinery,loadNailBoard,loadWeapons,loadGoreAsset,
   loadCushions,loadTrafficProps,loadScenerySigns,loadCrows,loadBalconyPots,
-  loadJetpack,loadRocket,loadTrampolines,loadWallDolls,loadSceneryBed,loadBackdropMachines
+  loadJetpack,loadRocket,loadTrampolines,loadCarcasses,loadWallDolls,loadSceneryBed,loadBackdropMachines
  ]));
 }
 
