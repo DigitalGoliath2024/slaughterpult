@@ -1231,7 +1231,7 @@ function positionGore(state,w,h){
  }
  for(let step=0;step<steps;step++)for(const p of goreParts){
   const floor=window.launcherSupportYAt?window.launcherSupportYAt(p.userData.worldX):h*.88;
-  const u=p.userData;u.trampolineCooldown=Math.max(0,(u.trampolineCooldown||0)-dt);
+  const u=p.userData;u.trampolineCooldown=Math.max(0,(u.trampolineCooldown||0)-dt);u.surfaceContact=Math.max(0,(u.surfaceContact||0)-dt);
   if(u.joint==='rh'){
    // Keep the existing forearm/hand fragment; fingertips lead its creeping
    // direction and its lower surface rests against the floor.
@@ -1247,6 +1247,7 @@ function positionGore(state,w,h){
   u.floorY=floor+floorDepth;u.contactExtent=contactExtent;
   let belt=conveyors.find(hazard=>hazard.id===u.conveyorId);
   if(belt){
+   u.surfaceContact=.25;
    const end=belt.x+belt.width/2;
    const previousX=u.worldX;u.worldX+=beltSpeed*dt;window.launcherDebrisTravel?.(u.joint,previousX,u.worldY,u.worldX,u.worldY,contactExtent);u.vx=beltSpeed;u.vy=0;u.resting=false;u.originX=u.worldX;
    const top=h*.88+(belt.groundOffset||0)-77;
@@ -1273,6 +1274,7 @@ function positionGore(state,w,h){
    const collision=window.launcherMachineCollision?.(oldX,oldY,u.worldX,u.worldY,machineExtent,null);
    // Conveyor top contacts are handled below so they carry, rather than bounce, debris.
    if(collision&&!(collision.hazard.kind==='conveyor'&&collision.ny===-1)){
+    if(collision.ny<-.35)u.surfaceContact=.25;
     if(collision.hazard.balcony)window.launcherBalconyHit?.(collision.hazard.id,u.worldX,u.worldY);
     const inward=u.vx*collision.nx+u.vy*collision.ny;
     if(inward<0){const response=collision.hazard.kind==='roller'?1.12:1.5;u.vx-=response*inward*collision.nx;u.vy-=response*inward*collision.ny;if((u.machineSoundTime||0)<=now-100)window.launcherPartGroundImpact?.(u.joint,-inward);u.machineSoundTime=now;}
@@ -1289,7 +1291,7 @@ function positionGore(state,w,h){
     if(Math.abs(hitX-pad.x)>pad.width/2-8)continue;
     u.worldX=hitX;u.worldY=surface(hitX)-contactExtent-1;
     u.vx=(Number.isFinite(pad.vx)?pad.vx:300)+THREE.MathUtils.clamp(u.vx*.15,-140,140);u.vy=Math.min(-700,pad.vy||-1100);
-    u.trampolineCooldown=.18;u.freeTravel=true;u.originX=hitX;u.resting=false;u.visualGrounded=false;u.conveyorId=null;u.bounces=0;u.spin=-u.spin;
+    u.surfaceContact=.25;u.trampolineCooldown=.18;u.freeTravel=true;u.originX=hitX;u.resting=false;u.visualGrounded=false;u.conveyorId=null;u.bounces=0;u.spin=-u.spin;
     window.launcherDebrisTrampolineHit?.(pad.id);window.launcherDebrisScore?.(pad.id,u.joint,u.worldX,u.worldY);break;
    }
    if(u.vy>0)for(const candidate of conveyors){
@@ -1298,12 +1300,12 @@ function positionGore(state,w,h){
     const fraction=Math.max(0,Math.min(1,(target-oldY)/(u.worldY-oldY||1))),hitX=oldX+(u.worldX-oldX)*fraction;
     if(hitX<candidate.x-candidate.width/2||hitX>candidate.x+candidate.width/2)continue;
     if(u.vy>45)window.launcherPartGroundImpact?.(u.joint,u.vy);
-    window.launcherDebrisScore?.(candidate.id,u.joint,hitX,top);u.conveyorId=candidate.id;u.worldX=hitX;u.worldY=target;u.originX=hitX;u.vx=beltSpeed;u.vy=0;u.resting=false;u.visualGrounded=false;u.floorY=top;break;
+    window.launcherDebrisScore?.(candidate.id,u.joint,hitX,top);u.surfaceContact=.25;u.conveyorId=candidate.id;u.worldX=hitX;u.worldY=target;u.originX=hitX;u.vx=beltSpeed;u.vy=0;u.resting=false;u.visualGrounded=false;u.floorY=top;break;
    }
    if(u.worldY<groundY-6)u.visualGrounded=false;
    if(!u.conveyorId&&u.worldY>=groundY){
     if(!u.visualGrounded&&u.vy>45&&!window.launcherCushionContact?.(u.worldX))window.launcherPartGroundImpact?.(u.joint,u.vy);
-    u.visualGrounded=true;
+    u.visualGrounded=true;u.surfaceContact=.25;
     if(!u.pillowImpact&&window.launcherCushionContact?.(u.worldX)){window.launcherCushionImpact?.(u.worldX,u.vy,Math.sign(u.vx));u.pillowImpact=true;}
     u.worldY=groundY;
     // Keep the orientation earned during the tumble, not a prescribed side pose.
@@ -1339,10 +1341,11 @@ function positionGore(state,w,h){
    }
   }
   if(u.joint==='head'&&u.eyes){
+   const eyesAwake=u.resting||!!u.conveyorId||(u.surfaceContact||0)>0;
    u.eyeTime+=dt;
    // Natural eyes: irregular pauses, small tracking motions, occasional
    // rapid saccades. No fixed repeating gaze sequence.
-   if(u.resting){
+   if(eyesAwake){
     if(u.nextLook===undefined)u.nextLook=0;
     if(u.eyeTime>=u.nextLook){
      const glance=Math.random();
@@ -1358,7 +1361,7 @@ function positionGore(state,w,h){
      u.nextBlink=u.eyeTime+2+Math.random()*4;
     }
    }
-   const awake=u.resting?1:0;
+   const awake=eyesAwake?1:0;
    const ease=1-Math.exp(-(u.lookSpeed||7)*dt);
    u.gazeX=(u.gazeX||0)+((u.targetGazeX||0)*awake-(u.gazeX||0))*ease;
    u.gazeY=(u.gazeY||0)+((u.targetGazeY||0)*awake-(u.gazeY||0))*ease;
