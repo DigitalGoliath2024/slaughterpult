@@ -94,3 +94,9 @@ Piston-equipped launches mix one of the two supplied ram clips quietly with the 
 Pull Back animates the arm from its raised build pose (2.95 radians) down to the existing charged pose (3.39 radians) over 0.6 seconds. Launch becomes available when the pull finishes. Charged angle, torque, release timing and launch tuning remain unchanged. Reset cancels the pull.
 
 Detached skulls and limbs collide with conveyor tops using swept downward contact. Belts carry them at the same 180px/s speed as the visible tread; skulls roll, limbs tumble, and parts resume gravity with belt momentum past the outlet. All course ground offsets are respected and underside passes remain free.
+
+Ragdoll nodes and detached bones use swept solid machinery contacts, including high-speed crossings, side hits and underside hits. Rendered GLB housing/support bounds supply collision boxes; 2D press, gate and conveyor surfaces supply their drawn bounds. Incoming normal velocity reflects with reduced energy while tangential motion remains. Conveyor top carrying and cutter damage remain active. A final body pass prevents joint constraints pulling limbs inside machinery.
+
+Striped hopper housings use separate left/right wall and base colliders. Their central 64% intake stays open; entering bodies can reach the existing shred zone while rim hits bounce.
+
+Knife rollers likewise retain a through passage between solid upper/lower housing bands so the conveyor feed can reach their existing cutting contacts and outlet.

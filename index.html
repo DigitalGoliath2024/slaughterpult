@@ -929,6 +929,53 @@ function segmentHitsMachine(x0,y0,x1,y1,box,padding){
  }
  return true;
 }
+// Solid housings use swept contacts so high-speed parts cannot skip through them.
+function machineCollision(x0,y0,x1,y1,radius=8,skipId=null){
+ let nearest=null;const candidates=new Set();
+ for(let bin=Math.floor((Math.min(x0,x1)-radius)/100);bin<=Math.floor((Math.max(x0,x1)+radius)/100);bin++)for(const hazard of bloodHazardsAt(bin*100))candidates.add(hazard);
+ for(const hazard of candidates){
+  if(hazard.id===skipId||!['roller','grinder','press','conveyor','door'].includes(hazard.kind)||hazard.kind==='door'&&gateOpen())continue;
+  const floor=H*.88+(hazard.groundOffset||0),machine=window.machineBloodSurfaces?.[hazard.id];
+  let box=machine?.hitBounds;
+  if(!box){if(hazard.kind==='conveyor')box={left:hazard.x-hazard.width/2,right:hazard.x+hazard.width/2,top:floor-77,bottom:floor-51};
+   else if(hazard.kind==='press')box={left:hazard.x-53,right:hazard.x+53,top:floor-237,bottom:pressBottomY()+8};
+   else if(hazard.kind==='door')box={left:hazard.x-hazard.width/2,right:hazard.x+hazard.width/2,top:floor-220,bottom:floor};
+   else box={left:hazard.x-machineFootprint(hazard)/2,right:hazard.x+machineFootprint(hazard)/2,top:machine?.top??floor-(hazard.kind==='grinder'?125:164),bottom:floor};}
+  // Striped hoppers have an open middle intake, surrounded by solid side walls and a base.
+  const housing=box,openingHalf=(housing.right-housing.left)*.32;
+  const knife=hazard.kind==='roller'&&(machine?.kind==='twin'||/(?:roller[135]|roller2)$/.test(hazard.id));
+  const boxes=hazard.kind==='grinder'?[{...housing,right:hazard.x-openingHalf},{...housing,left:hazard.x+openingHalf},{left:hazard.x-openingHalf,right:hazard.x+openingHalf,top:housing.bottom-24,bottom:housing.bottom}]:knife?[{...housing,bottom:housing.top+(housing.bottom-housing.top)*.18},{...housing,top:housing.bottom-(housing.bottom-housing.top)*.18}]:[housing];
+  for(const box of boxes){
+  const b={left:box.left-radius,right:box.right+radius,top:box.top-radius,bottom:box.bottom+radius},dx=x1-x0,dy=y1-y0;
+  let enter=0,leave=1,nx=0,ny=0;
+  const inside=x0>b.left&&x0<b.right&&y0>b.top&&y0<b.bottom;
+  if(inside){
+   if(x1<b.left||x1>b.right||y1<b.top||y1>b.bottom)continue;
+   const faces=[{d:x1-b.left,x:b.left-.1,y:y1,nx:-1,ny:0},{d:b.right-x1,x:b.right+.1,y:y1,nx:1,ny:0},{d:y1-b.top,x:x1,y:b.top-.1,nx:0,ny:-1},{d:b.bottom-y1,x:x1,y:b.bottom+.1,nx:0,ny:1}];faces.sort((a,b)=>a.d-b.d);const face=faces[0];if(!nearest||nearest.time>0)nearest={...face,time:0,hazard};continue;
+  }
+  let misses=false;
+  for(const [start,delta,min,max,axis] of [[x0,dx,b.left,b.right,'x'],[y0,dy,b.top,b.bottom,'y']]){
+   if(Math.abs(delta)<1e-9){if(start<min||start>max){misses=true;break;}continue;}
+   let near=(min-start)/delta,far=(max-start)/delta,normal=-1;if(near>far){[near,far]=[far,near];normal=1;}
+   if(near>=enter){enter=near;nx=axis==='x'?normal:0;ny=axis==='y'?normal:0;}leave=Math.min(leave,far);if(enter>leave){misses=true;break;}
+  }
+  if(misses||enter<0||enter>1||!nx&&!ny||dx*nx+dy*ny>=0)continue;
+  if(!nearest||enter<nearest.time)nearest={x:x0+dx*enter+nx*.1,y:y0+dy*enter+ny*.1,nx,ny,time:enter,hazard};
+ }
+ }
+ return nearest;
+}
+window.launcherMachineCollision=machineCollision;
+function bounceBodyOffMachine(part,n){
+ if(rag.shredded||rag.softLanding||rag.pinned[part])return;
+ // Keep the powered conveyor's established top contact and transport.
+ const belt=LEVEL_HAZARDS.find(h=>h.kind==='conveyor'&&Math.abs(n.x-h.x)<h.width/2&&Math.abs(n.y+n.r-(H*.88+(h.groundOffset||0)-72))<8);
+ const hit=machineCollision(n.px,n.py,n.x,n.y,n.r,belt?.id);if(!hit)return;
+ let vx=n.x-n.px,vy=n.y-n.py;const inward=vx*hit.nx+vy*hit.ny;
+ if(inward<0){vx-=1.45*inward*hit.nx;vy-=1.45*inward*hit.ny;playBodyImpact(-inward/PHYSICS_STEP);checkImpactForce(part,-inward/PHYSICS_STEP,hit.x,hit.y,'machine');}
+ if(rag.shredded)return;n.x=hit.x;n.y=hit.y;n.px=n.x-vx;n.py=n.y-vy;
+}
+
 function hazardHit(x,y,part=null){
  if(!dummy||phase!=='airborne'||!rag||rag.softLanding)return;
  for(const h of LEVEL_HAZARDS){
@@ -1039,7 +1086,7 @@ function hazardHit(x,y,part=null){
   if(y<top)continue;
   if(h.kind==='soft'){
    if(!rag.shredded){hitHazards.add(h.id);registerSoftLanding(x);}
-  }else if(h.kind==='grinder'&&part&&!rag.shredded&&!levelFailed){
+  }else if(h.kind==='grinder'&&Math.abs(x-h.x)<machineFootprint(h)*.32&&part&&!rag.shredded&&!levelFailed){
    playBodyImpact();hitHazards.add(h.id);hazardPoints+=h.points;shredRagdoll(x,y,part);
   }
  }
@@ -1263,6 +1310,7 @@ function updateRagdoll(dt){
    n.x+=vx;n.y+=vy+650*h*h*(hanging?3:1)*(currentLevel==='trampoline'?1:part==='lh'||part==='rh'?1.55:part==='le'||part==='re'?1.2:1);
    const pinsBefore=Object.keys(rag.pinned).length;
    hazardHit(n.x,n.y,part);
+   bounceBodyOffMachine(part,n);
    if(Object.keys(rag.pinned).length>pinsBefore){checkImpactForce(part,incomingSpeed,n.x,n.y,'nail');}
    if(n.y+n.r>floor){
     groundedThisFrame=true;
@@ -1312,6 +1360,7 @@ function updateRagdoll(dt){
     }
    }
   }
+  for(const [part,n] of Object.entries(rag.nodes))bounceBodyOffMachine(part,n);
   if(currentLevel!=='trampoline'&&!rag.softLanding)checkWaistBend();
   // Final nonpenetration pass after all constraints, including impalement.
   for(const [id,n] of Object.entries(rag.nodes)){
@@ -1485,5 +1534,5 @@ function render(){drawFlipCallout();ctx.clearRect(0,0,W,H);ctx.fillStyle='#11151
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=debris-conveyors-20261014-32"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=solid-machine-collisions-20261014-33"></script></body></html>
 

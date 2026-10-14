@@ -498,7 +498,7 @@ function positionLevelMachinery(state,w,h){
    post.updateMatrixWorld(true);const mouth=post.localToWorld(new THREE.Vector3(post.userData.outlet.x,post.userData.outlet.y,post.userData.outlet.z));
    window.apparatusVents.push({id:key+':'+post.userData.side,x:mouth.x+state.camera+w/2,y:h/2-mouth.y+(state.cameraY||0),dir:post.userData.side,type:hazard.impactLauncher?'steam':post.userData.side<0?'fire':'steam'});
   }
-  if(hazard.attachedWall){root.updateMatrixWorld(true);support.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(root);bounds.union(new THREE.Box3().setFromObject(support));window.machineBloodSurfaces[hazard.id].hitBounds={left:bounds.min.x+state.camera+w/2,right:bounds.max.x+state.camera+w/2,top:h/2-bounds.max.y+(state.cameraY||0),bottom:h/2-bounds.min.y+(state.cameraY||0)};}
+  {root.updateMatrixWorld(true);support.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(root);bounds.union(new THREE.Box3().setFromObject(support));window.machineBloodSurfaces[hazard.id].hitBounds={left:bounds.min.x+state.camera+w/2,right:bounds.max.x+state.camera+w/2,top:h/2-bounds.max.y+(state.cameraY||0),bottom:h/2-bounds.min.y+(state.cameraY||0)};}
  }
  for(const [key,root] of machineryInstances)if(!active.has(key)){root.visible=false;root.userData.support.visible=false;}
 }
@@ -1104,6 +1104,13 @@ function positionGore(state,w,h){
    u.worldY+=u.vy*dt;
    if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
+   const collision=window.launcherMachineCollision?.(oldX,oldY,u.worldX,u.worldY,Math.max(contactExtent,u.halfWidth||u.radius||8),null);
+   // Conveyor top contacts are handled below so they carry, rather than bounce, debris.
+   if(collision&&!(collision.hazard.kind==='conveyor'&&collision.ny===-1)){
+    const inward=u.vx*collision.nx+u.vy*collision.ny;
+    if(inward<0){u.vx-=1.5*inward*collision.nx;u.vy-=1.5*inward*collision.ny;if((u.machineSoundTime||0)<=now-100)window.launcherPartGroundImpact?.(u.joint,-inward);u.machineSoundTime=now;}
+    u.worldX=collision.x;u.worldY=collision.y;u.originX=u.worldX;u.resting=false;u.bounces=0;u.spin=-u.spin;
+   }
    if(u.vy>0)for(const candidate of conveyors){
     const top=h*.88+(candidate.groundOffset||0)-77,target=top-contactExtent;
     if(oldY>target+2||u.worldY<target)continue;
