@@ -881,7 +881,7 @@ function positionCarcasses(state,w,h){
    const body=carcassTemplate.clone(true),size=115+random(bin+19)*35;body.scale.setScalar(size);body.rotation.y=(random(bin+33)-.5)*.7;
    const points=[new THREE.Vector3(0,28,0),new THREE.Vector3(0,5,0),new THREE.Vector3(7,0,0),new THREE.Vector3(12,5,0),new THREE.Vector3(9,11,0)];
    const hook=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),carcassHookMaterial);
-   item={body,hook,size,hasCarcass:random(bin+405)<.20,x,y:0,knocked:false,resting:false,angle:0};scene.add(body);scene.add(hook);carcassInstances.set(bin,item);
+   item={body,hook,size,hasCarcass:random(bin+405)<.40,x,y:0,knocked:false,resting:false,angle:0};scene.add(body);scene.add(hook);carcassInstances.set(bin,item);
   }
   item.homeX=x;item.homeY=h*.18+item.size/2;
  }
