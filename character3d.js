@@ -1,7 +1,8 @@
 // Experimental 2.5D bridge: rigged GLB models follow the 2D physics.
 import * as THREE from 'three';
-import {clone as cloneSkeleton} from 'three/addons/utils/SkeletonUtils.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+function scheduleSceneWork(callback){return typeof requestIdleCallback==='function'?requestIdleCallback(callback,{timeout:800}):setTimeout(callback,16);}
+function sceneWorkBreak(){return new Promise(resolve=>scheduleSceneWork(resolve));}
 const canvas=document.getElementById('character3d'),status=document.getElementById('characterStatus');
 let renderer,scene,camera,model,bones={},base={},ticket=0,activeId='cowboy',seatBends={},armPose={},seatRoot=null,seatReady=false;
 // Chair-space reference: pelvis is placed behind the chair foreground geometry (depth occlusion).
@@ -664,43 +665,44 @@ function positionTrafficProps(state,w,h){
 }
 
 const scenerySignTemplates=[],scenerySignInstances=new Map();let pizzaSignTemplate=null,wetFloorTemplate=null;
-let crowTemplate=null,crowClip=null;const crowInstances=new Map();
-function crowPoseBounds(visual){
- let root=visual;while(root.parent&&!root.parent.isScene)root=root.parent;
- root.updateWorldMatrix(true,false);root.updateMatrixWorld(true);
- // SkinnedMesh caches its bounds; refresh them after posing the skeleton.
- visual.traverse(mesh=>{if(mesh.isSkinnedMesh)mesh.computeBoundingBox();});
- return new THREE.Box3().setFromObject(visual);
+const crowFrames=[],crowInstances=new Map();
+async function prepareCrowFrames(gltf){
+ const source=gltf.scene,clip=gltf.animations.find(clip=>clip.duration>0),mixer=new THREE.AnimationMixer(source),frames=[];
+ if(clip)mixer.clipAction(clip).play();let span=0;
+ // Bake the clean part of the supplied animation once, in small idle tasks.
+ // Instances share these meshes; no cloned skeletons or pose scans in a frame.
+ for(let frame=0;frame<=42;frame++){
+  if(frame%2===0)await sceneWorkBreak();
+  mixer.setTime(frame===0?0:.85+(frame-1)*1.75/42);source.updateMatrixWorld(true);
+  const group=new THREE.Group(),vertex=new THREE.Vector3();
+  source.traverse(mesh=>{if(!mesh.isMesh)return;const geometry=mesh.geometry.clone(),position=geometry.attributes.position;
+   for(let i=0;i<position.count;i++){mesh.getVertexPosition(i,vertex);vertex.applyMatrix4(mesh.matrixWorld);position.setXYZ(i,vertex.x,vertex.y,vertex.z);}
+   geometry.morphAttributes={};geometry.computeVertexNormals();geometry.computeBoundingBox();group.add(new THREE.Mesh(geometry,mesh.material));
+  });
+  const bounds=new THREE.Box3().setFromObject(group),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());span=Math.max(span,size.x,size.y,size.z);
+  for(const mesh of group.children)mesh.geometry.translate(-center.x,-bounds.min.y,-center.z);frames.push(group);
+ }
+ const scale=56/Math.max(.001,span);
+ for(let i=0;i<frames.length;i++){if(i%4===0)await sceneWorkBreak();for(const mesh of frames[i].children)mesh.geometry.scale(scale,scale,scale);}
+ mixer.stopAllAction();mixer.uncacheRoot(source);crowFrames.push(...frames);
 }
 async function loadCrows(){
- try{const gltf=await new GLTFLoader().loadAsync('./game_ready_crow.glb');crowTemplate=gltf.scene;crowClip=gltf.animations.find(clip=>clip.duration>0);window.crowModelReady=true;}
+ try{const gltf=await new GLTFLoader().loadAsync('./game_ready_crow.glb');await prepareCrowFrames(gltf);window.crowModelReady=true;}
  catch(error){console.warn('Crow unavailable',error);}
 }
 function positionCrows(state,w,h){
- if(!crowTemplate)return;const active=new Set();
+ if(!crowFrames.length)return;const active=new Set();
  for(const crow of window.launcherCrows||[]){
-  active.add(crow.id);let bird=crowInstances.get(crow.id);
-  if(!bird){
-   const root=new THREE.Group(),fit=new THREE.Group(),offset=new THREE.Group(),visual=cloneSkeleton(crowTemplate);
-   root.add(fit);fit.add(offset);offset.add(visual);scene.add(root);
-   const mixer=new THREE.AnimationMixer(visual);if(crowClip)mixer.clipAction(crowClip).play();
-   // The later portion of the supplied clip deforms the skin to roughly
-   // 100 times its normal size. Use its clean flight section and resting pose.
-   let span=0;for(let t=0;t<=2.8;t+=.025){mixer.setTime(t);const size=crowPoseBounds(visual).getSize(new THREE.Vector3());span=Math.max(span,size.x,size.y,size.z);}
-   bird={root,fit,offset,visual,mixer,scale:56/Math.max(.001,span)};crowInstances.set(crow.id,bird);
-  }
-  bird.root.visible=!crow.hit&&Math.abs(crow.x-state.camera-w/2)<w/2+100;
-  if(!bird.root.visible)continue;
-  // Fit through a separate parent so animation cannot overwrite placement or scale.
-  bird.root.position.set(0,0,0);bird.root.rotation.set(0,0,0);bird.fit.scale.setScalar(1);bird.offset.position.set(0,0,0);
-  bird.mixer.setTime(crow.flying?.85+(crow.age*1.4)%1.75:0);
-  const box=crowPoseBounds(bird.visual),center=box.getCenter(new THREE.Vector3());
-  const size=box.getSize(new THREE.Vector3()),scale=Math.min(bird.scale,56/Math.max(.001,size.x,size.y,size.z));
-  bird.offset.position.set(-center.x,-box.min.y,-center.z);bird.fit.scale.setScalar(scale);
-  bird.root.rotation.y=crow.direction>0?Math.PI/2:-Math.PI/2;
-  bird.root.position.set(crow.x-state.camera-w/2,h/2-crow.y+(state.cameraY||0),30);
+  const visible=!crow.hit&&Math.abs(crow.x-state.camera-w/2)<w/2+100;active.add(crow.id);let root=crowInstances.get(crow.id);
+  // Do not create off-screen birds, and keep perched birds on their cached pose.
+  if(!visible){if(root)root.visible=false;continue;}
+  if(!root){root=new THREE.Group();for(const mesh of crowFrames[0].children)root.add(new THREE.Mesh(mesh.geometry,mesh.material));scene.add(root);crowInstances.set(crow.id,root);}
+  const frame=crow.flying?1+Math.floor((crow.age*1.4%1.75)/1.75*42):0;
+  if(root.userData.frame!==frame){const pose=crowFrames[frame];root.children.forEach((mesh,i)=>{mesh.geometry=pose.children[i].geometry;});root.userData.frame=frame;}
+  root.visible=true;root.rotation.y=crow.direction>0?Math.PI/2:-Math.PI/2;
+  root.position.set(crow.x-state.camera-w/2,h/2-crow.y+(state.cameraY||0),30);
  }
- for(const [id,bird] of crowInstances)if(!active.has(id)){scene.remove(bird.root);bird.mixer.stopAllAction();crowInstances.delete(id);}
+ for(const [id,root] of crowInstances)if(!active.has(id)){scene.remove(root);crowInstances.delete(id);}
 }
 function prepareScenerySign(source,sideFacing=false,neon=true){
  const flat=new THREE.Group();source.updateWorldMatrix(true,true);
@@ -1190,7 +1192,7 @@ function warmGoreParts(){
  if(!goreAsset||goreWarmTimer!==null)return;
  const next=Object.keys(GORE_MAP).find(joint=>!readyGoreParts.has(joint)&&!goreParts.some(p=>p.userData.joint===joint));
  if(!next)return;
- goreWarmTimer=setTimeout(()=>{goreWarmTimer=null;const part=buildGorePart(next);readyGoreParts.set(next,part);if(part&&renderer?.compileAsync)renderer.compileAsync(part,camera,scene).catch(e=>console.warn('Gore shader warmup failed',e));warmGoreParts();},0);
+ goreWarmTimer=scheduleSceneWork(()=>{goreWarmTimer=null;const part=buildGorePart(next);readyGoreParts.set(next,part);if(part&&renderer?.compileAsync)renderer.compileAsync(part,camera,scene).catch(e=>console.warn('Gore shader warmup failed',e));warmGoreParts();});
 }
 function positionGore(state,w,h){
  const fullShred=!!state.shredded,headOnly=!!state.headDetached;
@@ -1669,5 +1671,22 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();loadIndustrialBeams();loadScenerySigns();loadTrafficProps();loadCrows();loadBalconyPots();animate();}
+// Keep the initial launcher and character ahead of optional scenery downloads.
+// Limit loader groups to two so model parsing and image decoding do not all
+// compete for the first interactive frames.
+const sceneAssetQueue=[];let sceneAssetLoads=0;
+function queueSceneAssets(jobs){sceneAssetQueue.push(...jobs);pumpSceneAssets();}
+function pumpSceneAssets(){
+ while(sceneAssetLoads<2&&sceneAssetQueue.length){const job=sceneAssetQueue.shift();sceneAssetLoads++;
+  scheduleSceneWork(()=>{Promise.resolve().then(job).catch(error=>console.warn('Scene asset unavailable',error)).finally(()=>{sceneAssetLoads--;pumpSceneAssets();});});
+ }
+}
+if(renderer){
+ animate();
+ Promise.allSettled([loadChair(),load('cowboy')]).then(()=>queueSceneAssets([
+  loadIndustrialBeams,loadLevelMachinery,loadNailBoard,loadWeapons,loadGoreAsset,
+  loadCushions,loadTrafficProps,loadScenerySigns,loadCrows,loadBalconyPots,
+  loadJetpack,loadRocket,loadTrampolines,loadWallDolls,loadSceneryBed,loadBackdropMachines
+ ]));
+}
 
