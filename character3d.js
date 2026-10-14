@@ -445,7 +445,7 @@ function positionMachineLipBlood(root,template,hazard,state,width,centerY){
   const bloodY=state.machineLipBlood&&Number.isFinite(stain.y)?stain.y:centerY;
   mesh.position.set(x/scale,(centerY-bloodY)/scale,root.userData.lipFront);
   mesh.scale.set(stain.size*1.65/scale,Math.max(1,stain.size*.32)/scale,1);mesh.visible=true;
-  if(template.userData.kind==='twin'){root.updateMatrixWorld(true);mesh.position.copy(root.worldToLocal(new THREE.Vector3(root.position.x+x,root.position.y+centerY-bloodY,root.position.z+root.userData.projectedLipFront)));mesh.quaternion.copy(root.quaternion).invert();}
+  if(template.userData.kind==='twin'||template.userData.kind==='beam'){root.updateMatrixWorld(true);mesh.position.copy(root.worldToLocal(new THREE.Vector3(root.position.x+x,root.position.y+centerY-bloodY,root.position.z+root.userData.projectedLipFront)));mesh.quaternion.copy(root.quaternion).invert();}
   if(Number.isFinite(stain.drumAngle)){const angle=stain.drumAngle,radius=template.userData.heightRatio/2+.004;mesh.position.set(x/scale,Math.cos(angle)*radius,Math.sin(angle)*radius);mesh.rotation.x=angle-Math.PI/2;}
  }
  for(const [id,mesh] of marks)if(!active.has(id)){root.remove(mesh);marks.delete(id);}
@@ -751,13 +751,16 @@ async function loadWeapons(){
    const material=source.material.clone();material.side=THREE.DoubleSide;
    weaponTemplates[kind]=new THREE.Mesh(geometry,material);
   }
+  const sword=new THREE.Group(),bladeMat=new THREE.MeshStandardMaterial({color:0xb8c1c5,metalness:.75,roughness:.34}),gripMat=new THREE.MeshStandardMaterial({color:0x292321,roughness:.85});
+  const shape=new THREE.Shape();shape.moveTo(-.055,.3);shape.lineTo(-.055,.84);shape.lineTo(0,1);shape.lineTo(.055,.84);shape.lineTo(.055,.3);shape.closePath();const blade=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:.012,bevelEnabled:true,bevelThickness:.007,bevelSize:.006,bevelSegments:1,steps:1}),bladeMat);sword.add(blade);
+  const guard=new THREE.Mesh(new THREE.BoxGeometry(.24,.025,.035),bladeMat);guard.position.y=.29;sword.add(guard);const grip=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,.25,8),gripMat);grip.position.y=.15;sword.add(grip);weaponTemplates.sword=sword;
   window.weaponOverlayReady=!!weaponTemplates.knife;
  }catch(e){console.warn('Weapon pack unavailable; original hazard visuals remain',e);}
 }
 function mountedWeapon(parent,kind,length,x,y,angle,z=52){
  const template=weaponTemplates[kind]||weaponTemplates.knife;if(!template)return;
  const mesh=template.clone();mesh.scale.setScalar(length*(parent.userData.rotatingBlade?1.05:1));
- mesh.position.set(x,y,z);mesh.rotation.z=angle;mesh.frustumCulled=false;
+ mesh.position.set(x,y,z);mesh.rotation.z=angle;mesh.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});
  parent.add(mesh);return mesh;
 }
 function makeWeaponStation(hazard){
@@ -781,7 +784,7 @@ function makeWeaponStation(hazard){
  }else if(hazard.kind==='ramp'){
   for(let x=-hazard.width/2+16,i=0;x<hazard.width/2;x+=28,i++){
    const y=hazard.y-(x+hazard.width/2)*hazard.slope;
-   mountedWeapon(root,i%3?'knife':'axe',26,x,y,Math.atan(-hazard.slope));
+   const variant=window.launcherBoardVariant?.(hazard)||0;mountedWeapon(root,variant===2?'sword':'knife',variant===2?38:26,x,y-(variant===2?12:0),Math.atan(-hazard.slope));
   }
  }
  root.userData.rotors=rotors;scene.add(root);return root;
@@ -791,7 +794,7 @@ function positionWeapons(state,w,h){
  const active=new Set();
  for(const hazard of state.hazards||[]){
   if(Math.abs(hazard.x-state.camera-w/2)>w/2+hazard.width+250)continue;
-  if(!['press','ramp'].includes(hazard.kind)||hazard.kind==='ramp'&&window.nailBoardOverlayReady)continue;
+  if(!['press','ramp'].includes(hazard.kind)||hazard.kind==='ramp'&&window.nailBoardOverlayReady&&(window.launcherBoardVariant?.(hazard)||0)===0)continue;
   active.add(hazard.id);
   let root=weaponStations.get(hazard.id);
   if(!root){root=makeWeaponStation(hazard);weaponStations.set(hazard.id,root);}
@@ -1198,17 +1201,70 @@ function positionGore(state,w,h){
  }
  window.bodyCameraParts=goreParts.map(p=>({joint:p.userData.joint,x:p.userData.worldX,y:p.userData.worldY,resting:!!p.userData.resting,floorY:p.userData.floorY,extent:p.userData.contactExtent,radius:p.userData.radius}));
 }
+const industrialBeamTemplates=new Map(),industrialBeamInstances=new Map(),boardBeamSupports=new Map(),beamBackdropInstances=new Map();window.industrialBeamOverlayReady=false;
+async function loadIndustrialBeams(){
+ try{
+  const gltf=await new GLTFLoader().loadAsync('./beam_industrial_pack_n1.glb');gltf.scene.updateMatrixWorld(true);
+  const selections={beam:'beam_big_03_',thin:'beam_mid_03_',brace:'beam_pum_03_',rail:'railing_04_',panel:'panel_mas_03_',grid:'grid_broke_01_'};
+  for(const [kind,prefix] of Object.entries(selections)){
+   let source;gltf.scene.traverse(o=>{if(o.isMesh&&o.name.startsWith(prefix))source=o;});if(!source)continue;
+   const geometry=source.geometry.clone();geometry.applyMatrix4(source.matrixWorld);geometry.computeBoundingBox();let size=geometry.boundingBox.getSize(new THREE.Vector3());
+   if(['beam','thin','brace'].includes(kind)){const axis=size.y>size.x&&size.y>size.z?new THREE.Vector3(0,1,0):size.z>size.x?new THREE.Vector3(0,0,1):new THREE.Vector3(1,0,0);geometry.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(axis,new THREE.Vector3(1,0,0)));geometry.computeBoundingBox();}
+   const center=geometry.boundingBox.getCenter(new THREE.Vector3());size=geometry.boundingBox.getSize(new THREE.Vector3());geometry.translate(-center.x,-center.y,-center.z);geometry.scale(1/size.x,1/size.y,1/size.z);geometry.userData.sharedAsset=true;
+   const mesh=new THREE.Mesh(geometry,source.material);mesh.userData.sourceMesh=source.name;mesh.userData.nativeRatio=size.clone().divideScalar(size.x);industrialBeamTemplates.set(kind,mesh);
+  }
+  if(!industrialBeamTemplates.has('beam'))throw Error('Straight beam missing from pack');window.industrialBeamOverlayReady=true;if(steelFrame)steelFrame.userData.floorDistance=NaN;
+ }catch(e){console.warn('Industrial beam pack could not load',e);}
+}
+function addIndustrialBeam(parent,x1,y1,x2,y2,width=20,depth=26,z=0,kind='beam'){
+ const template=industrialBeamTemplates.get(kind)||industrialBeamTemplates.get('beam');if(!template)return null;
+ const root=new THREE.Group(),mesh=template.clone();root.position.set((x1+x2)/2,(y1+y2)/2,z);root.rotation.z=Math.atan2(y2-y1,x2-x1);mesh.scale.set(Math.hypot(x2-x1,y2-y1),width,depth);root.add(mesh);parent.add(root);return root;
+}
+function beamRise(hazard,h){return Math.min(hazard.wallRise||340,h*.62);}
+function positionIndustrialBeams(state,w,h){
+ if(!window.industrialBeamOverlayReady)return;const active=new Set(),supportActive=new Set();
+ for(const hazard of state.hazards||[]){
+  if(Math.abs(hazard.x-state.camera-w/2)>w/2+hazard.width+200)continue;
+  const floor=h*.88+(hazard.groundOffset||0),x=hazard.x-state.camera-w/2;
+  if(hazard.kind==='beam'){
+   const key=state.level+':'+hazard.id;active.add(key);let root=industrialBeamInstances.get(key);
+   if(!root){root=new THREE.Group();addIndustrialBeam(root,-hazard.width/2,0,hazard.width/2,0,hazard.beamThickness||24,30,0,hazard.beamVariant||'beam');root.userData.lipBlood=new Map();root.userData.lipFront=16;root.userData.projectedLipFront=16;scene.add(root);industrialBeamInstances.set(key,root);}
+   const centerY=floor-beamRise(hazard,h);root.position.set(x,h/2-centerY+(state.cameraY||0),28);root.visible=true;root.updateMatrixWorld(true);
+   const bounds=new THREE.Box3().setFromObject(root);window.machineBloodSurfaces[hazard.id]={kind:'beam',centerY,width:hazard.width,height:hazard.beamThickness||24,top:centerY-(hazard.beamThickness||24)/2,hitBounds:{left:bounds.min.x+state.camera+w/2,right:bounds.max.x+state.camera+w/2,top:h/2-bounds.max.y+(state.cameraY||0),bottom:h/2-bounds.min.y+(state.cameraY||0)}};
+   positionMachineLipBlood(root,{userData:{kind:'beam'}},hazard,state,hazard.width,centerY);
+  }
+  if(['ramp','press'].includes(hazard.kind)){
+   const key=state.level+':'+hazard.id;supportActive.add(key);let root=boardBeamSupports.get(key);
+   if(!root){root=new THREE.Group();scene.add(root);boardBeamSupports.set(key,root);}
+   const dimensions=[h,hazard.y,hazard.slope,hazard.width].join(':');if(root.userData.dimensions!==dimensions){root.clear();root.userData.dimensions=dimensions;
+    if(hazard.kind==='ramp'){if((window.launcherBoardVariant?.(hazard)||0)!==0)addIndustrialBeam(root,-hazard.width/2,hazard.y-5,hazard.width/2,hazard.y-hazard.width*hazard.slope-5,10,36,7,'thin');for(const side of [-1,1]){const xx=side*(hazard.width/2-22),rise=hazard.y-(xx+hazard.width/2)*hazard.slope;addIndustrialBeam(root,xx,0,xx,rise,14,20,0,'thin');}addIndustrialBeam(root,-hazard.width/2+22,18,hazard.width/2-22,18,10,16,-8,'brace');}
+    else for(const side of [-1,1])addIndustrialBeam(root,side*43,0,side*43,235,12,20,0,'thin');
+   }root.position.set(x,h/2-floor+(state.cameraY||0),20);root.visible=true;
+  }
+ }
+ for(const [key,root] of industrialBeamInstances)if(!active.has(key))root.visible=false;
+ for(const [key,root] of boardBeamSupports)if(!supportActive.has(key))root.visible=false;
+ // Decorative panels and railings stay against the wall, below its roofline.
+ const start=Math.max(1,Math.floor((state.camera*.7-400)/950)),backActive=new Set();
+ for(let i=start;i<start+Math.ceil(w/950)+3;i++){
+  const key=state.level+':'+i;backActive.add(key);let root=beamBackdropInstances.get(key);
+  if(!root){root=new THREE.Group();const kind=['rail','panel','grid'][i%3],template=industrialBeamTemplates.get(kind);if(template){const mesh=template.clone(),ratio=template.userData.nativeRatio;mesh.scale.set(180,Math.min(160,180*ratio.y),Math.min(24,180*ratio.z));root.add(mesh);}addIndustrialBeam(root,-120,0,120,0,12,18,-8,'brace');scene.add(root);beamBackdropInstances.set(key,root);}
+  const worldX=i*950,ground=window.launcherGroundYAt?.(worldX)??h*.88;root.position.set(worldX-state.camera*.7-w/2,h/2-(ground-Math.min(180,h*.35))+(state.cameraY||0),-65);root.visible=true;
+ }
+ for(const [key,root] of beamBackdropInstances)if(!backActive.has(key))root.visible=false;
+}
+
 let steelFrame=null,steelArm=null,nailBoardTemplate=null;
 const nailBoardInstances=new Map();window.nailBoardOverlayReady=false;window.catapultFrameReady=false;
 function positionSteelCatapult(state,w,h){
  if(!state.pivot)return;
  const floorDistance=h*.88-state.pivot.y;
  if(!steelFrame||steelFrame.userData.floorDistance!==floorDistance){
-  if(steelFrame){scene.remove(steelFrame);steelFrame.traverse(o=>{if(o.isMesh)o.geometry.dispose();});}
+  if(steelFrame){scene.remove(steelFrame);steelFrame.traverse(o=>{if(o.isMesh&&!o.geometry.userData.sharedAsset)o.geometry.dispose();});}
   steelFrame=new THREE.Group();steelFrame.userData.floorDistance=floorDistance;
   const steel=new THREE.MeshStandardMaterial({color:0x52616a,metalness:.65,roughness:.48}),edge=new THREE.MeshStandardMaterial({color:0x9eabb0,metalness:.72,roughness:.35}),dark=new THREE.MeshStandardMaterial({color:0x252e33,metalness:.55,roughness:.62});
   function block(parent,length,height,depth,x,y,z,mat=steel){const mesh=new THREE.Mesh(new THREE.BoxGeometry(length,height,depth),mat);mesh.position.set(x,y,z);parent.add(mesh);return mesh;}
-  function girder(parent,x1,y1,x2,y2,width=18,z=-12){const length=Math.hypot(x2-x1,y2-y1),beam=new THREE.Group();beam.position.set((x1+x2)/2,(y1+y2)/2,z);beam.rotation.z=Math.atan2(y2-y1,x2-x1);block(beam,length,width-4,8,0,0,0);block(beam,length,3,25,0,width/2,0,edge);block(beam,length,3,25,0,-width/2,0,edge);parent.add(beam);return beam;}
+  function girder(parent,x1,y1,x2,y2,width=18,z=-12){if(window.industrialBeamOverlayReady)return addIndustrialBeam(parent,x1,y1,x2,y2,width,25,z);const length=Math.hypot(x2-x1,y2-y1),beam=new THREE.Group();beam.position.set((x1+x2)/2,(y1+y2)/2,z);beam.rotation.z=Math.atan2(y2-y1,x2-x1);block(beam,length,width-4,8,0,0,0);block(beam,length,3,25,0,width/2,0,edge);block(beam,length,3,25,0,-width/2,0,edge);parent.add(beam);return beam;}
   function bolt(parent,x,y,z,r=4){const mesh=new THREE.Mesh(new THREE.CylinderGeometry(r,r,3,6),edge);mesh.rotation.x=Math.PI/2;mesh.position.set(x,y,z);parent.add(mesh);}
   girder(steelFrame,-155,-floorDistance+9,155,-floorDistance+9,20);
   for(const side of [-1,1]){
@@ -1225,7 +1281,7 @@ function positionSteelCatapult(state,w,h){
   const collar=new THREE.Mesh(new THREE.CylinderGeometry(18,18,34,24),edge);collar.rotation.x=Math.PI/2;collar.position.z=0;steelFrame.add(collar);
   const hub=new THREE.Mesh(new THREE.CylinderGeometry(11,11,5,16),dark);hub.rotation.x=Math.PI/2;hub.position.z=20;steelFrame.add(hub);bolt(steelFrame,0,0,24,6);
   steelArm=new THREE.Group();steelArm.position.z=-4;
-  block(steelArm,343,13,9,56.5,0,0,steel);block(steelArm,343,3,26,56.5,8,0,edge);block(steelArm,343,3,26,56.5,-8,0,edge);
+  if(window.industrialBeamOverlayReady)addIndustrialBeam(steelArm,-115,0,228,0,19,26,0);else {block(steelArm,343,13,9,56.5,0,0,steel);block(steelArm,343,3,26,56.5,8,0,edge);block(steelArm,343,3,26,56.5,-8,0,edge);}
   for(const x of [-110,-75,-40,35,70,110,150,195])bolt(steelArm,x,0,15,3);
   steelFrame.add(steelArm);scene.add(steelFrame);window.catapultFrameReady=true;
  }
@@ -1245,7 +1301,7 @@ async function loadNailBoard(){
 }
 function positionNailBoards(state,w,h){
  if(!nailBoardTemplate)return;const active=new Set();
- for(const hazard of state.hazards||[]){if(hazard.kind!=='ramp'||Math.abs(hazard.x-state.camera-w/2)>w/2+hazard.width+150)continue;
+ for(const hazard of state.hazards||[]){if(hazard.kind!=='ramp'||(window.launcherBoardVariant?.(hazard)||0)!==0||Math.abs(hazard.x-state.camera-w/2)>w/2+hazard.width+150)continue;
   const key=state.level+':'+hazard.id;active.add(key);let root=nailBoardInstances.get(key);if(!root){root=nailBoardTemplate.clone(true);nailBoardInstances.set(key,root);scene.add(root);}
   const slope=hazard.slope||0,length=hazard.width*Math.sqrt(1+slope*slope),centerY=h*.88-hazard.y+hazard.width*.5*slope;
   root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),28);root.rotation.z=-Math.atan(slope);root.scale.set(length,26/nailBoardTemplate.userData.nailHeight,length);root.visible=true;
@@ -1265,6 +1321,7 @@ function animate(){
  positionChair(state,w,h);
  positionNailBoards(state,w,h);
  positionLevelMachinery(state,w,h);
+ positionIndustrialBeams(state,w,h);
  positionWeapons(state,w,h);
  positionWallDolls(state,w,h);
  positionSceneryBed(state,w,h);
@@ -1357,5 +1414,5 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();loadIndustrialBeams();animate();}
 

@@ -103,7 +103,7 @@ Knife rollers likewise retain a through passage between solid upper/lower housin
 
 ## Worldwide arcade records
 
-Run `supabase/world-leaderboard.sql` in the supplied Supabase project's SQL Editor. The game uses the supplied public publishable key with the REST Data API; no SDK or secret key is required. World Top 10 appears on the intro splash and header board, ranked by score descending, distance descending, then earliest server timestamp. Initials are two letters; different runs may share initials. Dates show month/year.
+Run `supabase/world-leaderboard.sql` in the supplied Supabase project's SQL Editor. The game uses the supplied public publishable key with the REST Data API; no SDK or secret key is required. World Top 5 appears on the intro splash and header board, ranked by score descending, distance descending, then earliest server timestamp. Initials are two letters; different runs may share initials. Dates show month/year.
 
 Existing records from `slaughterpultRankingsV1` automatically import from each player's own browser upon entering the game, preserving original month/year. A stable browser ID and deterministic record UUID make retries idempotent; existing local records remain intact. Browser records cannot be retrieved until that browser visits. Legacy records have unknown course/character rather than invented metadata.
 
@@ -116,3 +116,9 @@ Creator-supplied source links and credits are retained in `ASSET_CREDIT_OVERRIDE
 The supplied `board_with_nails_in_blood.glb` now renders on every existing nail ramp, replacing drawn planks and substitute weapon meshes while retaining the authored ramp position, slope and collision logic. Original model textures are preserved; its board surface is aligned to the simulated ramp and nails extend to the existing tip height. DISMHa_Ha attribution is included.
 
 The launcher now has a lit 3D steel frame with I-section legs and arm, foot plates, triangular gussets, hex bolts, pivot bearing and mounting collars. It uses the same pivot, arm scale and theta as the existing simulation; the uploaded cradle remains attached as before. Attachments and sockets remain functional. Non-WebGL fallback beams also use steel colors. No physics or course placement was changed.
+
+The supplied Beam industrial Pack N1 by TheSighet replaces the catapult girders/arm and provides ramp/knife-board and press supports, plus parallax wall panels and railings. Two solid beam obstacles per base course and per extension stay 270–390px above the local floor (capped to 62% of viewport height), within the wall area. Their source mesh materials are retained, their solid bounds join swept body/bone collisions, and blood stays on their front surfaces. Source geometries are shared and preserved when rebuilding the frame.
+
+All 12 frame anchors and eight arm anchors, labels, attachments and hover outlines render on a pointer-transparent canvas above the 3D frame, using the original socket coordinates and hit tests. Ramp appearances cycle deterministically between the supplied nail-board model, knife boards using the weapon pack, and custom metal sword props on beam supports. The uploaded weapon pack contains knives/machetes but no sword mesh. Ramp positions, slopes, blade tip heights and launch forces stay unchanged.
+
+The board now shows five entries, one best run per initials. Browsers retain a personal best (including imported history); only improving it can trigger a qualifying world-record prompt. The `slaughterpult_world_best` security-invoker view deduplicates historical rows before applying the top-five limit. Run the SQL setup again to add that view to existing installations; until then, the client deduplicates a bounded legacy result set.

@@ -29,9 +29,17 @@ create policy "Submit arcade records" on public.slaughterpult_scores
     and (course is null or course in ('slide','factory','trampoline'))
     and (character_id is null or character_id in ('cowboy','human','meshy'))
   );
+-- One best record per initials; the game displays only the first five.
+create index if not exists slaughterpult_scores_initials_idx
+  on public.slaughterpult_scores (initials, score desc, distance desc, created_at asc, run_id asc);
+create or replace view public.slaughterpult_world_best with (security_invoker=true) as
+select distinct on (initials) run_id, initials, score, distance, achieved_month, created_at
+from public.slaughterpult_scores
+order by initials, score desc, distance desc, created_at asc, run_id asc;
+grant select on public.slaughterpult_world_best to anon, authenticated;
 notify pgrst, 'reload schema';
 commit;
--- Verification: this should return 0–10 rows, ordered exactly like the game.
+-- Verification: this should return 0–5 rows, ordered exactly like the game.
 select initials, score, distance, to_char(achieved_month,'Mon YYYY') as date
-from public.slaughterpult_scores
-order by score desc, distance desc, created_at asc, run_id asc limit 10;
+from public.slaughterpult_world_best
+order by score desc, distance desc, created_at asc, run_id asc limit 5;
