@@ -1047,6 +1047,8 @@ function positionGore(state,w,h){
   if(removed.has(parent))for(const child of children)removed.add(child);
  }
  const joints=fullShred?Object.keys(GORE_MAP):[...removed];
+ const conveyors=(state.hazards||[]).filter(hazard=>hazard.kind==='conveyor');
+ const beltSpeed=state.conveyorSpeed||180;
  for(const joint of joints){
   if(goreParts.some(p=>p.userData.joint===joint)||!goreAsset)continue;
   // Exposed anatomy replaces the removed skin region, never duplicates it.
@@ -1082,7 +1084,18 @@ function positionGore(state,w,h){
   const floorDepth=(u.floorDepth||0)*Math.max(0,h-floor-contactExtent-8);
   groundY+=floorDepth;
   u.floorY=floor+floorDepth;u.contactExtent=contactExtent;
-  if(!u.resting){
+  let belt=conveyors.find(hazard=>hazard.id===u.conveyorId);
+  if(belt){
+   const end=belt.x+belt.width/2;
+   u.worldX+=beltSpeed*dt;u.vx=beltSpeed;u.vy=0;u.resting=false;u.originX=u.worldX;
+   const top=h*.88+(belt.groundOffset||0)-77;
+   u.worldY=top-contactExtent;u.floorY=top;
+   if(u.joint==='head')p.rotation.z+=beltSpeed/Math.max(7,u.radius||15)*dt;
+   else if(u.joint!=='rh')p.rotation.z+=u.spin*dt*30;
+   if(u.worldX>end){u.conveyorId=null;u.visualGrounded=false;u.bounces=0;belt=null;}
+  }
+  if(!belt&&!u.resting){
+   const oldX=u.worldX,oldY=u.worldY;
    u.vy+=780*dt;
    u.vx*=Math.exp(-.34*dt);
    u.worldX+=u.vx*dt;
@@ -1091,8 +1104,16 @@ function positionGore(state,w,h){
    u.worldY+=u.vy*dt;
    if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
+   if(u.vy>0)for(const candidate of conveyors){
+    const top=h*.88+(candidate.groundOffset||0)-77,target=top-contactExtent;
+    if(oldY>target+2||u.worldY<target)continue;
+    const fraction=Math.max(0,Math.min(1,(target-oldY)/(u.worldY-oldY||1))),hitX=oldX+(u.worldX-oldX)*fraction;
+    if(hitX<candidate.x-candidate.width/2||hitX>candidate.x+candidate.width/2)continue;
+    if(u.vy>45)window.launcherPartGroundImpact?.(u.joint,u.vy);
+    u.conveyorId=candidate.id;u.worldX=hitX;u.worldY=target;u.originX=hitX;u.vx=beltSpeed;u.vy=0;u.resting=false;u.visualGrounded=false;u.floorY=top;break;
+   }
    if(u.worldY<groundY-6)u.visualGrounded=false;
-   if(u.worldY>=groundY){
+   if(!u.conveyorId&&u.worldY>=groundY){
     if(!u.visualGrounded&&u.vy>45&&!window.launcherCushionContact?.(u.worldX))window.launcherPartGroundImpact?.(u.joint,u.vy);
     u.visualGrounded=true;
     if(!u.pillowImpact&&window.launcherCushionContact?.(u.worldX)){window.launcherCushionImpact?.(u.worldX,u.vy,Math.sign(u.vx));u.pillowImpact=true;}
@@ -1107,7 +1128,7 @@ function positionGore(state,w,h){
      else{u.vx=0;u.resting=true;u.lieAngle=p.rotation.z;}
     }
    }
-  }else{
+  }else if(!belt){
    u.worldY=groundY;
    if(u.joint==='rh'&&u.crawlClock!==undefined){
     if(u.crawlStartX===null)u.crawlStartX=u.worldX;

@@ -92,3 +92,5 @@ Pistons act as fast launch rams: a strong initial push tapers to zero over 0.55 
 Piston-equipped launches mix one of the two supplied ram clips quietly with the catapult launch sound, with no immediate repeat and one ram voice per launch. The supplied installation clip plays when a regular or boost piston is connected. Both follow effects/master volume and mute.
 
 Pull Back animates the arm from its raised build pose (2.95 radians) down to the existing charged pose (3.39 radians) over 0.6 seconds. Launch becomes available when the pull finishes. Charged angle, torque, release timing and launch tuning remain unchanged. Reset cancels the pull.
+
+Detached skulls and limbs collide with conveyor tops using swept downward contact. Belts carry them at the same 180px/s speed as the visible tread; skulls roll, limbs tumble, and parts resume gravity with belt momentum past the outlet. All course ground offsets are respected and underside passes remain free.
