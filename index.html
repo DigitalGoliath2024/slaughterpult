@@ -406,16 +406,24 @@ function drawCircusPennants(top,backX){
  }
 }
 
+const circusSkyFeathered=new Map();
+function featheredCircusSky(index){
+ if(circusSkyFeathered.has(index))return circusSkyFeathered.get(index);
+ const image=circusSkyImages[index],panel=document.createElement('canvas');panel.width=image.naturalWidth;panel.height=image.naturalHeight;
+ const paint=panel.getContext('2d');paint.drawImage(image,0,0);
+ paint.globalCompositeOperation='destination-in';const fade=paint.createLinearGradient(0,0,panel.width*.06,0);fade.addColorStop(0,'rgba(255,255,255,0)');fade.addColorStop(1,'rgba(255,255,255,1)');paint.fillStyle=fade;paint.fillRect(0,0,panel.width,panel.height);paint.globalCompositeOperation='source-over';
+ circusSkyFeathered.set(index,panel);return panel;
+}
 function drawCircusBackdrop(){
  syncTrampolineSkyVideo();ctx.fillStyle='#291127';ctx.fillRect(0,cameraY,W,H);
  const ready=circusSkyImages.every(image=>image.complete&&image.naturalWidth>0);
  if(ready){
   const height=Math.max(H*1.35,W*circusSkyImage.naturalHeight/circusSkyImage.naturalWidth),widths=circusSkyImages.map(image=>height*image.naturalWidth/image.naturalHeight),pan=Math.max(0,camera*.18),cropY=Math.max(0,Math.min(height-H,(height-H)*.5+cameraY*.12));
   // Parking lot once, then woodland/bayou panels alternate for the rest of the flight.
-  const draw=(index,x)=>ctx.drawImage(circusSkyImages[index],x-pan,cameraY-cropY,widths[index],height);
+  const draw=(index,x)=>ctx.drawImage(index===0?circusSkyImages[0]:featheredCircusSky(index),x-pan,cameraY-cropY,widths[index],height);
   if(pan<widths[0])draw(0,0);
-  const cycleWidth=widths[1]+widths[2],cycle=Math.max(0,Math.floor((pan-widths[0])/cycleWidth));
-  for(let x=widths[0]+cycle*cycleWidth;x<pan+W;x+=cycleWidth){draw(1,x);draw(2,x+widths[1]);}
+  const firstJoin=widths[0]-widths[1]*.06,step=widths[1]-widths[2]*.06,cycleWidth=step+widths[2]-widths[1]*.06,cycle=Math.max(0,Math.floor((pan-firstJoin)/cycleWidth)-1);
+  for(let x=firstJoin+cycle*cycleWidth;x<pan+W;x+=cycleWidth){draw(1,x);draw(2,x+step);}
  }else if(circusSkyImage.complete&&circusSkyImage.naturalWidth>0){
   // Hold the opening artwork while the following panels load.
   const scale=Math.max(W/circusSkyImage.naturalWidth,H*1.35/circusSkyImage.naturalHeight),height=circusSkyImage.naturalHeight*scale;
@@ -1225,7 +1233,7 @@ function hazardHit(x,y,part=null){
     if(levelClock-(rag.spinnerHits.get(h.id)??-99)>.65){rag.spinnerHits.set(h.id,levelClock);if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;}
      const connected=new Set([part]);for(let i=0;i<rag.links.length;i++)for(const link of rag.links)if(!link.broken){if(connected.has(link.a))connected.add(link.b);if(connected.has(link.b))connected.add(link.a);}
      const incoming=Math.hypot(n.x-n.px,n.y-n.py)/PHYSICS_STEP;for(const id of connected){const node=rag.nodes[id],vx=(node.x-node.px)/PHYSICS_STEP,vy=(node.y-node.py)/PHYSICS_STEP;node.px=node.x-Math.max(1100,vx+700)*PHYSICS_STEP;node.py=node.y-(Math.min(-550,vy-300))*PHYSICS_STEP;}
-     directionalBlood(x,y,1,-.5,1.5);playBodyImpact();checkImpactForce(part,Math.min(500,Math.max(180,incoming)),x,y,'spinner');
+     playBodyImpact();if(currentLevel!=='circus'){directionalBlood(x,y,1,-.5,1.5);checkImpactForce(part,Math.min(500,Math.max(180,incoming)),x,y,'spinner');}
     }continue;
    }
    if(touches){
@@ -1701,5 +1709,5 @@ function render(){if(currentLevel!=='circus')syncTrampolineSkyVideo();drawFlipCa
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller'||s.surface?.kind==='beam')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=circus-sky-sequence-20261014-47"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=circus-sky-feather-20261014-48"></script></body></html>
 
