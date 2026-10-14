@@ -1318,19 +1318,21 @@ function simulateStep(dt){
   // The cradle starts BEHIND the pivot (to the left). As the arm swings
   // upward toward the front, its tangential velocity carries the dummy RIGHT.
   // Keep screen Y positive down, so decreasing theta swings left-side tip up.
-  const torque=Math.abs(forces());
-  const acceleration=.4+torque*.8;
-  omega=Math.max(0,Math.min(3.8+connections.filter(c=>c.type.endsWith('Plus')).length*.65,omega+(acceleration-omega*.6)*dt*7));
+  // Forces contribute signed torque: an opposing mount must not become a boost.
+  const torque=-forces(),inertia=.55+.45*armScale*armScale;
+  const acceleration=(.4+torque*.8)/inertia;
+  omega=Math.max(0,omega+(acceleration-omega*.6)*dt*7);
   theta-=omega*dt;
   const target=Math.PI-releaseDeg*Math.PI/180;
   if(theta<=target || frameTime>5){
     theta=Math.max(target,theta);
-    // Preserve the authored launch strength after correcting the old .016s Verlet initialization.
-    const launchScale=currentLevel==='trampoline'?1:1.92;
+    // Keep the starter's authored trampoline route while letting every setup gain speed from torque.
+    const trampolineScale=.7165213436,launchScale=currentLevel==='trampoline'?trampolineScale:1.92;
     const tip=cradlePoint(),speed=omega*150*armScale*.9*launchScale;
     const vx=Math.max(28,speed*Math.sin(theta));
     const vy=Math.min(-38,speed*Math.cos(theta));
-    dummy={x:tip.x,y:tip.y-22,vx,vy,rot:0,spin:omega*.52};rag=makeRagdoll(dummy.x,dummy.y,vx,vy,omega*.52);impacts=0;
+    const spin=omega*.52*(currentLevel==='trampoline'?trampolineScale:1);
+    dummy={x:tip.x,y:tip.y-22,vx,vy,rot:0,spin};rag=makeRagdoll(dummy.x,dummy.y,vx,vy,spin);impacts=0;
     flightStart=bodyDistanceX(rag);
     setPhase('flying');phase='airborne';playCharacterVoice('flying');startFlightSounds();
     startNotice(`<strong>Released!</strong> The arm swings up from behind the pivot and sends the dummy forward (right). Initial speed ${Math.round(Math.hypot(vx,vy))} px/s.`);
