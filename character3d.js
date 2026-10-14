@@ -647,7 +647,7 @@ function positionTrafficProps(state,w,h){
 const scenerySignTemplates=[],scenerySignInstances=new Map();let pizzaSignTemplate=null,wetFloorTemplate=null;
 function prepareScenerySign(source,sideFacing=false,neon=true){
  const flat=new THREE.Group();source.updateWorldMatrix(true,true);
- source.traverse(o=>{if(!o.isMesh)return;const geometry=o.geometry.clone();geometry.applyMatrix4(o.matrixWorld);if(sideFacing)geometry.rotateY(Math.PI/2);const materials=(Array.isArray(o.material)?o.material:[o.material]).map(original=>{const mat=original.clone();mat.side=THREE.DoubleSide;if(neon&&mat.emissive&&mat.emissive.getHex()!==0)mat.emissiveIntensity=Math.max(1.8,mat.emissiveIntensity||1);return mat;});const mesh=new THREE.Mesh(geometry,Array.isArray(o.material)?materials:materials[0]);flat.add(mesh);});
+ source.traverse(o=>{if(!o.isMesh)return;const geometry=o.geometry.clone();geometry.applyMatrix4(o.matrixWorld);if(sideFacing)geometry.rotateY(-Math.PI/2);const materials=(Array.isArray(o.material)?o.material:[o.material]).map(original=>{const mat=original.clone();mat.side=THREE.DoubleSide;if(neon&&mat.emissive&&mat.emissive.getHex()!==0)mat.emissiveIntensity=Math.max(1.8,mat.emissiveIntensity||1);return mat;});const mesh=new THREE.Mesh(geometry,Array.isArray(o.material)?materials:materials[0]);flat.add(mesh);});
  const box=new THREE.Box3().setFromObject(flat),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
  for(const mesh of flat.children){mesh.geometry.translate(-center.x,-center.y,-center.z);mesh.geometry.scale(1/size.x,1/size.x,1/size.x);}flat.userData.heightRatio=size.y/size.x;return flat;
 }
@@ -655,7 +655,7 @@ async function loadScenerySigns(){
  const jobs=[['neon_signs.glb','pack'],['neon_sign.glb','single'],['pizza_time_neon_sign.glb','pizza'],['low_poly_wet_floor_sign__kaygan_zemin_tabelas.glb','wet']];
  await Promise.allSettled(jobs.map(async([file,kind])=>{try{const gltf=await new GLTFLoader().loadAsync('./'+file);gltf.scene.updateMatrixWorld(true);
  if(kind==='pack'){const group=gltf.scene.getObjectByName('GLTF_SceneRootNode');for(const source of group?.children||[])scenerySignTemplates.push(prepareScenerySign(source,true));}
- else if(kind==='single')scenerySignTemplates.push(prepareScenerySign(gltf.scene));
+ else if(kind==='single'){const sign=prepareScenerySign(gltf.scene);for(const mesh of sign.children)mesh.geometry.rotateY(Math.PI);scenerySignTemplates.push(sign);}
  else if(kind==='pizza')pizzaSignTemplate=prepareScenerySign(gltf.scene);
  else wetFloorTemplate=prepareScenerySign(gltf.scene,false,false);
  }catch(error){console.warn('Scenery sign unavailable',file,error);}}));
@@ -668,7 +668,7 @@ function positionScenerySigns(state,w,h){
   for(let i=start;i<start+Math.ceil(w/step)+3;i++)for(let slot=0;slot<2;slot++){
    const seed=i*31+slot*97+(factory?51:0);if(random(seed)<.38)continue;
    const index=Math.floor(random(seed+8)*scenerySignTemplates.length),u=slot? .76:.30,v=factory?(slot?.31:.43):(slot?.35:.445);
-   place(state.level+':neon:'+i+':'+slot,scenerySignTemplates[index],i*step-pan+tileWidth*u-w/2,h*v,Math.min(125,tileWidth*.075),-600);
+   place(state.level+':neon:'+i+':'+slot,scenerySignTemplates[index],i*step-pan+tileWidth*u-w/2,h*v,Math.min(125,tileWidth*.075)*(factory?1:.5),-600);
   }
  }
  if(state.level==='trampoline'&&pizzaSignTemplate){
@@ -1187,7 +1187,7 @@ function positionGore(state,w,h){
   let belt=conveyors.find(hazard=>hazard.id===u.conveyorId);
   if(belt){
    const end=belt.x+belt.width/2;
-   u.worldX+=beltSpeed*dt;u.vx=beltSpeed;u.vy=0;u.resting=false;u.originX=u.worldX;
+   const previousX=u.worldX;u.worldX+=beltSpeed*dt;window.launcherDebrisTravel?.(u.joint,previousX,u.worldY,u.worldX,u.worldY,contactExtent);u.vx=beltSpeed;u.vy=0;u.resting=false;u.originX=u.worldX;
    const top=h*.88+(belt.groundOffset||0)-77;
    u.worldY=top-contactExtent;u.floorY=top;
    if(u.joint==='head')p.rotation.z+=beltSpeed/Math.max(7,u.radius||15)*dt;
@@ -1204,6 +1204,7 @@ function positionGore(state,w,h){
    u.worldY+=u.vy*dt;
    if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
+   window.launcherDebrisTravel?.(u.joint,oldX,oldY,u.worldX,u.worldY,Math.max(contactExtent,u.halfWidth||u.radius||8));
    const collision=window.launcherMachineCollision?.(oldX,oldY,u.worldX,u.worldY,Math.max(contactExtent,u.halfWidth||u.radius||8),null);
    // Conveyor top contacts are handled below so they carry, rather than bounce, debris.
    if(collision&&!(collision.hazard.kind==='conveyor'&&collision.ny===-1)){
@@ -1220,7 +1221,7 @@ function positionGore(state,w,h){
     u.worldX=hitX;u.worldY=surface(hitX)-contactExtent-1;
     u.vx=(Number.isFinite(pad.vx)?pad.vx:300)+THREE.MathUtils.clamp(u.vx*.15,-140,140);u.vy=Math.min(-700,pad.vy||-1100);
     u.trampolineCooldown=.18;u.freeTravel=true;u.originX=hitX;u.resting=false;u.visualGrounded=false;u.conveyorId=null;u.bounces=0;u.spin=-u.spin;
-    window.launcherDebrisTrampolineHit?.(pad.id);break;
+    window.launcherDebrisTrampolineHit?.(pad.id);window.launcherDebrisScore?.(pad.id,u.joint,u.worldX,u.worldY);break;
    }
    if(u.vy>0)for(const candidate of conveyors){
     const top=h*.88+(candidate.groundOffset||0)-77,target=top-contactExtent;
@@ -1228,7 +1229,7 @@ function positionGore(state,w,h){
     const fraction=Math.max(0,Math.min(1,(target-oldY)/(u.worldY-oldY||1))),hitX=oldX+(u.worldX-oldX)*fraction;
     if(hitX<candidate.x-candidate.width/2||hitX>candidate.x+candidate.width/2)continue;
     if(u.vy>45)window.launcherPartGroundImpact?.(u.joint,u.vy);
-    u.conveyorId=candidate.id;u.worldX=hitX;u.worldY=target;u.originX=hitX;u.vx=beltSpeed;u.vy=0;u.resting=false;u.visualGrounded=false;u.floorY=top;break;
+    window.launcherDebrisScore?.(candidate.id,u.joint,hitX,top);u.conveyorId=candidate.id;u.worldX=hitX;u.worldY=target;u.originX=hitX;u.vx=beltSpeed;u.vy=0;u.resting=false;u.visualGrounded=false;u.floorY=top;break;
    }
    if(u.worldY<groundY-6)u.visualGrounded=false;
    if(!u.conveyorId&&u.worldY>=groundY){
