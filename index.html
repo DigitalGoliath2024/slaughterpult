@@ -1199,14 +1199,15 @@ function scoreCrowTravel(x0,y0,x1,y1,radius){
  if(phase!=='airborne'||!rag||levelFailed||rag.softLanding||rag.resultAwarded||!window.crowModelReady)return;
  for(const crow of courseCrows)if(!crow.hit&&segmentHitsMachine(x0-crow.oldX,y0-crow.oldY,x1-crow.x,y1-crow.y,{left:-18,right:18,top:-32,bottom:0},Math.min(radius,18))){awardCrowHit(crow);}
 }
-// Knife sharpeners score only inside the nip between their two drums.
+// Knife sharpeners score inside the open processing channel, below the solid top.
 function isKnifeRoller(h){return h.kind==='roller'&&!h.impactLauncher&&(window.machineBloodSurfaces?.[h.id]?.kind==='twin'||/(?:roller[135]|roller2)$/.test(h.id));}
 function rollerIntake(h,x0,y0,x1,y1){
  const machine=window.machineBloodSurfaces?.[h.id],height=machine?.height??h.width*.733,width=machine?.width??h.width;
  const center=machine?.centerY??H*.88+(h.groundOffset||0)-height*.5;
- // Drum centers lie at 21% and 53.5% of the housing height. Require
- // the particle center to enter their nip, without radius padding.
- return segmentHitsMachine(x0,y0,x1,y1,{left:h.x-width*.28,right:h.x+width*.28,top:center-height*.16,bottom:center-height*.095},0);
+ // Match the open channel used by machineCollision: its top and bottom
+ // housings each occupy 18% of the height. Keep a 4% inner margin,
+ // with no particle-radius padding that could count a bounce on the roof.
+ return segmentHitsMachine(x0,y0,x1,y1,{left:h.x-width*.39,right:h.x+width*.39,top:center-height*.28,bottom:center+height*.28},0);
 }
 function scoreHazard(h,x=h.x,y=(window.machineBloodSurfaces?.[h.id]?.centerY??H*.88+(h.groundOffset||0)-100),processed=false){
  if(isKnifeRoller(h)&&!processed)return;
@@ -1222,7 +1223,10 @@ window.launcherDebrisTravel=(joint,x0,y0,x1,y1,radius)=>{
  if(!rag||levelFailed)return;scoreCrowTravel(x0,y0,x1,y1,radius);const candidates=new Set();for(let bin=Math.floor((Math.min(x0,x1)-radius)/100);bin<=Math.floor((Math.max(x0,x1)+radius)/100);bin++)for(const h of bloodHazardsAt(bin*100))candidates.add(h);
  for(const h of candidates){if(!['roller','grinder'].includes(h.kind))continue;const machine=window.machineBloodSurfaces?.[h.id],floor=H*.88+(h.groundOffset||0),center=machine?.centerY??floor-100,height=machine?.height??150,width=machine?.width??h.width;
   const box=h.kind==='grinder'?{left:h.x-width*.30,right:h.x+width*.30,top:machine?.top??floor-125,bottom:floor-18}:{left:h.x-width*.40,right:h.x+width*.40,top:center-height*.5,bottom:center+height*.5};
-  if(isKnifeRoller(h)?rollerIntake(h,x0,y0,x1,y1):segmentHitsMachine(x0,y0,x1,y1,box,Math.min(radius,12)))window.launcherDebrisScore(h.id,joint,x1,y1,true);
+  if(isKnifeRoller(h)?rollerIntake(h,x0,y0,x1,y1):segmentHitsMachine(x0,y0,x1,y1,box,Math.min(radius,12))){
+   if(isKnifeRoller(h))scoreHazard(h,x1,y1,true);
+   window.launcherDebrisScore(h.id,joint,x1,y1,true);
+  }
  }
 };
 function drawScorePopups(overlay){
@@ -1303,7 +1307,7 @@ function hazardHit(x,y,part=null){
     }
    }continue;
   }
-  if(h.impactLauncher&&n){if(Math.max(x,n.px)<h.x-h.width/2-n.r||Math.min(x,n.px)>h.x+h.width/2+n.r)continue;}else if(x<h.x-h.width/2||x>h.x+h.width/2)continue;
+  if((h.impactLauncher||isKnifeRoller(h))&&n){if(Math.max(x,n.px)<h.x-h.width/2-n.r||Math.min(x,n.px)>h.x+h.width/2+n.r)continue;}else if(x<h.x-h.width/2||x>h.x+h.width/2)continue;
   if(h.kind==='ramp'&&n){
    const surface=rampY(h,x);
    // Nails are drawn every 14px, with tips 20px ABOVE the board face.
