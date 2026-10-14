@@ -82,7 +82,7 @@ function positionChair(state,w,h){
  if(!seatRoot||!seatReady)return;
  // The bracket origin stays physically on the steel girder tip.
  seatRoot.visible=state.camera<750;
- seatRoot.position.set(state.tip.x-state.camera-w/2+25,h/2-state.tip.y+(state.cameraY||0),12);
+ seatRoot.position.set(state.tip.x-state.camera-w/2,h/2-state.tip.y+(state.cameraY||0),12);
  // Rigidly welded to the girder: arm rotation only, no independent seat tilt.
  seatRoot.rotation.z=state.theta-Math.PI;
 }
