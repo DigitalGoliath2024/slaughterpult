@@ -1,6 +1,6 @@
 import json,struct,concurrent.futures,pathlib,html,re
 root=pathlib.Path(__file__).resolve().parent.parent
-paths=sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file() and '.git' not in p.parts and p.suffix.lower() in ('.glb','.png','.jpg','.mp3','.wav','.ogg'))
+paths=sorted(p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file() and '.git' not in p.parts and p.suffix.lower() in ('.glb','.png','.jpg','.mp3','.wav','.ogg','.mp4'))
 def meta(p):
  try:
   with (root/p).open('rb') as r:

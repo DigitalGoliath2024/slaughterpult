@@ -417,7 +417,7 @@ function buildMachineTemplate(source,kind){
    if(name.includes('Stripes'))trim=new THREE.Box3().setFromObject(o);
    if(o.name==='Object_7')panel=new THREE.Box3().setFromObject(o);
   });
-  if(trim&&panel)template.userData.bloodHeightRatio=((trim.max.y+panel.max.y)*.5-bounds.min.y)/size.x;
+  if(trim&&panel){template.userData.bloodHeightRatio=((trim.max.y+panel.max.y)*.5-bounds.min.y)/size.x;const left=Math.max(trim.min.x,panel.min.x),right=Math.min(trim.max.x,panel.max.x);if(right>left){template.userData.bloodLeftRatio=(left-center.x)/size.x;template.userData.bloodRightRatio=(right-center.x)/size.x;}}
  }
  template.userData.kind=kind;template.userData.heightRatio=size.y/size.x;return template;
 }
@@ -440,8 +440,9 @@ function positionMachineLipBlood(root,template,hazard,state,width,centerY){
  const active=new Set(),scale=root.scale.x;
  for(const stain of state.machineLipBlood||[]){
   if(stain.machineId!==hazard.id)continue;active.add(stain.id);let mesh=marks.get(stain.id);
-  if(!mesh){mesh=new THREE.Mesh(lipBloodGeometry,lipBloodMaterial);root.add(mesh);marks.set(stain.id,mesh);}
-  const x=Math.max(-width*.44,Math.min(width*.44,stain.x-hazard.x));
+  if(!mesh){mesh=new THREE.Mesh(lipBloodGeometry,lipBloodMaterial);mesh.userData.bloodDecal=true;root.add(mesh);marks.set(stain.id,mesh);}
+  const surface=window.machineBloodSurfaces?.[hazard.id],margin=stain.size*1.8+2,left=(surface?.bloodLeft??hazard.x-width*.5)-hazard.x+margin,right=(surface?.bloodRight??hazard.x+width*.5)-hazard.x-margin;
+  const x=Math.max(Math.min(left,right),Math.min(Math.max(left,right),stain.x-hazard.x));
   const bloodY=state.machineLipBlood&&Number.isFinite(stain.y)?stain.y:centerY;
   mesh.position.set(x/scale,(centerY-bloodY)/scale,root.userData.lipFront);
   mesh.scale.set(stain.size*1.65/scale,Math.max(1,stain.size*.32)/scale,1);mesh.visible=true;
@@ -450,6 +451,11 @@ function positionMachineLipBlood(root,template,hazard,state,width,centerY){
  }
  for(const [id,mesh] of marks)if(!active.has(id)){root.remove(mesh);marks.delete(id);}
 }
+function colorCircusProps(root,circus,index=0){
+ if(root.userData.circusColors===circus)return;root.userData.circusColors=circus;let piece=0;const colors=[0xea417f,0xe9bf49,0x36c7ce,0x9a66e0];
+ root.traverse(o=>{if(!o.isMesh||o.userData.bloodDecal)return;if(!o.userData.originalCircusMaterials){const mats=Array.isArray(o.material)?o.material:[o.material];o.userData.originalCircusMaterials=mats.map(m=>m.color.clone());o.material=Array.isArray(o.material)?mats.map(m=>m.clone()):mats[0].clone();}const mats=Array.isArray(o.material)?o.material:[o.material];mats.forEach((m,i)=>{m.color.copy(o.userData.originalCircusMaterials[i]);if(circus)m.color.lerp(new THREE.Color(colors[(index+piece+i)%colors.length]),.6);});piece++;});
+}
+
 function positionLevelMachinery(state,w,h){
  const active=new Set();window.machineBloodSurfaces={};window.apparatusVents=[];
  for(const hazard of state.hazards||[]){
@@ -469,11 +475,12 @@ function positionLevelMachinery(state,w,h){
    const support=new THREE.Group();
    root.userData.support=support;scene.add(support);scene.add(root);machineryInstances.set(key,root);
   }
+  colorCircusProps(root,state.level==='circus',Math.floor(hazard.x/100));
   root.visible=Math.abs(hazard.x-state.camera-w/2)<w/2+width;
   const height=template.userData.heightRatio*width/root.userData.facingWidth;
   const centerY=kind==='spiked'?floor-106:floor-height/2;
   root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),35);
-  window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,bloodTop:kind==='hopper'&&template.userData.bloodHeightRatio?floor-template.userData.bloodHeightRatio*width/root.userData.facingWidth:undefined,centerY,height,width,kind,feedBelt:hazard.feedBelt};
+  window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,bloodTop:kind==='hopper'&&template.userData.bloodHeightRatio?floor-template.userData.bloodHeightRatio*width/root.userData.facingWidth:undefined,centerY,height,width,kind,feedBelt:hazard.feedBelt,bloodLeft:hazard.x+(template.userData.bloodLeftRatio??-.48)*width/root.userData.facingWidth,bloodRight:hazard.x+(template.userData.bloodRightRatio??.48)*width/root.userData.facingWidth};
   if(kind==='hopper'||kind==='spiked'||kind==='twin')positionMachineLipBlood(root,template,hazard,state,width,centerY);
   if(!root.userData.cutters&&window.weaponOverlayReady){
    const cutter=hazard.impactLauncher?'bat':['axe','machete','knife'][Math.floor(hazard.x/100)%3];
@@ -493,12 +500,13 @@ function positionLevelMachinery(state,w,h){
   if(kind==='spiked'&&!support.children.length&&apparatusTemplates.length){
    for(const side of [-1,1]){const post=apparatusTemplates[(Math.abs(hazard.x)+ (side>0?1:0))%apparatusTemplates.length].clone(true);post.userData.side=side;post.rotation.y=side<0?Math.PI:0;post.scale.setScalar(106);support.add(post);}
   }
+  colorCircusProps(support,state.level==='circus',Math.floor(hazard.x/200));
   for(const post of support.children){
    post.position.set(root.position.x+post.userData.side*width*.48,root.position.y,35);
    post.updateMatrixWorld(true);const mouth=post.localToWorld(new THREE.Vector3(post.userData.outlet.x,post.userData.outlet.y,post.userData.outlet.z));
    window.apparatusVents.push({id:key+':'+post.userData.side,x:mouth.x+state.camera+w/2,y:h/2-mouth.y+(state.cameraY||0),dir:post.userData.side,type:hazard.impactLauncher?'steam':post.userData.side<0?'fire':'steam'});
   }
-  {root.updateMatrixWorld(true);support.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(root);bounds.union(new THREE.Box3().setFromObject(support));window.machineBloodSurfaces[hazard.id].hitBounds={left:bounds.min.x+state.camera+w/2,right:bounds.max.x+state.camera+w/2,top:h/2-bounds.max.y+(state.cameraY||0),bottom:h/2-bounds.min.y+(state.cameraY||0)};}
+  {root.updateMatrixWorld(true);support.updateMatrixWorld(true);const bodyParts=root.children.filter(part=>!part.userData.bloodDecal),parts=bodyParts.map(part=>part.userData.motorAxis?part.children[0]:part).filter(Boolean);const boxes=parts.map(part=>new THREE.Box3().setFromObject(part));const bounds=new THREE.Box3();for(const box of boxes)bounds.union(box);const convert=box=>({left:box.min.x+state.camera+w/2,right:box.max.x+state.camera+w/2,top:h/2-box.max.y+(state.cameraY||0),bottom:h/2-box.min.y+(state.cameraY||0)});const surface=window.machineBloodSurfaces[hazard.id];surface.hitBounds=convert(bounds);surface.hitBoxes=boxes.map(convert);for(const post of support.children)surface.hitBoxes.push(convert(new THREE.Box3().setFromObject(post)));}
  }
  for(const [key,root] of machineryInstances)if(!active.has(key)){root.visible=false;root.userData.support.visible=false;}
 }
@@ -556,7 +564,8 @@ function positionTrampolines(state,w,h){
    const bounds=new THREE.Box3().setFromObject(root);root.userData.legDepth=-bounds.min.y;
    scene.add(root);trampolineInstances.set(pad.id,root);
   }
-  root.visible=state.level==='trampoline'&&Math.abs(pad.x-state.camera-w/2)<w/2+pad.width;
+  colorCircusProps(root,state.level==='circus',pad.variant||0);
+  root.visible=['trampoline','circus'].includes(state.level)&&Math.abs(pad.x-state.camera-w/2)<w/2+pad.width;
   root.position.set(pad.x-state.camera-w/2,h/2-(h*.88+pad.offset)+(state.cameraY||0),40);
   const ground=window.launcherGroundYAt?window.launcherGroundYAt(pad.x):h*.88;
   const groundScreen=h/2-ground+(state.cameraY||0),support=root.userData.support;
@@ -670,7 +679,8 @@ async function loadBackdropMachines(){
 function positionBackdropMachines(state,w,h){
  for(const root of backdropMachines){
   const x=root.userData.worldX,ground=window.launcherGroundYAt?window.launcherGroundYAt(x):h*.88;
-  root.visible=['factory','trampoline'].includes(state.level)&&Math.abs(x-state.camera-w/2)<w/2+200;
+  colorCircusProps(root,state.level==='circus',Math.floor(x/100));
+  root.visible=['factory','trampoline','circus'].includes(state.level)&&Math.abs(x-state.camera-w/2)<w/2+200;
   root.position.set(x-state.camera-w/2,h/2-ground+(state.cameraY||0),-70);
  }
 }
@@ -688,7 +698,7 @@ async function loadSceneryBed(){
 function positionSceneryBed(state,w,h){
  if(!sceneryBed)return;
  const x=state.level==='trampoline'?1390:1100,ground=window.launcherGroundYAt?window.launcherGroundYAt(x):h*.88;
- sceneryBed.visible=['factory','trampoline'].includes(state.level)&&Math.abs(x-state.camera-w/2)<w/2+200;
+ sceneryBed.visible=['factory','trampoline','circus'].includes(state.level)&&Math.abs(x-state.camera-w/2)<w/2+200;
  sceneryBed.position.set(x-state.camera-w/2,h/2-ground+(state.cameraY||0),-55);
 }
 const wallDolls=[];
@@ -715,7 +725,7 @@ function positionWallDolls(state,w,h){
  const now=performance.now(),dt=dollLastTime?Math.min(.04,(now-dollLastTime)/1000):1/60;dollLastTime=now;
  for(const pivot of wallDolls){
   const u=pivot.userData;
-  pivot.visible=['factory','trampoline'].includes(state.level)&&Math.abs(u.worldX-state.camera-w/2)<w/2+100;
+  pivot.visible=['factory','trampoline','circus'].includes(state.level)&&Math.abs(u.worldX-state.camera-w/2)<w/2+100;
   // Damped pendulum driven by irregular small gusts. No repeating sine loop.
   u.gustTimer-=dt;
   if(u.gustTimer<=0){u.wind=(Math.random()-.5)*.20;u.gustTimer=.55+Math.random()*1.9;}
@@ -1051,6 +1061,7 @@ function positionGore(state,w,h){
  }
  const joints=fullShred?Object.keys(GORE_MAP):[...removed];
  const conveyors=(state.hazards||[]).filter(hazard=>hazard.kind==='conveyor');
+ const trampolines=(state.hazards||[]).filter(hazard=>hazard.kind==='trampoline');
  const beltSpeed=state.conveyorSpeed||180;
  for(const joint of joints){
   if(goreParts.some(p=>p.userData.joint===joint)||!goreAsset)continue;
@@ -1073,7 +1084,7 @@ function positionGore(state,w,h){
  }
  for(let step=0;step<steps;step++)for(const p of goreParts){
   const floor=window.launcherSupportYAt?window.launcherSupportYAt(p.userData.worldX):h*.88;
-  const u=p.userData;
+  const u=p.userData;u.trampolineCooldown=Math.max(0,(u.trampolineCooldown||0)-dt);
   if(u.joint==='rh'){
    // Keep the existing forearm/hand fragment; fingertips lead its creeping
    // direction and its lower surface rests against the floor.
@@ -1103,7 +1114,7 @@ function positionGore(state,w,h){
    u.vx*=Math.exp(-.34*dt);
    u.worldX+=u.vx*dt;
    // Keep debris within a plausible vicinity of the impact site.
-   u.worldX=THREE.MathUtils.clamp(u.worldX,u.originX-165,u.originX+165);
+   if(!u.freeTravel)u.worldX=THREE.MathUtils.clamp(u.worldX,u.originX-165,u.originX+165);
    u.worldY+=u.vy*dt;
    if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
@@ -1113,6 +1124,17 @@ function positionGore(state,w,h){
     const inward=u.vx*collision.nx+u.vy*collision.ny;
     if(inward<0){u.vx-=1.5*inward*collision.nx;u.vy-=1.5*inward*collision.ny;if((u.machineSoundTime||0)<=now-100)window.launcherPartGroundImpact?.(u.joint,-inward);u.machineSoundTime=now;}
     u.worldX=collision.x;u.worldY=collision.y;u.originX=u.worldX;u.resting=false;u.bounces=0;u.spin=-u.spin;
+   }
+   if(u.vy>0&&u.trampolineCooldown===0)for(const pad of trampolines){
+    const surface=x=>h*.88+(pad.offset||0)-(x-pad.x)*(pad.slope||0);
+    const before=oldY+contactExtent-surface(oldX),after=u.worldY+contactExtent-surface(u.worldX);
+    if(before>2||after<0||after<=before)continue;
+    const fraction=Math.max(0,Math.min(1,-before/(after-before))),hitX=oldX+(u.worldX-oldX)*fraction;
+    if(Math.abs(hitX-pad.x)>pad.width/2-8)continue;
+    u.worldX=hitX;u.worldY=surface(hitX)-contactExtent-1;
+    u.vx=(Number.isFinite(pad.vx)?pad.vx:300)+THREE.MathUtils.clamp(u.vx*.15,-140,140);u.vy=Math.min(-700,pad.vy||-1100);
+    u.trampolineCooldown=.18;u.freeTravel=true;u.originX=hitX;u.resting=false;u.visualGrounded=false;u.conveyorId=null;u.bounces=0;u.spin=-u.spin;
+    window.launcherDebrisTrampolineHit?.(pad.id);break;
    }
    if(u.vy>0)for(const candidate of conveyors){
     const top=h*.88+(candidate.groundOffset||0)-77,target=top-contactExtent;
