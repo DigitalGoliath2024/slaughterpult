@@ -8,9 +8,9 @@
     },
     {
       "file": "blood_splatter (1).glb",
-      "author": "Robin.Mikalsen (https://sketchfab.com/Robin.Mikalsen)",
+      "author": "Robin.Mikalsen",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
-      "source": "https://sketchfab.com/3d-models/blood-splatter-43e6b3753cc34aecbee9f4d0cd97a8b0",
+      "source": "https://skfb.ly/owsuS",
       "title": "Blood splatter"
     },
     {
@@ -99,9 +99,9 @@
     },
     {
       "file": "skeleton_gore_model.glb",
-      "author": "DJMaesen (https://sketchfab.com/bumstrum)",
+      "author": "DJMaesen",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
-      "source": "https://sketchfab.com/3d-models/skeleton-gore-model-f80e51109cf04f38869adb1d0de90daa",
+      "source": "https://skfb.ly/6yL7Q",
       "title": "Skeleton gore model"
     },
     {
@@ -113,16 +113,16 @@
     },
     {
       "file": "toy__grinder_beam_ugc_a_000_1x1.glb",
-      "author": "BRUNO 365 (https://sketchfab.com/BRUNO365)",
+      "author": "GUY 228",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
-      "source": "https://sketchfab.com/3d-models/toy--grinder-beam-ugc-a-000-1x1-8d74474c25194563a3a45e07d1271abc",
+      "source": "https://skfb.ly/pGpFS",
       "title": "Toy_ Grinder Beam UGC_A_000_1x1"
     },
     {
       "file": "toy__grinder_ugc_a_000_1x1.glb",
-      "author": "BRUNO 365 (https://sketchfab.com/BRUNO365)",
+      "author": "GUY 228",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
-      "source": "https://sketchfab.com/3d-models/toy--grinder-ugc-a-000-1x1-202a18676f8a446daa40b474cacde067",
+      "source": "https://skfb.ly/pG6Wr",
       "title": "Toy_ Grinder UGC_A_000_1x1"
     },
     {
@@ -134,23 +134,23 @@
     },
     {
       "file": "trash_grinder.glb",
-      "author": "NotoriousTitan (https://sketchfab.com/NotoriousTitan)",
+      "author": "NotoriousTitan",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
-      "source": "https://sketchfab.com/3d-models/trash-grinder-e53e056595c748cb95de38815dbe2feb",
+      "source": "https://skfb.ly/6SY9v",
       "title": "Trash Grinder"
     },
     {
       "file": "twist_the_knife.glb",
-      "author": "AdrianMurariu (https://sketchfab.com/AdrianMurariu)",
+      "author": "AdrianMurariu",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
-      "source": "https://sketchfab.com/3d-models/twist-the-knife-4593329a99e6496f9cc7337506e91b07",
+      "source": "https://skfb.ly/6ZpMt",
       "title": "Twist The Knife"
     },
     {
       "file": "vintage_windmill_animated_.glb_free_low_poly.glb",
-      "author": "LordSamueliSolo (https://sketchfab.com/LadyLionStudios)",
+      "author": "Lady Lion Studios",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
-      "source": "https://sketchfab.com/3d-models/vintage-windmill-animated-glb-free-low-poly-0ffb2ba5163140b1a7d2a65a6bc3aa11",
+      "source": "https://skfb.ly/opSOr",
       "title": "Vintage Windmill Animated .glb FREE Low Poly"
     },
     {
@@ -280,6 +280,71 @@
       "name": "Barlow Condensed",
       "source": "https://fonts.google.com/specimen/Barlow+Condensed",
       "license": "SIL Open Font License"
+    }
+  ],
+  "supplied_assets": [
+    {
+      "file": "board_with_nails_in_blood.glb",
+      "title": "Board with nails in blood",
+      "author": "DISMHa_Ha",
+      "source": "https://skfb.ly/oATtL",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": null,
+      "title": "blood effect",
+      "author": "rock170gaming",
+      "source": "https://skfb.ly/6YGvy",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": "blood_splatter (1).glb",
+      "title": "Blood splatter",
+      "author": "Robin.Mikalsen",
+      "source": "https://skfb.ly/owsuS",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": "skeleton_gore_model.glb",
+      "title": "Skeleton gore model",
+      "author": "DJMaesen",
+      "source": "https://skfb.ly/6yL7Q",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": "trash_grinder.glb",
+      "title": "Trash Grinder",
+      "author": "NotoriousTitan",
+      "source": "https://skfb.ly/6SY9v",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": "toy__grinder_ugc_a_000_1x1.glb",
+      "title": "Toy_ Grinder UGC_A_000_1x1",
+      "author": "GUY 228",
+      "source": "https://skfb.ly/pG6Wr",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": "toy__grinder_beam_ugc_a_000_1x1.glb",
+      "title": "Toy_ Grinder Beam UGC_A_000_1x1",
+      "author": "GUY 228",
+      "source": "https://skfb.ly/pGpFS",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": "twist_the_knife.glb",
+      "title": "Twist The Knife",
+      "author": "AdrianMurariu",
+      "source": "https://skfb.ly/6ZpMt",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": "vintage_windmill_animated_.glb_free_low_poly.glb",
+      "title": "Vintage Windmill Animated .glb FREE Low Poly",
+      "author": "Lady Lion Studios",
+      "source": "https://skfb.ly/opSOr",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
     }
   ]
 }

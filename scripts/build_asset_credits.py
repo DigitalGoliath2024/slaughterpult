@@ -7,9 +7,16 @@ def meta(p):
    h=r.read(20);n=struct.unpack_from('<I',h,12)[0];d=json.loads(r.read(n));e=d.get('asset',{}).get('extras',{});return {'file':p,**e}
  except Exception as e:return {'file':p,'metadata_error':str(e)}
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool: models=list(pool.map(meta,[p for p in paths if p.endswith('.glb')]))
+credit_override_path=root/'ASSET_CREDIT_OVERRIDES.json'
+supplied_assets=json.loads(credit_override_path.read_text()).get('credits',[]) if credit_override_path.exists() else []
+for m in models:
+ for credit in supplied_assets:
+  if credit.get('file')==m['file'] or (m.get('title') and m['title'].casefold()==credit['title'].casefold()):
+   m.update({key:credit[key] for key in ('title','author','source','license')})
 for m in models:
  if m['file']=='jet_pack.glb':m['author']='Incredible INC. / '+m.get('author','kumaripanchamarthi')
 manifest={'models':models,'uploaded_files':paths,'custom_assets':'Meshy visuals, custom character and chair, dialogue and sound effects supplied by Tim / Flying Vee Studios.','audio_sources':[{'file':'chrysalyn-intense-cinematic-wind-whoosh-transition-543526.mp3','creator':'chrysalyn','source_status':'Original source/license URL not supplied.'},{'file':'freesound_community-jet-engine-6753.mp3','creator':'freesound_community','source_status':'Original source/license URL not supplied.'}],'adaptations':'Game adaptations include resizing, reorientation, extracted/compressed textures, separated motor assemblies, material edits, skeletal posing and procedural movement. Source meshes retain original authorship.'}
+manifest['supplied_assets']=supplied_assets
 manifest['fonts']=[{'name':'Creepster','source':'https://fonts.google.com/specimen/Creepster','license':'SIL Open Font License'},{'name':'Barlow Condensed','source':'https://fonts.google.com/specimen/Barlow+Condensed','license':'SIL Open Font License'}]
 (root/'ASSET_CREDITS.json').write_text(json.dumps(manifest,indent=2)+'\n')
 rows=[]
