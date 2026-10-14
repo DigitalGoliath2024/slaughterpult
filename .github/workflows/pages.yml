@@ -20,6 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build character voice catalog
         run: python3 scripts/build_voice_catalog.py
+      - name: Build asset credits
+        run: python3 scripts/build_asset_credits.py
       - uses: actions/configure-pages@v5
         with:
           enablement: true
@@ -28,3 +30,4 @@ jobs:
           path: .
       - id: deployment
         uses: actions/deploy-pages@v4
+
