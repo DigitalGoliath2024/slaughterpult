@@ -368,6 +368,28 @@ function syncTrampolineSkyVideo(){
  if(trampolineSkyVideo.paused&&!skyPlayPending&&performance.now()>=skyRetryAt){skyPlayPending=true;const playing=trampolineSkyVideo.play?.();if(playing)playing.catch(()=>{skyRetryAt=performance.now()+2000;}).finally(()=>{skyPlayPending=false;});else skyPlayPending=false;}
 }
 document.addEventListener('visibilitychange',syncTrampolineSkyVideo);
+// Artwork coordinates keep fixtures welded to each repeating wall panel.
+function drawWallLighting(level,x,y,width,height,tile){
+ const time=performance.now()/1000,seed=((tile*1664525+1013904223)>>>0),scale=width/1536;
+ const light=(u,v,color,strength=1)=>{
+  const px=x+u*width,py=y+v*height,r=48*scale,pulse=.92+.08*Math.sin(time*.8+tile+u*9);
+  ctx.save();ctx.globalCompositeOperation='screen';ctx.globalAlpha=strength*pulse;
+  const glow=ctx.createRadialGradient(px,py,2,px,py+r*.5,r);glow.addColorStop(0,color);glow.addColorStop(.35,color.replace('0.28','0.10'));glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.ellipse(px,py+r*.5,r,r*1.4,0,0,Math.PI*2);ctx.fill();ctx.restore();
+ };
+ if(level==='slide'){
+  light(.164,.445,'rgba(255,193,105,0.28)');light(.887,.470,'rgba(255,193,105,0.28)',.85);
+  if(seed%4!==0){
+   const sx=x+width*.284,sy=y+height*.425,sw=width*.078,sh=height*.05;
+   ctx.save();ctx.fillStyle='#161b1c';ctx.shadowColor='#000';ctx.shadowBlur=3;ctx.fillRect(sx+3,sy+3,sw,sh);ctx.strokeStyle='#485255';ctx.lineWidth=2;ctx.strokeRect(sx,sy,sw,sh);
+   ctx.strokeStyle='#667174';ctx.beginPath();ctx.moveTo(sx+sw*.15,sy);ctx.lineTo(sx+sw*.15,sy-8*scale);ctx.moveTo(sx+sw*.85,sy);ctx.lineTo(sx+sw*.85,sy-8*scale);ctx.stroke();
+   ctx.globalAlpha=.88+.12*Math.sin(time*1.3+tile);ctx.fillStyle=seed%2?'#ff6b96':'#6fe8ce';ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=9*scale;ctx.font='bold '+Math.max(9,sh*.62)+'px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(seed%2?'BEER':'OPEN',sx+sw/2,sy+sh/2,sw*.86);ctx.restore();
+  }
+ }else if(level==='factory'){
+  light(.128,.58,'rgba(255,80,44,0.28)',.65);light(.12,.465,'rgba(210,231,236,0.28)',.6);light(.911,.603,'rgba(255,205,116,0.28)',.8);
+ }else if(level==='trampoline'){
+  for(const [u,v] of [[.206,.03],[.611,.02],[.716,.096],[.239,.226]])light(u,v,'rgba(139,206,228,0.28)',.55);
+ }
+}
 function drawTrampolineParkBackdrop(){
  ctx.fillStyle='#0b1019';ctx.fillRect(0,cameraY,W,H);
  const sky=levelSkyImages.trampoline;
@@ -379,7 +401,7 @@ function drawTrampolineParkBackdrop(){
  if(trampolineParkWall.complete&&trampolineParkWall.naturalWidth>0){
   // Hide the baked foreground lip under the physical basin floor.
   const sourceHeight=trampolineParkWall.naturalHeight*.85,wallHeight=Math.max(620,H*1.2),wallWidth=trampolineParkWall.naturalWidth*wallHeight/sourceHeight,floor=H*.88+340,top=floor-wallHeight,backX=camera*.55,start=Math.floor(backX/wallWidth)-1;
-  for(let i=start;i<start+Math.ceil(W/wallWidth)+2;i++)ctx.drawImage(trampolineParkWall,0,0,trampolineParkWall.naturalWidth,sourceHeight,i*wallWidth-backX,top,wallWidth,wallHeight);
+  for(let i=start;i<start+Math.ceil(W/wallWidth)+2;i++){const x=i*wallWidth-backX;ctx.drawImage(trampolineParkWall,0,0,trampolineParkWall.naturalWidth,sourceHeight,x,top,wallWidth,wallHeight);ctx.save();ctx.beginPath();ctx.rect(x,top,wallWidth,wallHeight);ctx.clip();drawWallLighting('trampoline',x,top,wallWidth,wallHeight/.85,i);ctx.restore();}
  }
 }
 // World-aligned fence: mounted hazards move with its mesh; artwork recedes behind it.
@@ -479,13 +501,13 @@ function drawSky(){
    if(bg===horrorFactoryImage){
     // Align the supplied factory's wall/floor junction to the playable ground.
     // Crop its baked floor; the textured physical floor starts at this seam.
-    ctx.drawImage(bg,0,0,bg.naturalWidth,bg.naturalHeight*.85,x,0,tileW,floor);
+    ctx.drawImage(bg,0,0,bg.naturalWidth,bg.naturalHeight*.85,x,0,tileW,floor);drawWallLighting('factory',x,0,tileW,floor/.85,i);
    }else if(bg===industrialWallImage){
     ctx.drawImage(bg,12,102,bg.naturalWidth-24,Math.min(650,bg.naturalHeight-204),x,0,tileW,H);
    }else{
     // Preserve transparent pixels of the clean factory panel. The cosmic
     // sky remains visible above its roofline; no opaque rectangle is drawn.
-    ctx.drawImage(bg,x,0,tileW,H);
+    ctx.drawImage(bg,x,0,tileW,H);if(currentLevel==='slide')drawWallLighting('slide',x,0,tileW,H,i);
    }
   }
  }else if(currentLevel==='slide'){
@@ -1715,5 +1737,5 @@ function render(){if(currentLevel!=='circus')syncTrampolineSkyVideo();drawFlipCa
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller'||s.surface?.kind==='beam')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=circus-crowd-scale-20261014-50"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=wall-lighting-20261014-51"></script></body></html>
 
