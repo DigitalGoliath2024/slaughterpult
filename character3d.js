@@ -434,6 +434,7 @@ function positionMachineLipBlood(root,template,hazard,state,width,centerY){
   const bloodY=state.machineLipBlood&&Number.isFinite(stain.y)?stain.y:centerY;
   mesh.position.set(x/scale,(centerY-bloodY)/scale,root.userData.lipFront);
   mesh.scale.set(stain.size*1.65/scale,Math.max(1,stain.size*.32)/scale,1);mesh.visible=true;
+  if(Number.isFinite(stain.drumAngle)){const angle=stain.drumAngle,radius=template.userData.heightRatio/2+.004;mesh.position.set(x/scale,Math.cos(angle)*radius,Math.sin(angle)*radius);mesh.rotation.x=angle-Math.PI/2;}
  }
  for(const [id,mesh] of marks)if(!active.has(id)){root.remove(mesh);marks.delete(id);}
 }
@@ -461,7 +462,7 @@ function positionLevelMachinery(state,w,h){
   const centerY=kind==='spiked'?floor-106:floor-height/2;
   root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),35);
   window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,bloodTop:kind==='hopper'&&template.userData.bloodHeightRatio?floor-template.userData.bloodHeightRatio*width/root.userData.facingWidth:undefined,centerY,height,width,kind,feedBelt:hazard.feedBelt};
-  if(kind==='hopper')positionMachineLipBlood(root,template,hazard,state,width,centerY);
+  if(kind==='hopper'||kind==='spiked')positionMachineLipBlood(root,template,hazard,state,width,centerY);
   if(!root.userData.cutters&&window.weaponOverlayReady){
    const cutter=['axe','machete','knife'][Math.floor(hazard.x/100)%3];
    for(const motor of root.children.filter(p=>p.userData.motorAxis)){
