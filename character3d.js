@@ -722,7 +722,7 @@ async function loadScenerySigns(){
 function positionScenerySigns(state,w,h){
  const active=new Set(),random=n=>{const v=Math.sin(n*12.9898+78.233)*43758.5453;return v-Math.floor(v);};
  const place=(key,template,x,y,width,depth,yaw=0)=>{if(!template||Math.abs(x)>w/2+180)return;active.add(key);let root=scenerySignInstances.get(key);if(!root){root=template.clone(true);if(key.includes(':pizza:')){const steel=new THREE.MeshStandardMaterial({color:0x78858c,metalness:.8,roughness:.4});for(const side of [-1,1]){const clamp=new THREE.Mesh(new THREE.BoxGeometry(.035,.12,.04),steel);clamp.position.set(side*.42,template.userData.heightRatio*.4,-.025);root.add(clamp);}}scene.add(root);scenerySignInstances.set(key,root);}root.scale.setScalar(width);root.rotation.y=yaw;root.position.set(x,h/2-y+(state.cameraY||0),depth);root.visible=true;return root;};
- if(['slide','factory'].includes(state.level)&&scenerySignTemplates.length){
+ if(state.level==='slide'&&scenerySignTemplates.length){
   const factory=state.level==='factory',image=factory?window.factoryBackdropDimensions:null,tileWidth=factory&&image?h*.88*image.width/(image.height*.85):Math.max(factory?880:780,Math.round(h*(factory?2.2:2.25))),step=tileWidth-(factory?28:0),pan=state.camera*.55,start=Math.floor(pan/step)-1;
   for(let i=start;i<start+Math.ceil(w/step)+3;i++)for(let slot=0;slot<2;slot++){
    const seed=i*31+slot*97+(factory?51:0);if(random(seed)<.38)continue;
