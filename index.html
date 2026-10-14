@@ -396,6 +396,15 @@ const levelSkyImages={slide:new Image(),factory:new Image()};
 levelSkyImages.slide.src='./Meshy_AI_night_sky_giant_heads.png';
 levelSkyImages.factory.src='./Meshy_AI_cosmic_surreal_entities.png';
 levelSkyImages.trampoline=new Image();levelSkyImages.trampoline.src='./tramp_park_sky.png';
+const trampolineSkyImages=[levelSkyImages.trampoline,...[2,3].map(n=>{const image=new Image();image.src='./tramp_park_sky_'+n+'.jfif';return image;})];
+const trampolineSkyFeathered=new Map();
+function featheredTrampolineSky(index){
+ if(trampolineSkyFeathered.has(index))return trampolineSkyFeathered.get(index);
+ const image=trampolineSkyImages[index],panel=document.createElement('canvas');panel.width=image.naturalWidth;panel.height=image.naturalHeight;
+ const paint=panel.getContext('2d');paint.drawImage(image,0,0);
+ paint.globalCompositeOperation='destination-in';const fade=paint.createLinearGradient(0,0,panel.width*.06,0);fade.addColorStop(0,'rgba(255,255,255,0)');fade.addColorStop(1,'rgba(255,255,255,1)');paint.fillStyle=fade;paint.fillRect(0,0,panel.width,panel.height);paint.globalCompositeOperation='source-over';
+ trampolineSkyFeathered.set(index,panel);return panel;
+}
 const trampolineParkWall=new Image();trampolineParkWall.src='./tramp_park_wall.png';
 const circusSkyImages=[3,4,5].map(n=>{const image=new Image();image.src='./circus_sky_'+n+'.jfif';return image;});
 const circusSkyImage=circusSkyImages[0];
@@ -431,9 +440,19 @@ function drawTrampolineParkBackdrop(){
  ctx.fillStyle='#0b1019';ctx.fillRect(0,cameraY,W,H);
  const sky=levelSkyImages.trampoline;
  if(sky.complete&&sky.naturalWidth>0){
-  // Preserve the artwork's aspect ratio; pan horizontally without repeating it vertically.
-  const sourceHeight=sky.naturalHeight*.94,scale=Math.max(W*1.25/sky.naturalWidth,H*1.35/sourceHeight),tileW=sky.naturalWidth*scale,tileH=sourceHeight*scale,backX=camera*.18,start=Math.floor(backX/tileW),cropY=Math.max(0,Math.min(tileH-H,(tileH-H)*.5+cameraY*.12));
-  for(let i=start;i<start+Math.ceil(W/tileW)+1;i++)ctx.drawImage(sky,0,0,sky.naturalWidth,sourceHeight,i*tileW-backX,cameraY-cropY,tileW,tileH);
+  // Keep the entrance/parking lot once, then feather panels 2 and 3 along the course.
+  // Retain the original aspect ratio and lower-border crop, with no vertical repeats.
+  const sourceHeight=sky.naturalHeight*.94,scale=Math.max(W*1.25/sky.naturalWidth,H*1.35/sourceHeight),tileH=sourceHeight*scale,backX=Math.max(0,camera*.18),cropY=Math.max(0,Math.min(tileH-H,(tileH-H)*.5+cameraY*.12));
+  if(trampolineSkyImages.every(image=>image.complete&&image.naturalWidth>0)){
+   const widths=trampolineSkyImages.map(image=>tileH*image.naturalWidth/(image.naturalHeight*.94));
+   const draw=(index,x)=>{const image=trampolineSkyImages[index];ctx.drawImage(index===0?image:featheredTrampolineSky(index),0,0,image.naturalWidth,image.naturalHeight*.94,x-backX,cameraY-cropY,widths[index],tileH);};
+   if(backX<widths[0])draw(0,0);
+   const firstJoin=widths[0]-widths[1]*.06,step=widths[1]-widths[2]*.06,cycleWidth=step+widths[2]-widths[1]*.06,cycle=Math.max(0,Math.floor((backX-firstJoin)/cycleWidth)-1);
+   for(let x=firstJoin+cycle*cycleWidth;x<backX+W;x+=cycleWidth){draw(1,x);draw(2,x+step);}
+  }else{
+   // Hold the opening view until both continuation images are ready.
+   ctx.drawImage(sky,0,0,sky.naturalWidth,sourceHeight,0,cameraY-cropY,sky.naturalWidth*scale,tileH);
+  }
  }
  if(trampolineParkWall.complete&&trampolineParkWall.naturalWidth>0){
   // Hide the baked foreground lip under the physical basin floor.
@@ -1918,4 +1937,5 @@ function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:[...LEVEL_HAZARDS,...alleyBalconies()],machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();drawSplashBlood(dt);requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
 </script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=fast-build-startup-20261014-64"></script></body></html>
+
 
