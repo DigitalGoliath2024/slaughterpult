@@ -90,3 +90,5 @@ Desktop launch buttons and tuning controls use larger text and targets. The head
 Pistons act as fast launch rams: a strong initial push tapers to zero over 0.55 seconds, with full pressure up to 340px separation and a stroke taper ending at 420px. Mounting still supplies signed leverage. Boost pistons double ram force; hydraulic assist multiplies it by 1.9. Bands and springs retain their existing tuning.
 
 Piston-equipped launches mix one of the two supplied ram clips quietly with the catapult launch sound, with no immediate repeat and one ram voice per launch. The supplied installation clip plays when a regular or boost piston is connected. Both follow effects/master volume and mute.
+
+Pull Back animates the arm from its raised build pose (2.95 radians) down to the existing charged pose (3.39 radians) over 0.6 seconds. Launch becomes available when the pull finishes. Charged angle, torque, release timing and launch tuning remain unchanged. Reset cancels the pull.
