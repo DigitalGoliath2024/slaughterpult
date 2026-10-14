@@ -54,22 +54,23 @@ const actionSounds={
  launch:[['catapult_launch_with_#1-1791930256015.mp3',.35],['catapult_launch_with_#2-1791930221469.mp3',.55]],
  squish:[['splat_squish_sound_#1-1791930022493.mp3',.85],['splat_squish_sound_#2-1791930016713.mp3',1],['splat_squish_sound_#2-1791930038748.mp3',.5],['splat_squish_sound_#4-1791930006652.mp3',.7],['splat_squish_sound_#4-1791930030413.mp3',.85]]
 };
-const activeActionSounds=new Set(),lastActionClip=new Map(),queuedImpactSounds=new Set();let squishCooldown=0,boneCooldown=0,bodyImpactCooldown=0,impactQuietTime=0;
-function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();queuedImpactSounds.clear();squishCooldown=boneCooldown=bodyImpactCooldown=impactQuietTime=0;}
+const actionAudioBank=new Map();
+for(const pool of Object.values(actionSounds))for(const [file] of pool){const sound=new Audio('./'+encodeURIComponent(file));sound.preload='auto';sound.load();actionAudioBank.set(file,sound);}
+const activeActionSounds=new Set(),lastActionClip=new Map();let squishCooldown=0,boneCooldown=0,bodyImpactCooldown=0,impactQuietTime=0;
+function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();squishCooldown=boneCooldown=bodyImpactCooldown=impactQuietTime=0;}
 function playActionSound(kind){
  if(rag?.voiceLanded&&!rag.landingPending&&characterVoice&&!characterVoice.paused&&kind!=='knife')return;
  if((kind==='squish'&&squishCooldown>0)||(kind==='bone'&&boneCooldown>0))return;
  const pool=actionSounds[kind],choices=pool.length>1?pool.filter(([file])=>file!==lastActionClip.get(kind)):pool;
  const [file,volume]=choices[Math.floor(Math.random()*choices.length)];lastActionClip.set(kind,file);
- if(kind==='bone'&&activeActionSounds.size>=2){queuedImpactSounds.add('bone');return;}
  if(kind==='bone')boneCooldown=1.2;
  if(kind==='squish')squishCooldown=.18; // One contact often tears several joints in the same physics step.
  if(activeActionSounds.size>=2){
-  const replace=kind==='landing'?[...activeActionSounds].find(sound=>sound.effectKind!=='landing')||activeActionSounds.values().next().value:kind==='knife'?[...activeActionSounds].find(sound=>sound.effectKind!=='landing'):kind==='squish'?[...activeActionSounds].find(sound=>sound.effectKind==='bone'):null;
+  const replace=kind==='landing'?[...activeActionSounds].find(sound=>sound.effectKind!=='landing')||activeActionSounds.values().next().value:kind==='knife'?[...activeActionSounds].find(sound=>sound.effectKind!=='landing'):kind==='bone'?[...activeActionSounds].find(sound=>sound.effectKind!=='landing'):null;
   if(!replace)return;replace.pause();activeActionSounds.delete(replace);
  }
 
- const sound=new Audio('./'+encodeURIComponent(file));sound.effectKind=kind;sound.effectVolume=volume;if(kind!=='launch')impactQuietTime=0;sound.volume=volume*(kind==='landing'?1:characterVoice&&!characterVoice.paused?.65:1);
+ const sound=actionAudioBank.get(file);sound.pause();sound.currentTime=0;sound.effectKind=kind;sound.effectVolume=volume;if(kind!=='launch')impactQuietTime=0;sound.volume=volume*(kind==='landing'?1:characterVoice&&!characterVoice.paused?.65:1);
  activeActionSounds.add(sound);sound.onended=()=>activeActionSounds.delete(sound);sound.onerror=sound.onended;
  sound.play().catch(()=>activeActionSounds.delete(sound));
 }
@@ -82,8 +83,7 @@ function playFlightEffect(file,volume){const sound=new Audio('./audio/effects/'+
 function startFlightSounds(){stopFlightSounds();playActionSound('launch');flyingSound=playFlightEffect('flying_character_sound.mp3',.5);flyingSound.loop=true;if(jetpackMounted&&rag?.jetFuel>0)jetEngineSound=playFlightEffect('freesound_community-jet-engine-6753.mp3',.28);}
 function syncFlightSounds(){
  syncMapAmbience();impactQuietTime+=PHYSICS_STEP;
- if(activeActionSounds.size<2&&queuedImpactSounds.size){const kind=queuedImpactSounds.values().next().value;queuedImpactSounds.delete(kind);playActionSound(kind);}
- if(rag?.landingPending&&rag.landingRestTime>=.6&&impactQuietTime>=.35&&activeActionSounds.size===0&&queuedImpactSounds.size===0){rag.landingPending=false;playCharacterVoice('landed');}
+ if(rag?.landingPending&&rag.landingRestTime>=.6&&impactQuietTime>=.35&&activeActionSounds.size===0){rag.landingPending=false;playCharacterVoice('landed');}
  squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);boneCooldown=Math.max(0,boneCooldown-PHYSICS_STEP);bodyImpactCooldown=Math.max(0,bodyImpactCooldown-PHYSICS_STEP);
  for(const sound of activeActionSounds)sound.volume=sound.effectVolume*(sound.effectKind==='landing'?1:(characterVoice&&!characterVoice.paused?.65:1)*(activeActionSounds.size>1?.8:1));
  if(!rag||phase!=='airborne'){stopFlightSounds();return;}
