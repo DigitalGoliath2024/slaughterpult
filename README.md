@@ -84,3 +84,5 @@ Elevated machinery uses swept collision checks against the rendered assembly bou
 Detached anatomy is prepared between frames before impact. Its fall uses elapsed time in 120Hz substeps rather than dropping elapsed time below 29fps, so shredding does not put debris into slow motion.
 
 Impact blood uses spatial bins for machinery and all pillow depths, so each droplet checks nearby surfaces instead of the entire extended course. Detached-part materials also compile during preparation rather than first impact.
+
+Desktop launch buttons and tuning controls use larger text and targets. The header speaker opens independent master, character voice, impact/effect, rocket/jetpack, flight wind and music/ambiance sliders, plus mute and restore defaults. Settings apply to playing sounds immediately, retain existing balance and ducking, and persist in browser storage.
