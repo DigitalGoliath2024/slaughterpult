@@ -366,7 +366,7 @@ function buildJetpackTemplate(source){
 }
 async function loadJetpack(){try{const g=await new GLTFLoader().loadAsync('./jet_pack.glb');jetpackModel=buildJetpackTemplate(g.scene);jetpackModel.scale.setScalar(35);jetpackModel.visible=false;scene.add(jetpackModel);window.jetpackOverlayReady=true;}catch(e){console.warn('Supplied jet pack unavailable',e);}}
 function positionJetpack(state,w,h){
- if(!jetpackModel)return;jetpackModel.visible=!!state.jetpackMounted;if(!jetpackModel.visible)return;
+ if(!jetpackModel)return;jetpackModel.visible=!!state.jetpackMounted&&!state.jetExploded;if(!jetpackModel.visible)return;
  let center,up;
  if(state.rag){const hip=state.rag.waist||state.rag.hip,chest=state.rag.chest;center=new THREE.Vector3((hip.x+chest.x)/2-state.camera-w/2,h/2-(hip.y+chest.y)/2+(state.cameraY||0),-5);up=new THREE.Vector3(chest.x-hip.x,hip.y-chest.y,0).normalize();
   if(state.shredded){const torso=goreParts.find(p=>p.userData.joint==='chest');if(torso){center.set(torso.userData.worldX-state.camera-w/2,h/2-torso.userData.worldY+(state.cameraY||0),-5);}}
@@ -1246,3 +1246,4 @@ function drawBasket(state,w,h){
  basketCtx.restore();
 }
 if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();animate();}
+
