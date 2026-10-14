@@ -606,33 +606,51 @@ async function loadCushions(){
  window.cushionOverlayReady=cushionTemplates.some(Boolean);
 }
 const trafficTemplates=new Map(),trafficInstances=new Map();let trafficLastTime=0,trafficReset=-1,trafficPrevious=new Map();
+function trafficMaterialCompatibility(parser){
+ return {name:'KHR_materials_pbrSpecularGlossiness',beforeRoot(){
+  for(const material of parser.json.materials||[]){const old=material.extensions?.KHR_materials_pbrSpecularGlossiness;if(!old)continue;
+   material.pbrMetallicRoughness={baseColorFactor:old.diffuseFactor??[1,1,1,1],baseColorTexture:old.diffuseTexture,metallicFactor:0,roughnessFactor:1-(old.glossinessFactor??0)};
+  }
+ }};
+}
 async function loadTrafficProps(){
- try{const gltf=await new GLTFLoader().loadAsync('./traffic_props.glb');gltf.scene.updateMatrixWorld(true);
- for(const [kind,name] of [['cone','traffic_cone_tall'],['fold','traffic_sign.002'],['gate','traffic_sign'],['rail','Cube.009']]){
-  const source=gltf.scene.getObjectByName(name);if(!source)continue;const flat=new THREE.Group();source.traverse(o=>{if(!o.isMesh)return;const geometry=o.geometry.clone();geometry.applyMatrix4(o.matrixWorld);geometry.rotateX(-Math.PI/2);geometry.rotateY(Math.PI/2);flat.add(new THREE.Mesh(geometry,o.material));});
+ try{const gltf=await new GLTFLoader().register(trafficMaterialCompatibility).loadAsync('./traffic_props.glb');gltf.scene.updateMatrixWorld(true);
+ for(const [kind,name] of [['cone','traffic_cone_tall'],['fold','traffic_sign.002'],['gate','traffic_sign'],['rail','Cube.009'],['jersey','jersey_barrier']]){
+  const source=gltf.scene.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(name));if(!source)continue;const flat=new THREE.Group();source.traverse(o=>{if(!o.isMesh)return;const geometry=o.geometry.clone();geometry.applyMatrix4(o.matrixWorld);flat.add(new THREE.Mesh(geometry,o.material));});
+  const nativeSize=new THREE.Box3().setFromObject(flat).getSize(new THREE.Vector3());if(nativeSize.z>nativeSize.x)for(const mesh of flat.children)mesh.geometry.rotateY(Math.PI/2);
   const bounds=new THREE.Box3().setFromObject(flat),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
-  for(const mesh of flat.children){mesh.geometry.translate(-center.x,-bounds.min.y,-center.z);mesh.geometry.scale(1/size.y,1/size.y,1/size.y);}flat.userData.widthRatio=size.x/size.y;trafficTemplates.set(kind,flat);
+  for(const mesh of flat.children){mesh.geometry.translate(-center.x,-bounds.min.y,-center.z);mesh.geometry.scale(1/size.y,1/size.y,1/size.y);}flat.userData.widthRatio=size.x/size.y;flat.userData.depthRatio=size.z/size.y;trafficTemplates.set(kind,flat);
  }
  }catch(error){console.warn('Traffic props unavailable',error);}
 }
 function trafficSegmentHit(a,b,box){
  let enter=0,exit=1;for(const [p,d,min,max] of [[a.x,b.x-a.x,box.left,box.right],[a.y,b.y-a.y,box.top,box.bottom]]){if(Math.abs(d)<1e-8){if(p<min||p>max)return false;continue;}let t0=(min-p)/d,t1=(max-p)/d;if(t0>t1)[t0,t1]=[t1,t0];enter=Math.max(enter,t0);exit=Math.min(exit,t1);if(enter>exit)return false;}return true;
 }
+function roadsidePropPosition(state,desired,halfWidth){
+ for(const shift of [0,70,-70,140,-140,210,-210]){
+  const x=desired+shift;if(x<350)continue;
+  if(!(state.hazards||[]).some(machine=>!machine.attachedWall&&machine.kind!=='soft'&&Math.abs(x-machine.x)<machine.width/2+halfWidth+12))return x;
+ }
+ return null;
+}
 function positionTrafficProps(state,w,h){
  const now=performance.now()/1000,dt=Math.max(0,Math.min(.12,trafficLastTime?now-trafficLastTime:0));trafficLastTime=now;
  if(trafficReset!==state.goreResetId){for(const root of trafficInstances.values()){root.userData.knocked=false;root.userData.dx=0;root.userData.vx=0;root.userData.angle=0;root.userData.spin=0;}trafficPrevious.clear();trafficReset=state.goreResetId;}
  if(state.level!=='slide'){for(const root of trafficInstances.values())root.visible=false;trafficPrevious.clear();return;}
- const random=n=>{const a=Math.sin(n*12.9898+29.19)*43758.5453;return a-Math.floor(a);},active=new Set(),bins=new Set(),contacts=[];
+ const random=n=>{const a=Math.sin(n*12.9898+29.19)*43758.5453;return a-Math.floor(a);},active=new Set(),contacts=[];
  if(state.rag&&!state.shredded)for(const [joint,n] of Object.entries(state.rag))contacts.push({key:'body:'+joint,...n,radius:9});
  for(const part of window.bodyCameraParts||[])contacts.push({key:'gore:'+part.joint,...part,radius:part.radius||8});
- for(const pillow of state.cushions||[]){if(pillow.depth||pillow.stack)continue;const bin=Math.floor(pillow.x/1400);if(bins.has(bin)||random(bin+93)<.25)continue;if((state.hazards||[]).some(machine=>!machine.attachedWall&&machine.kind!=='soft'&&Math.abs(pillow.x-machine.x)<machine.width/2+115))continue;bins.add(bin);
-  const count=random(bin+27)>.45?3:2;
-  for(let i=0;i<count;i++){
-   const key='traffic:'+bin+':'+i,kind=i===0?['fold','gate','rail'][Math.floor(random(bin+11)*3)]:'cone',template=trafficTemplates.get(kind);if(!template)continue;
-   const origin=pillow.x+(i-(count-1)/2)*54,height=kind==='cone'?48:64;
-   if(Math.abs(origin-state.camera-w/2)>w/2+350)continue;active.add(key);let root=trafficInstances.get(key);
-   if(!root){root=template.clone(true);root.userData={...root.userData,dx:0,vx:0,angle:0,spin:0,knocked:false};root.scale.setScalar(height);root.rotation.y=(random(bin+i+81)-.5)*.4;scene.add(root);trafficInstances.set(key,root);}
-   const data=root.userData,ground=window.launcherGroundYAt?.(origin+data.dx)??h*.88,width=template.userData.widthRatio*height;
+ // Stable road-side placements, independent of cushions; every barrier variant
+ // appears in rotation, alongside the tall cones, as the course scrolls.
+ const start=Math.max(0,Math.floor((state.camera-400)/780));
+ for(let bin=start;bin<start+Math.ceil(w/780)+3;bin++){
+  for(let i=0;i<2;i++){
+   const key='traffic:'+bin+':'+i,kind=i===0?['fold','gate','rail','jersey'][bin%4]:'cone',template=trafficTemplates.get(kind);if(!template)continue;
+   const height=kind==='cone'?62:kind==='jersey'?66:74;
+   const origin=roadsidePropPosition(state,bin*780+450+i*120,template.userData.widthRatio*height/2);if(origin===null)continue;
+   if(Math.abs(origin-state.camera-w/2)>w/2+350)continue;window.launcherClearCushionsForProp?.(origin,template.userData.widthRatio*height/2);active.add(key);let root=trafficInstances.get(key);
+   if(!root){root=template.clone(true);root.userData={...root.userData,dx:0,vx:0,angle:0,spin:0,knocked:false};root.scale.setScalar(height);const angles=[-.6,.35,Math.PI-.45,.65,-.25,Math.PI+.55];root.rotation.y=angles[(bin*2+i)%angles.length];scene.add(root);trafficInstances.set(key,root);}
+   const data=root.userData,ground=window.launcherGroundYAt?.(origin+data.dx)??h*.88,width=(template.userData.widthRatio*Math.abs(Math.cos(root.rotation.y))+(template.userData.depthRatio||0)*Math.abs(Math.sin(root.rotation.y)))*height;
    if(!data.knocked)for(const n of contacts){const previous=trafficPrevious.get(n.key)||{x:n.x-(n.vx||0)*dt,y:n.y-(n.vy||0)*dt};if(trafficSegmentHit(previous,n,{left:origin-width/2-n.radius,right:origin+width/2+n.radius,top:ground-height-n.radius,bottom:ground+n.radius})){
     const vx=n.vx??(dt?(n.x-previous.x)/dt:0),speed=Math.hypot(vx,n.vy??(dt?(n.y-previous.y)/dt:0));if(speed<25)continue;data.knocked=true;data.direction=vx<0?-1:1;data.vx=data.direction*Math.min(380,Math.max(70,speed*.22));data.spin=-data.direction*4;break;
    }}
@@ -647,6 +665,13 @@ function positionTrafficProps(state,w,h){
 
 const scenerySignTemplates=[],scenerySignInstances=new Map();let pizzaSignTemplate=null,wetFloorTemplate=null;
 let crowTemplate=null,crowClip=null;const crowInstances=new Map();
+function crowPoseBounds(visual){
+ let root=visual;while(root.parent&&!root.parent.isScene)root=root.parent;
+ root.updateWorldMatrix(true,false);root.updateMatrixWorld(true);
+ // SkinnedMesh caches its bounds; refresh them after posing the skeleton.
+ visual.traverse(mesh=>{if(mesh.isSkinnedMesh)mesh.computeBoundingBox();});
+ return new THREE.Box3().setFromObject(visual);
+}
 async function loadCrows(){
  try{const gltf=await new GLTFLoader().loadAsync('./game_ready_crow.glb');crowTemplate=gltf.scene;crowClip=gltf.animations.find(clip=>clip.duration>0);window.crowModelReady=true;}
  catch(error){console.warn('Crow unavailable',error);}
@@ -655,15 +680,23 @@ function positionCrows(state,w,h){
  if(!crowTemplate)return;const active=new Set();
  for(const crow of window.launcherCrows||[]){
   active.add(crow.id);let bird=crowInstances.get(crow.id);
-  if(!bird){const root=new THREE.Group(),visual=cloneSkeleton(crowTemplate);root.add(visual);scene.add(root);
-   const mixer=new THREE.AnimationMixer(visual);if(crowClip)mixer.clipAction(crowClip).play();mixer.setTime(0);visual.updateMatrixWorld(true);
-   const box=new THREE.Box3().setFromObject(visual),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3()),scale=64/Math.max(size.x,size.y,size.z);
-   visual.scale.setScalar(scale);visual.position.set(-center.x*scale,-box.min.y*scale,-center.z*scale);
-   bird={root,visual,mixer};crowInstances.set(crow.id,bird);
+  if(!bird){
+   const root=new THREE.Group(),fit=new THREE.Group(),offset=new THREE.Group(),visual=cloneSkeleton(crowTemplate);
+   root.add(fit);fit.add(offset);offset.add(visual);scene.add(root);
+   const mixer=new THREE.AnimationMixer(visual);if(crowClip)mixer.clipAction(crowClip).play();
+   // The later portion of the supplied clip deforms the skin to roughly
+   // 100 times its normal size. Use its clean flight section and resting pose.
+   let span=0;for(let t=0;t<=2.8;t+=.025){mixer.setTime(t);const size=crowPoseBounds(visual).getSize(new THREE.Vector3());span=Math.max(span,size.x,size.y,size.z);}
+   bird={root,fit,offset,visual,mixer,scale:56/Math.max(.001,span)};crowInstances.set(crow.id,bird);
   }
   bird.root.visible=!crow.hit&&Math.abs(crow.x-state.camera-w/2)<w/2+100;
   if(!bird.root.visible)continue;
-  bird.mixer.setTime(crow.flying?crow.age*1.4:0);
+  // Fit through a separate parent so animation cannot overwrite placement or scale.
+  bird.root.position.set(0,0,0);bird.root.rotation.set(0,0,0);bird.fit.scale.setScalar(1);bird.offset.position.set(0,0,0);
+  bird.mixer.setTime(crow.flying?.85+(crow.age*1.4)%1.75:0);
+  const box=crowPoseBounds(bird.visual),center=box.getCenter(new THREE.Vector3());
+  const size=box.getSize(new THREE.Vector3()),scale=Math.min(bird.scale,56/Math.max(.001,size.x,size.y,size.z));
+  bird.offset.position.set(-center.x,-box.min.y,-center.z);bird.fit.scale.setScalar(scale);
   bird.root.rotation.y=crow.direction>0?Math.PI/2:-Math.PI/2;
   bird.root.position.set(crow.x-state.camera-w/2,h/2-crow.y+(state.cameraY||0),30);
  }
@@ -700,10 +733,14 @@ function positionScenerySigns(state,w,h){
   for(let i=start;i<start+Math.ceil(w/1350)+3;i++){if(i<0||random(i+100)<.25)continue;const x=i*1350+250+random(i+7)*330;place('trampoline:pizza:'+i,pizzaSignTemplate,x-state.camera-w/2,floor-height*.55,125,-430);}
  }
  if(wetFloorTemplate){
-  const used=new Set();for(const pillow of state.cushions||[]){const bin=Math.floor(pillow.x/650);if(used.has(bin)||pillow.stack||!pillow.depth||random(bin+177)<.35)continue;used.add(bin);
-   const ground=window.launcherGroundYAt?.(pillow.x)??h*.88,signHeight=52,width=signHeight/wetFloorTemplate.userData.heightRatio;
-   const root=place(state.level+':wet:'+bin,wetFloorTemplate,pillow.x-state.camera-w/2,ground+pillow.depth-signHeight/2,width,95,(random(bin+71)-.5)*.65);
-   if(root){root.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(root);root.position.y+=(h/2-ground-pillow.depth+(state.cameraY||0))-bounds.min.y;}
+  const start=Math.max(0,Math.floor((state.camera-250)/830)),angles=[-.65,.25,Math.PI-.4,.6,-.2,Math.PI+.55];
+  for(let bin=start;bin<start+Math.ceil(w/830)+2;bin++){
+   const signHeight=52,width=signHeight/wetFloorTemplate.userData.heightRatio;
+   const x=roadsidePropPosition(state,bin*830+370+random(bin+177)*110,width/2);if(x===null)continue;
+   window.launcherClearCushionsForProp?.(x,width/2);
+   const ground=window.launcherGroundYAt?.(x)??h*.88;
+   const root=place(state.level+':wet:'+bin,wetFloorTemplate,x-state.camera-w/2,ground-signHeight/2,width,95,angles[bin%angles.length]);
+   if(root){root.updateMatrixWorld(true);const bounds=new THREE.Box3().setFromObject(root);root.position.y+=(h/2-ground+(state.cameraY||0))-bounds.min.y;}
   }
  }
  for(const [key,root] of scenerySignInstances)if(!active.has(key))root.visible=false;
@@ -1229,11 +1266,19 @@ function positionGore(state,w,h){
    if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
    window.launcherDebrisTravel?.(u.joint,oldX,oldY,u.worldX,u.worldY,Math.max(contactExtent,u.halfWidth||u.radius||8));
-   const collision=window.launcherMachineCollision?.(oldX,oldY,u.worldX,u.worldY,Math.max(contactExtent,u.halfWidth||u.radius||8),null);
+   // Use the current rendered extents on each axis, not the longest limb
+   // dimension as a sphere (which left thin parts hovering over machines).
+   p.updateMatrixWorld(true);const machineBounds=new THREE.Box3().setFromObject(p);
+   const machineExtent={left:Math.max(1,p.position.x-machineBounds.min.x),right:Math.max(1,machineBounds.max.x-p.position.x),top:Math.max(1,machineBounds.max.y-p.position.y),bottom:Math.max(1,p.position.y-machineBounds.min.y)};
+   const collision=window.launcherMachineCollision?.(oldX,oldY,u.worldX,u.worldY,machineExtent,null);
    // Conveyor top contacts are handled below so they carry, rather than bounce, debris.
    if(collision&&!(collision.hazard.kind==='conveyor'&&collision.ny===-1)){
+    if(collision.hazard.balcony)window.launcherBalconyHit?.(collision.hazard.id,u.worldX,u.worldY);
     const inward=u.vx*collision.nx+u.vy*collision.ny;
-    if(inward<0){u.vx-=1.5*inward*collision.nx;u.vy-=1.5*inward*collision.ny;if((u.machineSoundTime||0)<=now-100)window.launcherPartGroundImpact?.(u.joint,-inward);u.machineSoundTime=now;}
+    if(inward<0){const response=collision.hazard.kind==='roller'?1.12:1.5;u.vx-=response*inward*collision.nx;u.vy-=response*inward*collision.ny;if((u.machineSoundTime||0)<=now-100)window.launcherPartGroundImpact?.(u.joint,-inward);u.machineSoundTime=now;}
+    // Powered drum tops carry pieces toward the edge instead of leaving them
+    // repeatedly bouncing in place above the same patch of metal.
+    if(collision.hazard.kind==='roller'&&!collision.hazard.impactLauncher&&collision.ny<-.5)u.vx=Math.max(70,u.vx);
     u.worldX=collision.x;u.worldY=collision.y;u.originX=u.worldX;u.resting=false;u.bounces=0;u.spin=-u.spin;
    }
    if(u.vy>0&&u.trampolineCooldown===0)for(const pad of trampolines){
@@ -1363,7 +1408,7 @@ function positionIndustrialBeams(state,w,h){
   if(hazard.kind==='beam'){
    const key=state.level+':'+hazard.id;active.add(key);let root=industrialBeamInstances.get(key);
    if(!root){root=new THREE.Group();addIndustrialBeam(root,-hazard.width/2,0,hazard.width/2,0,hazard.beamThickness||24,30,0,hazard.beamVariant||'beam');root.userData.lipBlood=new Map();root.userData.lipFront=16;root.userData.projectedLipFront=16;scene.add(root);industrialBeamInstances.set(key,root);}
-   const centerY=floor-beamRise(hazard,h);root.position.set(x,h/2-centerY+(state.cameraY||0),28);root.visible=true;root.updateMatrixWorld(true);
+   const centerY=hazard.balcony?hazard.balconyY:floor-beamRise(hazard,h);root.position.set(x,h/2-centerY+(state.cameraY||0),hazard.balcony?-580:28);root.visible=true;root.updateMatrixWorld(true);
    const bounds=new THREE.Box3().setFromObject(root);window.machineBloodSurfaces[hazard.id]={kind:'beam',centerY,width:hazard.width,height:hazard.beamThickness||24,top:centerY-(hazard.beamThickness||24)/2,hitBounds:{left:bounds.min.x+state.camera+w/2,right:bounds.max.x+state.camera+w/2,top:h/2-bounds.max.y+(state.cameraY||0),bottom:h/2-bounds.min.y+(state.cameraY||0)}};
    positionMachineLipBlood(root,{userData:{kind:'beam'}},hazard,state,hazard.width,centerY);
   }
@@ -1472,12 +1517,12 @@ function animate(){
  positionWallDolls(state,w,h);
  positionSceneryBed(state,w,h);
  positionBackdropMachines(state,w,h);
- positionCushions(state,w,h);
  positionScenerySigns(state,w,h);
+ positionTrafficProps(state,w,h);
+ positionCushions(state,w,h);
  positionCrows(state,w,h);
  positionTrampolines(state,w,h);
  positionGore(state,w,h);
- positionTrafficProps(state,w,h);
  if(model&&window.characterOverlayReady&&!window.seatLoading){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
