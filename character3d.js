@@ -646,7 +646,7 @@ function positionTrafficProps(state,w,h){
  for(let bin=start;bin<start+Math.ceil(w/780)+3;bin++){
   for(let i=0;i<2;i++){
    const key='traffic:'+bin+':'+i,kind=i===0?['fold','gate','rail','jersey'][bin%4]:'cone',template=trafficTemplates.get(kind);if(!template)continue;
-   const height=kind==='cone'?124:kind==='jersey'?66:74;
+   const height=kind==='cone'?124:kind==='jersey'?132:148;
    const origin=roadsidePropPosition(state,bin*780+450+i*120,template.userData.widthRatio*height/2);if(origin===null)continue;
    if(Math.abs(origin-state.camera-w/2)>w/2+350)continue;window.launcherClearCushionsForProp?.(origin,template.userData.widthRatio*height/2);active.add(key);let root=trafficInstances.get(key);
    if(!root){root=template.clone(true);root.userData={...root.userData,dx:0,vx:0,angle:0,spin:0,knocked:false};root.scale.setScalar(height);const angles=[-.6,.35,Math.PI-.45,.65,-.25,Math.PI+.55];root.rotation.y=angles[(bin*2+i)%angles.length];scene.add(root);trafficInstances.set(key,root);}
