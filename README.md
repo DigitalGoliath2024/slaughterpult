@@ -100,3 +100,13 @@ Ragdoll nodes and detached bones use swept solid machinery contacts, including h
 Striped hopper housings use separate left/right wall and base colliders. Their central 64% intake stays open; entering bodies can reach the existing shred zone while rim hits bounce.
 
 Knife rollers likewise retain a through passage between solid upper/lower housing bands so the conveyor feed can reach their existing cutting contacts and outlet.
+
+## Worldwide arcade records
+
+Run `supabase/world-leaderboard.sql` in the supplied Supabase project's SQL Editor. The game uses the supplied public publishable key with the REST Data API; no SDK or secret key is required. World Top 10 appears on the intro splash and header board, ranked by score descending, distance descending, then earliest server timestamp. Initials are two letters; different runs may share initials. Dates show month/year.
+
+Existing records from `slaughterpultRankingsV1` automatically import from each player's own browser upon entering the game, preserving original month/year. A stable browser ID and deterministic record UUID make retries idempotent; existing local records remain intact. Browser records cannot be retrieved until that browser visits. Legacy records have unknown course/character rather than invented metadata.
+
+Qualifying runs prompt once after settling, or on reset/course selection/Exit to Splash. Save or skip; low scores do not interrupt play. Failed submissions remain available for retry, and UUIDs prevent duplicate writes. The last fetched world board is cached and labelled if offline; qualification refreshes the server board. Escape or the header menu opens Resume, Sound Options, and Exit to Splash. A qualifying save prompt completes before Exit returns to the intro. Animation keeps running. Tab closing cannot reliably show this custom modal; use the in-game Exit flow.
+
+Database permissions allow public reading and validated new inserts, with no public updates/deletes or client-supplied timestamps. Historical month values are validated for legacy imports. This casual leaderboard uses client-reported scores; it does not verify gameplay server-side or prevent fabricated score requests.
