@@ -74,3 +74,5 @@ Publishing runs `scripts/build_asset_credits.py` to refresh model attributions d
 Entry flow: the 13-or-over screen is silent. Age confirmation starts the uploaded Evil Drone at low volume, looping through the intro and course/character selection. BUILD YOUR LAUNCHER stops Evil Drone and starts the selected map ambience. Returning to selection pauses the map ambience and resumes Evil Drone.
 
 Launcher release velocity, initial spin and powered accessory thrust share a 0.75 output multiplier. Attachment torque still adds normally; free-air bending alone does not tear the waist.
+
+Level three includes extra free-bounce trampolines in machine gaps and throughout generated course extensions. They reuse the three supplied models, bounce upward at 1,450–1,600px/s, retain ragdoll movement, and do not alter the original four-pad progression. Wall-mounted knife rollers and faster bat-equipped spiked rollers provide elevated hazards; bats from the credited weapon pack knock contacting body pieces forward. Near-ground camera framing keeps the basin floor near the lower edge of the view.

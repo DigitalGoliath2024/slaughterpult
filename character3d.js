@@ -475,19 +475,19 @@ function positionLevelMachinery(state,w,h){
   window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,bloodTop:kind==='hopper'&&template.userData.bloodHeightRatio?floor-template.userData.bloodHeightRatio*width/root.userData.facingWidth:undefined,centerY,height,width,kind,feedBelt:hazard.feedBelt};
   if(kind==='hopper'||kind==='spiked')positionMachineLipBlood(root,template,hazard,state,width,centerY);
   if(!root.userData.cutters&&window.weaponOverlayReady){
-   const cutter=['axe','machete','knife'][Math.floor(hazard.x/100)%3];
+   const cutter=hazard.impactLauncher?'bat':['axe','machete','knife'][Math.floor(hazard.x/100)%3];
    for(const motor of root.children.filter(p=>p.userData.motorAxis)){
     const box=new THREE.Box3().setFromObject(motor.children[0]),radius=Math.min(.14,template.userData.heightRatio*.32);
     for(let row=-1;row<=1;row++)for(let i=0;i<6;i++){
      const a=i*Math.PI/3;
-     const blade=mountedWeapon(motor,cutter,.065,row*.12,Math.cos(a)*radius,0,Math.sin(a)*radius);
+     const blade=mountedWeapon(motor,cutter,hazard.impactLauncher?.19:.065,row*.12,Math.cos(a)*radius,0,Math.sin(a)*radius);
      if(blade){if(motor.userData.motorAxis==='x')blade.rotation.set(a,Math.PI/2,0);else {blade.position.set(Math.cos(a)*.065,Math.sin(a)*.065,row*.035);blade.rotation.z=a-Math.PI/2;}}
     }
    }
    root.userData.cutters=true;
   }
   const clock=state.machineryClock||0;
-  for(const part of root.children)if(part.userData.motorAxis)part.rotation[part.userData.motorAxis]=clock*2.6*part.userData.motorSign;
+  for(const part of root.children)if(part.userData.motorAxis)part.rotation[part.userData.motorAxis]=clock*(hazard.motorSpeed||2.6)*part.userData.motorSign;
   const support=root.userData.support;support.visible=root.visible;
   if(kind==='spiked'&&!support.children.length&&apparatusTemplates.length){
    for(const side of [-1,1]){const post=apparatusTemplates[(Math.abs(hazard.x)+ (side>0?1:0))%apparatusTemplates.length].clone(true);post.userData.side=side;post.rotation.y=side<0?Math.PI:0;post.scale.setScalar(106);support.add(post);}
@@ -495,7 +495,7 @@ function positionLevelMachinery(state,w,h){
   for(const post of support.children){
    post.position.set(root.position.x+post.userData.side*width*.48,root.position.y,35);
    post.updateMatrixWorld(true);const mouth=post.localToWorld(new THREE.Vector3(post.userData.outlet.x,post.userData.outlet.y,post.userData.outlet.z));
-   window.apparatusVents.push({id:key+':'+post.userData.side,x:mouth.x+state.camera+w/2,y:h/2-mouth.y+(state.cameraY||0),dir:post.userData.side,type:post.userData.side<0?'fire':'steam'});
+   window.apparatusVents.push({id:key+':'+post.userData.side,x:mouth.x+state.camera+w/2,y:h/2-mouth.y+(state.cameraY||0),dir:post.userData.side,type:hazard.impactLauncher?'steam':post.userData.side<0?'fire':'steam'});
   }
  }
  for(const [key,root] of machineryInstances)if(!active.has(key)){root.visible=false;root.userData.support.visible=false;}
@@ -540,10 +540,10 @@ function positionTrampolines(state,w,h){
  if(!window.trampolineOverlayReady)return;
  const active=new Set();
  for(const pad of state.hazards||[]){
-  if(pad.kind!=='trampoline')continue;
+  if(pad.kind!=='trampoline'||Math.abs(pad.x-state.camera-w/2)>w/2+pad.width+200)continue;
   active.add(pad.id);let root=trampolineInstances.get(pad.id);
   if(!root){
-   const variant=pad.stage===2?1:pad.stage===3?2:0;
+   const variant=pad.variant??(pad.stage===2?1:pad.stage===3?2:0);
    root=trampolineTemplates[variant%trampolineTemplates.length].clone(true);
    root.scale.setScalar(pad.width);root.rotation.z=Math.atan(pad.slope);
    const support=new THREE.Group(),steel=new THREE.MeshStandardMaterial({color:0x657079,metalness:.65,roughness:.65});
@@ -730,7 +730,7 @@ window.weaponOverlayReady=false;
 async function loadWeapons(){
  try{
   const gltf=await new GLTFLoader().loadAsync('./retro__psx-like_horror_melee_weapons_pack.glb?v=pbr2');
-  const names={knife:'kitchenKnife_Bloody_',axe:'axe_bloody_',machete:'machete_Bloody_',cleaver:'cleaver_Bloody_'};
+  const names={knife:'kitchenKnife_Bloody_',axe:'axe_bloody_',machete:'machete_Bloody_',cleaver:'cleaver_Bloody_',bat:'bat_Bloody_'};
   for(const [kind,prefix] of Object.entries(names)){
    let source;gltf.scene.traverse(o=>{if(o.isMesh&&o.name.startsWith(prefix))source=o;});
    if(!source)continue;

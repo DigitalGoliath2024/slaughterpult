@@ -473,7 +473,7 @@ function bloodSurfacePosition(stain){
  const half=window.machineBloodSurfaces?.[h.id]?.kind==='hopper'?window.machineBloodSurfaces[h.id].width*.44:h.kind==='grinder'&&window.grinderOverlayReady?38:h.width/2-3;
  const x=Math.max(h.x-half,Math.min(h.x+half,stain.x));
  const floor=H*.88;
- if(spinningDrum(h)){const machine=window.machineBloodSurfaces?.[h.id],radius=(machine?.height??h.width*.326)/2;return {x,y:(machine?.centerY??floor+(h.groundOffset||0)-106)-Math.cos((stain.drumAge||0)*2.6)*radius,drumAngle:(stain.drumAge||0)*2.6};}
+ if(spinningDrum(h)){const machine=window.machineBloodSurfaces?.[h.id],radius=(machine?.height??h.width*.326)/2;return {x,y:(machine?.centerY??floor+(h.groundOffset||0)-106)-Math.cos((stain.drumAge||0)*(h.motorSpeed||2.6))*radius,drumAngle:(stain.drumAge||0)*(h.motorSpeed||2.6)};}
  const y=h.kind==='press'&&stain.face==='underside'?pressBottomY()+8:(bloodSurfaceTop(h,x)??stain.y);
  return {x,y};
 }
@@ -658,7 +658,11 @@ const COURSES={
   {id:'bounce2',kind:'trampoline',x:1830,width:360,offset:200,slope:-.28,vx:485,vy:-1100,stage:2,points:300},
   {id:'bounce3',kind:'trampoline',x:3370,width:350,offset:90,slope:.28,vx:-305,vy:-700,stage:3,points:400},
   {id:'bounce4',kind:'trampoline',x:2700,width:340,offset:250,slope:-.38,vx:845,vy:-1100,stage:4,points:600},
-  {id:'grinder',kind:'grinder',x:5500,width:240,groundOffset:340,points:3000,label:''}
+  {id:'grinder',kind:'grinder',x:5500,width:240,groundOffset:340,points:3000,label:''},
+  {id:'recovery1',kind:'trampoline',x:4240,width:280,offset:290,slope:-.08,vx:360,vy:-1450,freeBounce:true,variant:1,points:200},
+  {id:'recovery2',kind:'trampoline',x:4840,width:300,offset:285,slope:-.10,vx:440,vy:-1600,freeBounce:true,variant:2,points:200},
+  {id:'wall-bat-roller4',kind:'roller',x:4500,width:270,groundOffset:-280,attachedWall:true,impactLauncher:true,motorSpeed:7,points:900,label:''},
+  {id:'wall-knife-roller1',kind:'roller',x:5180,width:240,groundOffset:-940,attachedWall:true,motorSpeed:5,points:1400,label:''}
  ]
 };
 // Pair knives with an unobstructed belt; don't pull them across intervening machines.
@@ -680,7 +684,7 @@ function machineFootprint(h){
  return h.width;
 }
 function spaceCourseMachines(hazards){
- const solid=hazards.filter(h=>!['soft','trampoline'].includes(h.kind)).sort((a,b)=>a.x-b.x);let previous=null;
+ const solid=hazards.filter(h=>!h.attachedWall&&!['soft','trampoline'].includes(h.kind)).sort((a,b)=>a.x-b.x);let previous=null;
  for(const h of solid){
   if(previous){const joins=h.feedBelt===previous.id&&previous.kind==='conveyor',gap=joins?-8:h.kind==='ramp'&&previous.kind==='ramp'?0:24;
    const minimum=previous.x+machineFootprint(previous)/2+gap+machineFootprint(h)/2;h.x=Math.max(h.x,minimum);
@@ -695,13 +699,20 @@ function ensureCourseCoverage(level,reach){
  while(end<reach){
   const section=(courseSections.get(level)||0)+1;courseSections.set(level,section);const start=end+140,offset=level==='trampoline'?340:0;
   const add=(id,kind,x,width,points,extra={})=>{hazards.push({id:level+'-extension'+section+'-'+id,kind,x:start+x,width,points,label:'',groundOffset:offset,...extra});};
-  add('belt1','conveyor',180,360,400);
-  add('roller1','roller',452,200,1200,{feedBelt:level+'-extension'+section+'-belt1'});
-  add('hopper1','grinder',800,220,1800);
-  add('roller4','roller',1160,230,1500);
-  add('belt2','conveyor',1560,360,450);
-  add('hopper2','grinder',1920,230,2000);
-  if(level!=='trampoline'){add('press','press',2240,150,1400);add('board','ramp',2570,250,350,{y:150+section%3*25,slope:section%2?.32:-.32});}
+  if(level==='trampoline'){
+   add('belt1','conveyor',180,360,400);add('roller1','roller',452,200,1200,{feedBelt:level+'-extension'+section+'-belt1'});
+   add('bounce1','trampoline',790,260,250,{offset:290,slope:-.08,vx:380,vy:-1500,freeBounce:true,variant:section%3});
+   add('hopper1','grinder',1150,220,1800);add('roller4','roller',1600,230,1500);
+   add('bounce2','trampoline',2020,280,250,{offset:290,slope:-.10,vx:450,vy:-1600,freeBounce:true,variant:(section+1)%3});
+   add('belt2','conveyor',2460,360,450);add('hopper2','grinder',2840,230,2000);
+   add('bounce3','trampoline',3280,260,250,{offset:290,slope:-.06,vx:360,vy:-1450,freeBounce:true,variant:(section+2)%3});
+   add('wall-knife-roller1','roller',1250,240,1400,{groundOffset:340-1200,attachedWall:true,motorSpeed:5});
+   add('wall-bat-roller4','roller',2220,270,900,{groundOffset:340-680,attachedWall:true,impactLauncher:true,motorSpeed:7});
+  }else{
+   add('belt1','conveyor',180,360,400);add('roller1','roller',452,200,1200,{feedBelt:level+'-extension'+section+'-belt1'});
+   add('hopper1','grinder',800,220,1800);add('roller4','roller',1160,230,1500);add('belt2','conveyor',1560,360,450);add('hopper2','grinder',1920,230,2000);
+   add('press','press',2240,150,1400);add('board','ramp',2570,250,350,{y:150+section%3*25,slope:section%2?.32:-.32});
+  }
   spaceCourseMachines(hazards);end=Math.max(...hazards.map(h=>h.x+machineFootprint(h)/2));
  }
  courseEnds.set(level,end);cushionLayouts.delete(level);cushionBins.delete(level);return true;
@@ -712,7 +723,7 @@ const cushionLayouts=new Map(),cushionBins=new Map();window.pillowBloodImpacts=[
 function cushionLayoutFor(level){
  if(cushionLayouts.has(level))return cushionLayouts.get(level);
  const hazards=COURSES[level],end=Math.max(...hazards.map(h=>h.x+h.width/2))+480;
- const blocked=hazards.filter(h=>!['soft','trampoline'].includes(h.kind)).map(h=>[h.x-h.width/2-24,h.x+h.width/2+24]).sort((a,b)=>a[0]-b[0]);
+ const blocked=hazards.filter(h=>!h.attachedWall&&h.kind!=='soft').map(h=>[h.x-h.width/2-24,h.x+h.width/2+24]).sort((a,b)=>a[0]-b[0]);
  const zones=[];let cursor=650;
  for(const [left,right] of blocked){if(left-cursor>55)zones.push([cursor,left]);cursor=Math.max(cursor,right);}
  if(end-cursor>55)zones.push([cursor,end]);
@@ -845,10 +856,14 @@ function bounceTrampolines(step){
  });
  if(!pad||!contact)return;
  const shift=Math.max(0,contact.y+contact.r-trampolineY(pad,contact.x))+2;
- const next=LEVEL_HAZARDS.find(p=>p.kind==='trampoline'&&p.stage===pad.stage+1)||LEVEL_HAZARDS.find(p=>p.kind==='grinder');
- const targetY=next.kind==='trampoline'?trampolineY(next,next.x)-40:groundYAt(next.x)-145;
- const flightTime=(-pad.vy+Math.sqrt(pad.vy*pad.vy+1300*(targetY-rag.nodes.hip.y)))/650;
- const launchX=(next.x-rag.nodes.hip.x)/flightTime*1.01;
+ let launchX;
+ if(pad.freeBounce){const incoming=nodes.reduce((sum,n)=>sum+(n.x-n.px)/step,0)/nodes.length;launchX=pad.vx+Math.max(-140,Math.min(140,incoming*.15));}
+ else{
+  const next=LEVEL_HAZARDS.find(p=>p.kind==='trampoline'&&!p.freeBounce&&p.stage===pad.stage+1)||LEVEL_HAZARDS.find(p=>p.kind==='grinder');
+  const targetY=next.kind==='trampoline'?trampolineY(next,next.x)-40:groundYAt(next.x)-145;
+  const flightTime=(-pad.vy+Math.sqrt(pad.vy*pad.vy+1300*(targetY-rag.nodes.hip.y)))/650;
+  launchX=(next.x-rag.nodes.hip.x)/flightTime*1.01;
+ }
  // Add the trampoline impulse to a articulated body: preserve relative
  // joint motion and the torque from off-center contact, rather than freezing
  // every joint into an identical ballistic velocity.
@@ -863,9 +878,9 @@ function bounceTrampolines(step){
   n.y-=shift;n.px=n.x-kickX*step;n.py=n.y-kickY*step;
  }
  rag.pinned={};rag.groundTime=0;rag.restTime=0;rag.settled=0;
- rag.bounceCooldown=.45;rag.trampolineStage=pad.stage;pad.flexAt=levelClock;playTrampolineBoing();
+ rag.bounceCooldown=.45;if(pad.freeBounce)rag.lastRecoveryBounce=pad.id;else rag.trampolineStage=pad.stage;pad.flexAt=levelClock;playTrampolineBoing();
  if(!hitHazards.has(pad.id)){hitHazards.add(pad.id);hazardPoints+=pad.points;}
- startNotice('<strong>BOUNCE '+pad.stage+'/4!</strong> '+(pad.stage===3?'Back toward the final launch pad.':pad.stage===4?'Long launch — aim for the grinder!':'Keep following the trampoline route.'));
+ if(!pad.freeBounce)startNotice('<strong>BOUNCE '+pad.stage+'/4!</strong> '+(pad.stage===3?'Back toward the final launch pad.':pad.stage===4?'Long launch — aim for the grinder!':'Keep following the trampoline route.'));
 }
 
 const gateOpen=()=>Math.sin(levelClock*2.15)>.35;
@@ -950,11 +965,19 @@ function hazardHit(x,y,part=null){
   }
   if(h.kind==='roller'&&n){
    const machine=window.machineBloodSurfaces?.[h.id]??{kind:/(?:roller[135]|roller2)$/.test(h.id)?'twin':'spiked',width:h.width,height:h.width*(/(?:roller[135]|roller2)$/.test(h.id)?.733:.326)};
-   const cx=h.x,cy=machine.centerY??floor-machine.height*.5,dx=x-cx,dy=y-cy;
+   const cx=h.x,cy=machine.centerY??(machine.kind==='spiked'?floor-106:floor-machine.height*.5),dx=x-cx,dy=y-cy;
    const touches=machine?.kind==='spiked'
-    ?Math.pow(dx/(machine.width*.5+n.r),2)+Math.pow(dy/(machine.height*.5+n.r),2)<1
+    ?Math.pow(dx/(machine.width*.5+n.r),2)+Math.pow(dy/((h.impactLauncher?h.width*.38:machine.height*.5)+n.r),2)<1
     :machine?.kind==='twin'?Math.abs(dx)<machine.width*.39&&[floor-machine.height*.79,floor-machine.height*.465].some(rollerY=>Math.abs(y-rollerY)<machine.height*.18+n.r)
     :Math.hypot(dx,dy)<100;
+   if(touches&&h.impactLauncher){
+    if(!rag.spinnerHits)rag.spinnerHits=new Map();
+    if(levelClock-(rag.spinnerHits.get(h.id)??-99)>.65){rag.spinnerHits.set(h.id,levelClock);if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;}
+     const connected=new Set([part]);for(let i=0;i<rag.links.length;i++)for(const link of rag.links)if(!link.broken){if(connected.has(link.a))connected.add(link.b);if(connected.has(link.b))connected.add(link.a);}
+     const incoming=Math.hypot(n.x-n.px,n.y-n.py)/PHYSICS_STEP;for(const id of connected){const node=rag.nodes[id],vx=(node.x-node.px)/PHYSICS_STEP,vy=(node.y-node.py)/PHYSICS_STEP;node.px=node.x-Math.max(1100,vx+700)*PHYSICS_STEP;node.py=node.y-(Math.min(-550,vy-300))*PHYSICS_STEP;}
+     directionalBlood(x,y,1,-.5,1.5);playBodyImpact();checkImpactForce(part,Math.min(500,Math.max(180,incoming)),x,y,'spinner');
+    }continue;
+   }
    if(touches){
     // Powered rollers grab and redirect contacting ragdoll particles.
     n.px=n.x-(dx<0?6:-4);n.py=n.y+4;
@@ -976,6 +999,7 @@ function drawHazards(){
  for(const h of LEVEL_HAZARDS){
   const floor=H*.88+(h.groundOffset||0);
   if(h.x+h.width/2<camera-150||h.x-h.width/2>camera+W+150)continue;
+  if(h.attachedWall){ctx.fillStyle='#252b2b';ctx.fillRect(h.x-h.width*.58,floor-230,h.width*1.16,230);ctx.strokeStyle='#67706b';ctx.lineWidth=5;ctx.strokeRect(h.x-h.width*.58,floor-230,h.width*1.16,230);for(const xx of [h.x-h.width*.52,h.x+h.width*.52])for(const yy of [floor-214,floor-16]){ctx.fillStyle='#a19f87';ctx.beginPath();ctx.arc(xx,yy,5,0,Math.PI*2);ctx.fill();}ctx.strokeStyle='#6a716b';ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(h.x-h.width*.5,floor-3);ctx.lineTo(h.x-h.width*.32,floor-48);ctx.moveTo(h.x+h.width*.5,floor-3);ctx.lineTo(h.x+h.width*.32,floor-48);ctx.stroke();}
   if(h.kind==='trampoline'){
    if(window.trampolineOverlayReady)continue;
    const left=h.x-h.width/2,right=h.x+h.width/2,yl=trampolineY(h,left),yr=trampolineY(h,right);
@@ -1064,7 +1088,7 @@ function markWall(x,y,power=1,surface=null,face='top'){
  const floor=H*.88;
  wallStains.push({x,face,y:Math.min(floor-14,Math.max(22,y)),size:(surface?2.4:1.3)+Math.random()*(surface?3.1:2)*power,surface:surface?{kind:surface.kind,id:surface.id,x:surface.x,width:surface.width}:null,seed:Math.random(),tilt:(Math.random()-.5)*.7});
  const stain=wallStains[wallStains.length-1];
- if(spinningDrum(surface)){stain.drumAge=0;stain.drumRelease=.4+Math.random()*.25;return;}
+ if(spinningDrum(surface)){stain.drumAge=0;stain.drumRelease=(.4+Math.random()*.25)*2.6/(surface.motorSpeed||2.6);return;}
  if(surface?.kind==='conveyor'){if(wallStains.length>750)wallStains.splice(0,wallStains.length-750);return;}
  // Nearby marks share a drip point; sources survive stain-array trimming
  // and only reset clears them. This keeps long attempts inexpensive.
@@ -1289,13 +1313,14 @@ function followBodyCamera(target,dt){
  const leadX=Math.max(-W*.15,Math.min(W*.15,target.vx*.08));
  const leadY=Math.max(-H*.12,Math.min(H*.12,target.vy*.06));
  const desiredX=Math.max(0,target.x+leadX-W*.5);
- const desiredY=target.y+leadY-H*.45;
+ const nearGround=currentLevel==='trampoline'&&target.y>groundYAt(target.x)-H*.3;
+ const desiredY=target.y+leadY-H*(nearGround?.72:.45);
  const tracking=1-Math.exp(-dt*12);
  camera+=(desiredX-camera)*tracking;cameraY+=(desiredY-cameraY)*tracking;
  // Sudden bounces and fast rockets must never leave the followed body offscreen.
  camera=Math.max(0,Math.max(target.x-W*.8,Math.min(target.x-W*.2,camera)));
  cameraY=Math.max(target.y-H*.8,Math.min(target.y-H*.15,cameraY));
- if(currentLevel!=='trampoline')cameraY=Math.min(0,cameraY);
+ if(currentLevel!=='trampoline')cameraY=Math.min(0,cameraY);else cameraY=Math.min(cameraY,groundYAt(target.x)-H*.82);
 }
 // 650 pixels/s² represents Earth gravity (32.174 feet/s²).
 const FEET_PER_PIXEL=32.174/650;
@@ -1387,5 +1412,5 @@ function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#11151b';ctx.fillRect(0,
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||spinningDrum(s.surface))&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=old-rocket-credits-20261014-23"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=recovery-trampolines-20261014-24"></script></body></html>
 
