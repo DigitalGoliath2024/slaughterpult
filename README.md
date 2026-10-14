@@ -70,3 +70,5 @@ The intro splash includes all embedded third-party model credits with original s
 
 
 Publishing runs `scripts/build_asset_credits.py` to refresh model attributions directly from GLB metadata and the full uploaded inventory. Rocket audio uses `rocket_sound.mp3`, looping only during its eight-second burn, then stops on termination before the shared explosion. Audio source credits will be expanded separately.
+
+Entry flow: the 13-or-over screen is silent. Age confirmation starts the uploaded Evil Drone at low volume, looping through the intro and course/character selection. BUILD YOUR LAUNCHER stops Evil Drone and starts the selected map ambience. Returning to selection pauses the map ambience and resumes Evil Drone.
