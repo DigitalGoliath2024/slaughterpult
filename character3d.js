@@ -1275,11 +1275,11 @@ function positionIndustrialBeams(state,w,h){
  // Circus has spectators in bleachers, not walls to mount props on.
  const fenceActive=new Set();
  if(state.level==='trampoline'){
-  const floor=h*.88+340,height=Math.max(620,h*1.2)-70,start=Math.floor((state.camera-80)/360);
+  const floor=h*.88+340-90,height=Math.max(620,h*1.2)-70,start=Math.floor((state.camera-80)/360);
   for(let i=start;i<start+Math.ceil(w/360)+3;i++){
    fenceActive.add(i);let root=parkFencePosts.get(i);
    if(!root){root=new THREE.Group();addIndustrialBeam(root,0,0,0,1,9,12,0,'thin');scene.add(root);parkFencePosts.set(i,root);}
-   root.scale.y=height;root.position.set(i*360-state.camera-w/2,h/2-floor+(state.cameraY||0),-20);root.visible=true;
+   root.scale.y=height;root.position.set(i*360-state.camera-w/2,h/2-floor+(state.cameraY||0),-450);root.visible=true;
   }
  }
  for(const [key,root] of parkFencePosts)if(!fenceActive.has(key))root.visible=false;
