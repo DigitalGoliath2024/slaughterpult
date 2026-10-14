@@ -218,11 +218,18 @@ function loadWorldRankings(){
  if(worldLoading)return worldLoading;
  worldLoading=(async()=>{try{let rows;try{rows=await worldRequest('slaughterpult_world_best?select=run_id,initials,score,distance,created_at,achieved_month&order=score.desc,distance.desc,created_at.asc,run_id.asc&limit=5');}catch(error){if(error.status!==404)throw error;rows=await worldRequest('slaughterpult_scores?select=run_id,initials,score,distance,created_at,achieved_month&order=score.desc,distance.desc,created_at.asc,run_id.asc&limit=100');}if(!Array.isArray(rows))throw Error('Invalid leaderboard');rankings=topRankings(rows.map(r=>({...r,month:(r.achieved_month||r.created_at).slice(0,7)})).filter(validRank));worldReady=true;try{localStorage.setItem(WORLD_CACHE,JSON.stringify(rankings));}catch(e){}renderRankings();return true;}catch(e){worldReady=false;renderRankings();return false;}finally{worldLoading=null;}})();return worldLoading;
 }
-function qualifiesWorld(run){const last=topRankings(rankings)[4];return !last||run.score>last.score||run.score===last.score&&run.distance>last.distance;}
+function qualifiesWorld(run){
+ const board=topRankings(rankings);let initials='';try{initials=(localStorage.getItem('slaughterpultInitials')||'').toUpperCase();}catch(e){}
+ const own=board.find(row=>row.initials===initials);
+ // An existing player's better run replaces their entry, never fills another slot.
+ if(own)return beatsRecord(run,own);
+ if(personalBest?.initials===initials&&initials&&!beatsRecord(run,personalBest))return false;
+ const last=board[4];return !last||beatsRecord(run,last);
+}
 let personalBest=null;
 function beatsRecord(run,other){return !other||run.score>other.score||run.score===other.score&&run.distance>other.distance;}
 try{const stored=JSON.parse(localStorage.getItem('slaughterpultPersonalBestV1')||'null');if(stored&&Number.isFinite(stored.score)&&Number.isFinite(stored.distance))personalBest=stored;const old=JSON.parse(localStorage.getItem('slaughterpultRankingsV1')||'[]');if(Array.isArray(old))for(const row of old.filter(validRank))if(beatsRecord(row,personalBest))personalBest={score:row.score,distance:row.distance};}catch(e){}
-function rememberPersonalBest(run){if(beatsRecord(run,personalBest)){personalBest={score:run.score,distance:run.distance};try{localStorage.setItem('slaughterpultPersonalBestV1',JSON.stringify(personalBest));}catch(e){}}}
+function rememberPersonalBest(run){if(beatsRecord(run,personalBest)){personalBest={score:run.score,distance:run.distance,initials:run.initials||''};try{localStorage.setItem('slaughterpultPersonalBestV1',JSON.stringify(personalBest));}catch(e){}}}
 function newRunId(){return crypto.randomUUID();}
 let legacySync=null;
 function syncLegacyRankings(){
@@ -248,7 +255,6 @@ async function offerRanking(){
  if(!rag||rag.rankingOffered||rag.softLanding||levelFailed||maxDist<1||pendingRanking)return;
  const body=rag,run={run_id:newRunId(),distance:Math.floor(maxDist),score:Math.floor(maxDist)+hazardPoints+(rag.flipPoints||0),course:currentLevel==='circus'?null:currentLevel,character_id:$('characterSelect').value||'cowboy'};
  body.rankingOffered=true;
- if(!beatsRecord(run,personalBest))return;
  if(!await loadWorldRankings()){body.rankingOffered=false;return;}
  if(!qualifiesWorld(run))return;
  pendingRanking=run;$('rankingsButton').textContent='TOP 5 · SAVE RUN';renderRankings();if(!$('rankingsDialog').open)$('rankingsDialog').showModal();$('rankingInitials').focus();
@@ -1709,5 +1715,5 @@ function render(){if(currentLevel!=='circus')syncTrampolineSkyVideo();drawFlipCa
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller'||s.surface?.kind==='beam')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=circus-sky-feather-20261014-48"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=ranking-improvements-20261014-49"></script></body></html>
 
