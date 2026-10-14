@@ -847,6 +847,7 @@ function positionSceneryBed(state,w,h){
  sceneryBed.position.set(x-state.camera-w/2,h/2-ground+(state.cameraY||0),-55);
 }
 
+let cableDollTemplate=null;
 let carcassTemplate=null,carcassRail=null,carcassLastTime=0,carcassReset=-1,carcassTravel=0;
 const carcassInstances=new Map();let carcassPrevious=new Map();
 async function loadCarcasses(){
@@ -862,8 +863,8 @@ async function loadCarcasses(){
 }
 function positionCarcasses(state,w,h){
  const now=performance.now()/1000,dt=Math.min(.05,Math.max(0,carcassLastTime?now-carcassLastTime:0));carcassLastTime=now;
- if(carcassReset!==state.goreResetId){for(const item of carcassInstances.values()){scene.remove(item.body);scene.remove(item.hook);item.hook.geometry.dispose();}carcassInstances.clear();carcassPrevious.clear();carcassReset=state.goreResetId;carcassTravel=0;}
- if(state.level!=='factory'||!carcassTemplate){if(carcassRail)carcassRail.visible=false;for(const item of carcassInstances.values()){item.body.visible=false;item.hook.visible=false;}carcassPrevious.clear();return;}
+ if(carcassReset!==state.goreResetId){for(const item of carcassInstances.values()){scene.remove(item.body);scene.remove(item.hook);if(item.doll)scene.remove(item.doll);item.hook.geometry.dispose();}carcassInstances.clear();carcassPrevious.clear();carcassReset=state.goreResetId;carcassTravel=0;}
+ if(state.level!=='factory'||!carcassTemplate){if(carcassRail)carcassRail.visible=false;for(const item of carcassInstances.values()){item.body.visible=false;item.hook.visible=false;if(item.doll)item.doll.visible=false;}carcassPrevious.clear();return;}
  if(!carcassRail){carcassRail=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1,0,0),new THREE.Vector3(1,0,0)]),carcassHookMaterial);scene.add(carcassRail);}
  carcassRail.visible=true;carcassRail.scale.x=w/2+100;carcassRail.position.set(0,h/2-h*.18+(state.cameraY||0),-40);
  const random=n=>{const v=Math.sin(n*12.9898+78.233)*43758.5453;return v-Math.floor(v);},contacts=[];
@@ -881,7 +882,7 @@ function positionCarcasses(state,w,h){
    const body=carcassTemplate.clone(true),size=115+random(bin+19)*35;body.scale.setScalar(size);body.rotation.y=(random(bin+33)-.5)*.7;
    const points=[new THREE.Vector3(0,28,0),new THREE.Vector3(0,5,0),new THREE.Vector3(7,0,0),new THREE.Vector3(12,5,0),new THREE.Vector3(9,11,0)];
    const hook=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),carcassHookMaterial);
-   item={body,hook,size,hasCarcass:random(bin+405)<.40,x,y:0,knocked:false,resting:false,angle:0};scene.add(body);scene.add(hook);carcassInstances.set(bin,item);
+   item={body,hook,size,hasCarcass:random(bin+405)<.40,hasDoll:random(bin+405)>=.40&&random(bin+405)<.60,x,y:0,knocked:false,resting:false,angle:0};scene.add(body);scene.add(hook);carcassInstances.set(bin,item);
   }
   item.homeX=x;item.homeY=h*.18+item.size/2;
  }
@@ -889,6 +890,13 @@ function positionCarcasses(state,w,h){
   const {body,hook,size}=item;
   item.homeX=700+bin*520+random(bin+88)*180-carcassTravel;item.homeY=h*.18+size/2;
   hook.position.set(item.homeX-state.camera-w/2,h/2-(h*.18+28)+(state.cameraY||0),-40);hook.visible=(!item.hasCarcass||item.knocked)&&Math.abs(item.homeX-state.camera-w/2)<w/2+120;
+  if(item.hasDoll&&cableDollTemplate){
+   if(!item.doll){item.doll=cableDollTemplate.clone(true);scene.add(item.doll);}
+   // The imported rope's top is the pivot: keep it directly on the moving cable.
+   item.doll.position.set(item.homeX-state.camera-w/2,h/2-h*.18+(state.cameraY||0),-35);
+   item.doll.rotation.z=Math.sin(now*.8+bin)*.035;
+   item.doll.visible=Math.abs(item.homeX-state.camera-w/2)<w/2+100;hook.visible=false;
+  }
   if(!item.hasCarcass){body.visible=false;continue;}
   if(!item.knocked){
    item.x=item.homeX;item.y=item.homeY;item.angle=0;
@@ -925,6 +933,9 @@ async function loadWallDolls(){
   const bounds=new THREE.Box3().setFromObject(source),size=bounds.getSize(new THREE.Vector3());
   const center=bounds.getCenter(new THREE.Vector3());
   const scale=78/(size.y||1);
+  cableDollTemplate=new THREE.Group();const cableDoll=source.clone(true);
+  cableDoll.scale.multiplyScalar(scale);cableDoll.position.set(-center.x*scale,-bounds.max.y*scale,-center.z*scale);
+  cableDoll.traverse(o=>{if(o.isMesh)o.frustumCulled=false;});cableDollTemplate.add(cableDoll);
   for(const [i,x] of [620,1160,2120,3030,3970,5050,6100,7310,8270].entries()){
    const pivot=new THREE.Group(),doll=source.clone(true);
    doll.scale.multiplyScalar(scale);
@@ -940,7 +951,7 @@ function positionWallDolls(state,w,h){
  const now=performance.now(),dt=dollLastTime?Math.min(.04,(now-dollLastTime)/1000):1/60;dollLastTime=now;
  for(const pivot of wallDolls){
   const u=pivot.userData;
-  pivot.visible=['factory','trampoline'].includes(state.level)&&Math.abs(u.worldX-state.camera-w/2)<w/2+100;
+  pivot.visible=state.level==='trampoline'&&Math.abs(u.worldX-state.camera-w/2)<w/2+100;
   // Damped pendulum driven by irregular small gusts. No repeating sine loop.
   u.gustTimer-=dt;
   if(u.gustTimer<=0){u.wind=(Math.random()-.5)*.20;u.gustTimer=.55+Math.random()*1.9;}
