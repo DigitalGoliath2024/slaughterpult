@@ -168,7 +168,7 @@ function syncFlightSounds(){
  if(rag?.jetStarted&&!rag.jetExploded&&(rag.jetFuel<=0||rag.shredded||rag.softLanding))terminateJetpack();
  syncWetSounds();syncMapAmbience();impactQuietTime+=PHYSICS_STEP;landingBurstCooldown=Math.max(0,landingBurstCooldown-PHYSICS_STEP);
  for(const [part,time] of partLandingCooldowns)if(time<=PHYSICS_STEP)partLandingCooldowns.delete(part);else partLandingCooldowns.set(part,time-PHYSICS_STEP);
- if(rag?.landingPending&&rag.landingRestTime>=.6&&impactQuietTime>=.35&&activeActionSounds.size===0&&!characterVoice&&!(window.bodyCameraParts||[]).some(part=>part.resting===false)){rag.landingPending=false;playCharacterVoice('landed');}
+ if(rag?.landingPending){rag.landingVoiceDelay=Math.max(0,(rag.landingVoiceDelay||0)-PHYSICS_STEP);if(rag.landingVoiceDelay<=1e-9){rag.landingPending=false;playCharacterVoice('landed');}}
  squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);boneCooldown=Math.max(0,boneCooldown-PHYSICS_STEP);bodyImpactCooldown=Math.max(0,bodyImpactCooldown-PHYSICS_STEP);
  for(const sound of activeActionSounds){if(sound.effectDuration){sound.effectAge+=PHYSICS_STEP;if(sound.effectAge>=sound.effectDuration){sound.pause();activeActionSounds.delete(sound);continue;}}const fade=sound.effectDuration?Math.min(1,(sound.effectDuration-sound.effectAge)/.07):1;mixVolume(sound,sound.effectVolume*fade*(sound.effectKind==='landing'?1:(characterVoice&&!characterVoice.paused?.65:1)*(activeActionSounds.size>1?.8:1)),'effects');}
  if(!rag||phase!=='airborne'){stopFlightSounds();return;}
@@ -1429,7 +1429,7 @@ function updateRagdoll(dt){
  // A grounded multi-body system can jitter forever under competing constraints.
  // Use whole-body motion to detect rest, then end simulation and retain the last pose.
  rag.groundTime=groundedThisFrame?rag.groundTime+dt:0;
- if(!rag.voiceLanded&&rag.groundTime>.18&&(rag.shredded||rag.softLanding||hip.y>groundYAt(hip.x)-55)){rag.voiceLanded=true;rag.landingPending=true;impactQuietTime=0;stopCharacterVoice();}
+ if(!rag.voiceLanded&&rag.groundTime>0&&(rag.shredded||rag.softLanding||hip.y>groundYAt(hip.x)-55)){rag.voiceLanded=true;rag.landingPending=true;rag.landingVoiceDelay=2;impactQuietTime=0;stopCharacterVoice();}
  const nodes=Object.values(rag.nodes);
  const avgStep=nodes.reduce((sum,n)=>sum+Math.hypot(n.x-n.px,n.y-n.py),0)/nodes.length;
  rag.landingRestTime=rag.groundTime>.18&&avgStep<.45?(rag.landingRestTime||0)+dt:0;
@@ -1601,5 +1601,5 @@ function render(){drawFlipCallout();ctx.clearRect(0,0,W,H);ctx.fillStyle='#11151
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller'||s.surface?.kind==='beam')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=industrial-beam-pack-20261014-36"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=landing-dialogue-timing-20261014-37"></script></body></html>
 
