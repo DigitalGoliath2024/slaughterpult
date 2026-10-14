@@ -54,23 +54,22 @@ const actionSounds={
  launch:[['catapult_launch_with_#1-1791930256015.mp3',.35],['catapult_launch_with_#2-1791930221469.mp3',.55]],
  squish:[['splat_squish_sound_#1-1791930022493.mp3',.85],['splat_squish_sound_#2-1791930016713.mp3',1],['splat_squish_sound_#2-1791930038748.mp3',.5],['splat_squish_sound_#4-1791930006652.mp3',.7],['splat_squish_sound_#4-1791930030413.mp3',.85]]
 };
-const actionAudioBank=new Map();
-for(const pool of Object.values(actionSounds))for(const [file] of pool){const sound=new Audio('./'+encodeURIComponent(file));sound.preload='auto';sound.load();actionAudioBank.set(file,sound);}
-const activeActionSounds=new Set(),lastActionClip=new Map();let squishCooldown=0,boneCooldown=0,bodyImpactCooldown=0,impactQuietTime=0;
-function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();squishCooldown=boneCooldown=bodyImpactCooldown=impactQuietTime=0;}
-function playActionSound(kind){
- if(rag?.voiceLanded&&!rag.landingPending&&characterVoice&&!characterVoice.paused&&kind!=='knife')return;
- if((kind==='squish'&&squishCooldown>0)||(kind==='bone'&&boneCooldown>0))return;
+const actionAudioBank=new Map(),effectVoiceLimits={landing:2,bone:1};
+for(const [kind,pool] of Object.entries(actionSounds))for(const [file] of pool){const voices=[];for(let i=0;i<(effectVoiceLimits[kind]||3);i++){const sound=new Audio('./'+encodeURIComponent(file));sound.preload='auto';sound.load();voices.push(sound);}actionAudioBank.set(file,voices);}
+const activeActionSounds=new Set(),lastActionClip=new Map(),partLandingCooldowns=new Map();let squishCooldown=0,boneCooldown=0,bodyImpactCooldown=0,impactQuietTime=0,landingBurstCooldown=0;
+function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();partLandingCooldowns.clear();squishCooldown=boneCooldown=bodyImpactCooldown=impactQuietTime=landingBurstCooldown=0;}
+function playActionSound(kind,strength=1){
+ if(kind==='bone'&&(boneCooldown>0||Math.random()>.25))return;
+ if(kind==='squish'&&squishCooldown>0)return;
  const pool=actionSounds[kind],choices=pool.length>1?pool.filter(([file])=>file!==lastActionClip.get(kind)):pool;
- const [file,volume]=choices[Math.floor(Math.random()*choices.length)];lastActionClip.set(kind,file);
+ const [file,baseVolume]=choices[Math.floor(Math.random()*choices.length)],volume=baseVolume*strength;lastActionClip.set(kind,file);
+ if(kind==='squish')squishCooldown=.18;
  if(kind==='bone')boneCooldown=1.2;
- if(kind==='squish')squishCooldown=.18; // One contact often tears several joints in the same physics step.
- if(activeActionSounds.size>=2){
-  const replace=kind==='landing'?[...activeActionSounds].find(sound=>sound.effectKind!=='landing')||activeActionSounds.values().next().value:kind==='knife'?[...activeActionSounds].find(sound=>sound.effectKind!=='landing'):kind==='bone'?[...activeActionSounds].find(sound=>sound.effectKind!=='landing'):null;
-  if(!replace)return;replace.pause();activeActionSounds.delete(replace);
- }
-
- const sound=actionAudioBank.get(file);sound.pause();sound.currentTime=0;sound.effectKind=kind;sound.effectVolume=volume;if(kind!=='launch')impactQuietTime=0;sound.volume=volume*(kind==='landing'?1:characterVoice&&!characterVoice.paused?.65:1);
+ const group=[...activeActionSounds].filter(sound=>sound.effectKind===kind);
+ if(group.length>=(effectVoiceLimits[kind]||3)){group[0].pause();activeActionSounds.delete(group[0]);}
+ if(activeActionSounds.size>=2){const replace=kind==='landing'?[...activeActionSounds].find(sound=>sound.effectKind==='landing')||activeActionSounds.values().next().value:kind==='knife'||kind==='bone'?[...activeActionSounds].find(sound=>sound.effectKind!=='landing'):null;if(!replace)return;replace.pause();activeActionSounds.delete(replace);}
+ const sound=actionAudioBank.get(file).find(voice=>!activeActionSounds.has(voice));
+ sound.pause();sound.currentTime=0;sound.effectKind=kind;sound.effectVolume=volume;if(kind!=='launch')impactQuietTime=0;sound.volume=volume*(kind==='landing'?1:characterVoice&&!characterVoice.paused?.65:1);
  activeActionSounds.add(sound);sound.onended=()=>activeActionSounds.delete(sound);sound.onerror=sound.onended;
  sound.play().catch(()=>activeActionSounds.delete(sound));
 }
@@ -88,21 +87,28 @@ function playTrampolineBoing(){
  wobble.frequency.value=[17,21,14][variant];bend.gain.setValueAtTime([65,80,50][variant],now);bend.gain.exponentialRampToValueAtTime(.1,now+duration);
  wobble.connect(bend);bend.connect(tone.frequency);tone.connect(envelope);envelope.connect(level);level.connect(audio.destination);
  envelope.gain.setValueAtTime(0,now);envelope.gain.linearRampToValueAtTime(.6,now+.008);envelope.gain.exponentialRampToValueAtTime(.001,now+duration);
- if(activeActionSounds.size>=2){const old=[...activeActionSounds].find(sound=>sound.effectKind!=='landing');if(old){old.pause();activeActionSounds.delete(old);}else {tone.disconnect();wobble.disconnect();bend.disconnect();envelope.disconnect();level.disconnect();return;}}
+ if(activeActionSounds.size>=2){const old=[...activeActionSounds].find(sound=>sound.effectKind!=='landing')||activeActionSounds.values().next().value;if(old){old.pause();activeActionSounds.delete(old);}else {tone.disconnect();wobble.disconnect();bend.disconnect();envelope.disconnect();level.disconnect();return;}}
  let stopped=false;const sound={effectKind:'boing',effectVolume:.45,set volume(value){level.gain.value=value;},pause(){if(stopped)return;stopped=true;tone.stop();wobble.stop();}};
  sound.volume=.45*(characterVoice&&!characterVoice.paused?.65:1);activeActionSounds.add(sound);impactQuietTime=0;
  tone.onended=()=>{activeActionSounds.delete(sound);tone.disconnect();wobble.disconnect();bend.disconnect();envelope.disconnect();level.disconnect();};
  tone.start(now);wobble.start(now);tone.stop(now+duration);wobble.stop(now+duration);
 }
-function playBodyImpact(speed=200){
- if(speed<120||bodyImpactCooldown>0||rag?.softLanding)return;
+function playBodyImpact(speed=200,part=null,type='machine'){
+ if(rag?.softLanding)return;
+ if(type==='ground'){
+  if(speed<45||(partLandingCooldowns.get(part)||0)>0)return;
+  partLandingCooldowns.set(part,.1);if(landingBurstCooldown>0)return;
+  landingBurstCooldown=.04;stopCharacterVoice();playActionSound('landing',Math.max(.55,Math.min(1,speed/450)));return;
+ }
+ if(speed<120||bodyImpactCooldown>0)return;
  bodyImpactCooldown=.7;stopCharacterVoice();playActionSound('landing');playActionSound('squish');
 }
 function stopFlightSounds(){for(const sound of [flyingSound,jetEngineSound])if(sound)sound.pause();flyingSound=jetEngineSound=null;}
 function playFlightEffect(file,volume){const sound=new Audio('./audio/effects/'+file);sound.loop=false;sound.volume=volume;sound.play().catch(()=>{});return sound;}
 function startFlightSounds(){stopFlightSounds();playActionSound('launch');flyingSound=playFlightEffect('flying_character_sound.mp3',.5);flyingSound.loop=true;if(jetpackMounted&&rag?.jetFuel>0)jetEngineSound=playFlightEffect('freesound_community-jet-engine-6753.mp3',.28);}
 function syncFlightSounds(){
- syncMapAmbience();impactQuietTime+=PHYSICS_STEP;
+ syncMapAmbience();impactQuietTime+=PHYSICS_STEP;landingBurstCooldown=Math.max(0,landingBurstCooldown-PHYSICS_STEP);
+ for(const [part,time] of partLandingCooldowns)if(time<=PHYSICS_STEP)partLandingCooldowns.delete(part);else partLandingCooldowns.set(part,time-PHYSICS_STEP);
  if(rag?.landingPending&&rag.landingRestTime>=.6&&impactQuietTime>=.35&&activeActionSounds.size===0){rag.landingPending=false;playCharacterVoice('landed');}
  squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);boneCooldown=Math.max(0,boneCooldown-PHYSICS_STEP);bodyImpactCooldown=Math.max(0,bodyImpactCooldown-PHYSICS_STEP);
  for(const sound of activeActionSounds)sound.volume=sound.effectVolume*(sound.effectKind==='landing'?1:(characterVoice&&!characterVoice.paused?.65:1)*(activeActionSounds.size>1?.8:1));
@@ -1046,7 +1052,7 @@ function tearJoint(a,b,x,y,force){
  return true;
 }
 function checkImpactForce(part,speed,x,y,type){
- if(rag&&!rag.softLanding)playBodyImpact(speed);
+ if(rag&&!rag.softLanding&&type!=='ground')playBodyImpact(speed);
  if(!rag||rag.shredded||rag.softLanding||rag.impactCooldown>0)return;
  const severity=speed*(type==='nail'?1.15:type==='press'?1.25:1);
  if(severity<125)return;
@@ -1123,7 +1129,7 @@ function updateRagdoll(dt){
     groundedThisFrame=true;
     const cushioned=!!cushionAt(n.x)&&!rag.shredded;
     if(cushioned)registerSoftLanding(n.x,incomingSpeed,Math.sign(vx));
-    if(!cushioned&&n.y-n.py>0)checkImpactForce(part,incomingSpeed,n.x,floor-n.r,'ground');
+    if(!cushioned&&n.y-n.py>0){playBodyImpact((n.y-n.py)/h,part,'ground');checkImpactForce(part,incomingSpeed,n.x,floor-n.r,'ground');}
     const downward=n.y-n.py;
     n.y=floor-n.r;
     n.py=n.y+Math.max(0,downward)*(cushioned?.025:.12);
