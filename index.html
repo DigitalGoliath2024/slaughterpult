@@ -1140,6 +1140,8 @@ function checkImpactForce(part,speed,x,y,type){
 }
 function checkWaistBend(){
  if(!rag||rag.shredded||rag.waistBroken)return;
+ // Free tumbling is not an impact: waist tears require contact or impalement.
+ if(rag.groundTime<=0&&rag.impactCooldown<=0&&!Object.keys(rag.pinned).length)return;
  const n=rag.nodes;
  const upper={x:n.chest.x-n.waist.x,y:n.chest.y-n.waist.y};
  const lower={x:n.waist.x-n.hip.x,y:n.waist.y-n.hip.y};
@@ -1161,7 +1163,7 @@ function jetpackForce(step){
  if(!(jetpackMounted||rocketMounted)||!rag||rag.shredded||rag.softLanding||rag.jetFuel<=0)return null;
  const hip=rag.nodes.waist||rag.nodes.hip,chest=rag.nodes.chest,dx=chest.x-hip.x,dy=chest.y-hip.y,len=Math.hypot(dx,dy)||1;
  rag.jetFuel=rag.jetFuel<=step+1e-9?0:rag.jetFuel-step;const nodes=new Set(['chest']);for(let i=0;i<rag.links.length;i++)for(const link of rag.links)if(!link.broken){if(nodes.has(link.a))nodes.add(link.b);if(nodes.has(link.b))nodes.add(link.a);}
- return {x:dx/len*(rocketMounted?30000:4200),y:dy/len*(rocketMounted?30000:4200),spin:rocketMounted?.35:.6,nodes};
+ return {x:dx/len*(rocketMounted?30000:4200)*LAUNCH_POWER,y:dy/len*(rocketMounted?30000:4200)*LAUNCH_POWER,spin:rocketMounted?.35:.6,nodes};
 }
 function updateRagdoll(dt){
  if(!rag)return;
@@ -1297,6 +1299,7 @@ function followBodyCamera(target,dt){
 }
 // 650 pixels/s² represents Earth gravity (32.174 feet/s²).
 const FEET_PER_PIXEL=32.174/650;
+const LAUNCH_POWER=.75;
 const PHYSICS_STEP=1/120;let physicsAccumulator=0,physicsSeed=1;
 function physicsRandom(){physicsSeed=(Math.imul(1664525,physicsSeed)+1013904223)>>>0;return physicsSeed/4294967296;}
 function bodyDistanceX(body){
@@ -1328,10 +1331,10 @@ function simulateStep(dt){
     theta=Math.max(target,theta);
     // Keep the starter's authored trampoline route while letting every setup gain speed from torque.
     const trampolineScale=.7165213436,launchScale=currentLevel==='trampoline'?trampolineScale:1.92;
-    const tip=cradlePoint(),speed=omega*150*armScale*.9*launchScale;
+    const tip=cradlePoint(),speed=omega*150*armScale*.9*launchScale*LAUNCH_POWER;
     const vx=Math.max(28,speed*Math.sin(theta));
     const vy=Math.min(-38,speed*Math.cos(theta));
-    const spin=omega*.52*(currentLevel==='trampoline'?trampolineScale:1);
+    const spin=omega*.52*(currentLevel==='trampoline'?trampolineScale:1)*LAUNCH_POWER;
     dummy={x:tip.x,y:tip.y-22,vx,vy,rot:0,spin};rag=makeRagdoll(dummy.x,dummy.y,vx,vy,spin);impacts=0;
     flightStart=bodyDistanceX(rag);
     setPhase('flying');phase='airborne';playCharacterVoice('flying');startFlightSounds();

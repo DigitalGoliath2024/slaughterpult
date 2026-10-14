@@ -66,9 +66,11 @@ All three courses start with machinery beyond 1,000 feet and extend ahead of lon
 ## Splash credits and rocket
 The intro splash includes all embedded third-party model credits with original source and license links. `ASSET_CREDITS.json` records the complete uploaded asset inventory and remaining source-credit gaps. Source attribution for the two named external audio tracks was not provided; it remains explicitly marked in that manifest.
 
-[old rocket](https://skfb.ly/oLQUJ) by pnhtuan — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Original geometry and textures are retained, resized and back-mounted with procedural exhaust. It is the final toolbar accessory, with 30,000px/s² thrust and eight seconds of fuel; the jetpack remains 4,200px/s² with five seconds of fuel. Selecting either replaces the other. The flow is intro → course/character selection → build/play.
+[old rocket](https://skfb.ly/oLQUJ) by pnhtuan — [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Original geometry and textures are retained, resized and back-mounted with procedural exhaust. It is the final toolbar accessory, with 22,500px/s² thrust and eight seconds of fuel; the jetpack remains 3,150px/s² with five seconds of fuel. Selecting either replaces the other. The flow is intro → course/character selection → build/play.
 
 
 Publishing runs `scripts/build_asset_credits.py` to refresh model attributions directly from GLB metadata and the full uploaded inventory. Rocket audio uses `rocket_sound.mp3`, looping only during its eight-second burn, then stops on termination before the shared explosion. Audio source credits will be expanded separately.
 
 Entry flow: the 13-or-over screen is silent. Age confirmation starts the uploaded Evil Drone at low volume, looping through the intro and course/character selection. BUILD YOUR LAUNCHER stops Evil Drone and starts the selected map ambience. Returning to selection pauses the map ambience and resumes Evil Drone.
+
+Launcher release velocity, initial spin and powered accessory thrust share a 0.75 output multiplier. Attachment torque still adds normally; free-air bending alone does not tear the waist.
