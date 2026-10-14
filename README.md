@@ -82,3 +82,5 @@ Airborne flips add combo bonuses: one full flip earns 100 total points, two earn
 Elevated machinery uses swept collision checks against the rendered assembly bounds so fast powered flights cannot skip through it. Direct hits shred and eject the body, including the wall-mounted bat assembly; blood marks keep their true elevated position and render on the 3D surfaces. Conveyor blood outlets follow each belt's own ground offset, including the lowered level-three basin.
 
 Detached anatomy is prepared between frames before impact. Its fall uses elapsed time in 120Hz substeps rather than dropping elapsed time below 29fps, so shredding does not put debris into slow motion.
+
+Impact blood uses spatial bins for machinery and all pillow depths, so each droplet checks nearby surfaces instead of the entire extended course. Detached-part materials also compile during preparation rather than first impact.

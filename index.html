@@ -513,6 +513,16 @@ function stepConveyorBlood(dt){
   wallStains.splice(i,1);
  }
 }
+let bloodHazardIndex=null;
+function bloodHazardsAt(x){
+ if(!bloodHazardIndex||bloodHazardIndex.hazards!==LEVEL_HAZARDS||bloodHazardIndex.count!==LEVEL_HAZARDS.length){
+  const bins=new Map();for(const obstacle of LEVEL_HAZARDS){
+   for(let bin=Math.floor((obstacle.x-obstacle.width/2)/100);bin<=Math.floor((obstacle.x+obstacle.width/2)/100);bin++){
+    if(!bins.has(bin))bins.set(bin,[]);bins.get(bin).push(obstacle);
+   }
+  }bloodHazardIndex={hazards:LEVEL_HAZARDS,count:LEVEL_HAZARDS.length,bins};
+ }return bloodHazardIndex.bins.get(Math.floor(x/100))||[];
+}
 function stepBlood(dt){
  stepDrumBlood(dt);stepConveyorBlood(dt);stepPersistentDrips(dt);
  for(let i=bloodDrops.length-1;i>=0;i--){
@@ -527,7 +537,7 @@ function stepBlood(dt){
   if(d.life>5){bloodDrops.splice(i,1);continue;}
   // Splashing droplets leave decals on nail ramps and moving equipment.
   let splashed=false;
-  for(const obstacle of LEVEL_HAZARDS){
+  for(const obstacle of bloodHazardsAt(d.x)){
    if(d.drip&&obstacle.id===d.sourceId)continue;
    if(d.x<obstacle.x-obstacle.width/2||d.x>obstacle.x+obstacle.width/2)continue;
    const surface=bloodSurfaceTop(obstacle,d.x);
@@ -717,11 +727,11 @@ function ensureCourseCoverage(level,reach){
   }
   spaceCourseMachines(hazards);end=Math.max(...hazards.map(h=>h.x+machineFootprint(h)/2));
  }
- courseEnds.set(level,end);cushionLayouts.delete(level);cushionBins.delete(level);return true;
+ courseEnds.set(level,end);cushionLayouts.delete(level);cushionBins.delete(level);cushionBloodBins.delete(level);return true;
 }
 let LEVEL_HAZARDS=COURSES.slide;
 // Keep comfortable piles in the ground gaps between dangerous machines.
-const cushionLayouts=new Map(),cushionBins=new Map();window.pillowBloodImpacts=[];
+const cushionLayouts=new Map(),cushionBins=new Map(),cushionBloodBins=new Map();window.pillowBloodImpacts=[];
 function cushionLayoutFor(level){
  if(cushionLayouts.has(level))return cushionLayouts.get(level);
  const hazards=COURSES[level],end=Math.max(...hazards.map(h=>h.x+h.width/2))+480;
@@ -742,14 +752,17 @@ function cushionLayoutFor(level){
    if(i%6===3)add(x-8,seed+309,0,10);
   }
  }
- const bins=new Map();
+ const bins=new Map(),bloodBins=new Map();
  for(const pillow of layout){
+  for(let bin=Math.floor((pillow.x-pillow.width*.5-40)/100);bin<=Math.floor((pillow.x+pillow.width*.5+40)/100);bin++){
+   if(!bloodBins.has(bin))bloodBins.set(bin,[]);bloodBins.get(bin).push(pillow);
+  }
   if(pillow.depth)continue;
   for(let bin=Math.floor((pillow.x-pillow.width*.5-25)/100);bin<=Math.floor((pillow.x+pillow.width*.5+25)/100);bin++){
    if(!bins.has(bin))bins.set(bin,[]);bins.get(bin).push(pillow);
   }
  }
- cushionLayouts.set(level,layout);cushionBins.set(level,bins);return layout;
+ cushionLayouts.set(level,layout);cushionBins.set(level,bins);cushionBloodBins.set(level,bloodBins);return layout;
 }
 function cushionSquash(pillow){return 1-Math.min(.42,Math.max(0,pillow.compression||0));}
 window.launcherCushionSquash=cushionSquash;
@@ -800,9 +813,10 @@ function drawCushionFallback(){
  }ctx.restore();
 }
 function landBloodOnPillow(drop){
+ cushionLayoutFor(currentLevel);
  const depth=drop.floorDepth||0;
  let selected=null,surface=Infinity;
- for(const pillow of cushionLayoutFor(currentLevel)){
+ for(const pillow of cushionBloodBins.get(currentLevel).get(Math.floor(drop.x/100))||[]){
   if(Math.abs(pillow.depth-depth)>22)continue;
   const radius=(pillow.contactWidth||pillow.width)*.5,dx=Math.abs(drop.x-pillow.x-(pillow.dx||0))/radius;if(dx>=1)continue;
   const y=groundYAt(pillow.x)+pillow.depth-pillow.stack-(pillow.contactHeight||pillow.height)*cushionSquash(pillow)*Math.sqrt(1-dx*dx);
@@ -1454,5 +1468,5 @@ function render(){drawFlipCallout();ctx.clearRect(0,0,W,H);ctx.fillStyle='#11151
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=debris-timing-20261014-26"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=impact-performance-20261014-27"></script></body></html>
 

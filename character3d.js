@@ -1030,7 +1030,7 @@ function warmGoreParts(){
  if(!goreAsset||goreWarmTimer!==null)return;
  const next=Object.keys(GORE_MAP).find(joint=>!readyGoreParts.has(joint)&&!goreParts.some(p=>p.userData.joint===joint));
  if(!next)return;
- goreWarmTimer=setTimeout(()=>{goreWarmTimer=null;const part=buildGorePart(next);readyGoreParts.set(next,part);warmGoreParts();},0);
+ goreWarmTimer=setTimeout(()=>{goreWarmTimer=null;const part=buildGorePart(next);readyGoreParts.set(next,part);if(part&&renderer?.compileAsync)renderer.compileAsync(part,camera,scene).catch(e=>console.warn('Gore shader warmup failed',e));warmGoreParts();},0);
 }
 function positionGore(state,w,h){
  const fullShred=!!state.shredded,headOnly=!!state.headDetached;
