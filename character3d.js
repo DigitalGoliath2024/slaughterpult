@@ -469,18 +469,18 @@ function positionLevelMachinery(state,w,h){
   const floor=h*.88+(hazard.groundOffset||0);
   if(!root){
    root=template.clone(true);
-   if(kind==='twin')root.rotation.y=Math.PI/3;
+   if(kind==='twin')root.rotation.y=Math.PI/3;if(hazard.sideways)root.rotation.y=Math.PI/2;
    const facingBounds=new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
-   root.userData.facingWidth=facingBounds.x;root.scale.setScalar(width/facingBounds.x);
+   root.userData.facingWidth=hazard.sideways?Math.max(facingBounds.x,template.userData.heightRatio+.38):facingBounds.x;root.scale.setScalar(width/root.userData.facingWidth);
    const support=new THREE.Group();
    root.userData.support=support;scene.add(support);scene.add(root);machineryInstances.set(key,root);
   }
   colorCircusProps(root,state.level==='circus',Math.floor(hazard.x/100));
   root.visible=Math.abs(hazard.x-state.camera-w/2)<w/2+width;
   const height=template.userData.heightRatio*width/root.userData.facingWidth;
-  const centerY=kind==='spiked'?floor-106:floor-height/2;
+  const centerY=hazard.sideways?floor-(template.userData.heightRatio*.5+.19)*width/root.userData.facingWidth-12:kind==='spiked'?floor-106:floor-height/2;
   root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),35);
-  window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,bloodTop:kind==='hopper'&&template.userData.bloodHeightRatio?floor-template.userData.bloodHeightRatio*width/root.userData.facingWidth:undefined,centerY,height,width,kind,feedBelt:hazard.feedBelt,bloodLeft:hazard.x+(template.userData.bloodLeftRatio??-.48)*width/root.userData.facingWidth,bloodRight:hazard.x+(template.userData.bloodRightRatio??.48)*width/root.userData.facingWidth};
+  window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,bloodTop:kind==='hopper'&&template.userData.bloodHeightRatio?floor-template.userData.bloodHeightRatio*width/root.userData.facingWidth:undefined,centerY,height,width,kind,impactRadius:hazard.sideways?(template.userData.heightRatio*.5+.19)*width/root.userData.facingWidth:undefined,feedBelt:hazard.feedBelt,bloodLeft:hazard.x+(template.userData.bloodLeftRatio??-.48)*width/root.userData.facingWidth,bloodRight:hazard.x+(template.userData.bloodRightRatio??.48)*width/root.userData.facingWidth};
   if(kind==='hopper'||kind==='spiked'||kind==='twin')positionMachineLipBlood(root,template,hazard,state,width,centerY);
   if(!root.userData.cutters&&window.weaponOverlayReady){
    const cutter=hazard.impactLauncher?'bat':['axe','machete','knife'][Math.floor(hazard.x/100)%3];
@@ -502,7 +502,7 @@ function positionLevelMachinery(state,w,h){
   }
   colorCircusProps(support,state.level==='circus',Math.floor(hazard.x/200));
   for(const post of support.children){
-   post.position.set(root.position.x+post.userData.side*width*.48,root.position.y,35);
+   if(hazard.sideways){post.scale.setScalar(floor-centerY);post.position.set(root.position.x,root.position.y,35+post.userData.side*width*.48);}else post.position.set(root.position.x+post.userData.side*width*.48,root.position.y,35);
    post.updateMatrixWorld(true);const mouth=post.localToWorld(new THREE.Vector3(post.userData.outlet.x,post.userData.outlet.y,post.userData.outlet.z));
    window.apparatusVents.push({id:key+':'+post.userData.side,x:mouth.x+state.camera+w/2,y:h/2-mouth.y+(state.cameraY||0),dir:post.userData.side,type:hazard.impactLauncher?'steam':post.userData.side<0?'fire':'steam'});
   }
@@ -725,7 +725,7 @@ function positionWallDolls(state,w,h){
  const now=performance.now(),dt=dollLastTime?Math.min(.04,(now-dollLastTime)/1000):1/60;dollLastTime=now;
  for(const pivot of wallDolls){
   const u=pivot.userData;
-  pivot.visible=['factory','trampoline','circus'].includes(state.level)&&Math.abs(u.worldX-state.camera-w/2)<w/2+100;
+  pivot.visible=['factory','trampoline'].includes(state.level)&&Math.abs(u.worldX-state.camera-w/2)<w/2+100;
   // Damped pendulum driven by irregular small gusts. No repeating sine loop.
   u.gustTimer-=dt;
   if(u.gustTimer<=0){u.wind=(Math.random()-.5)*.20;u.gustTimer=.55+Math.random()*1.9;}
@@ -1266,6 +1266,8 @@ function positionIndustrialBeams(state,w,h){
  }
  for(const [key,root] of industrialBeamInstances)if(!active.has(key))root.visible=false;
  for(const [key,root] of boardBeamSupports)if(!supportActive.has(key))root.visible=false;
+ // Circus has spectators in bleachers, not walls to mount props on.
+ if(state.level==='circus'){for(const root of beamBackdropInstances.values())root.visible=false;return;}
  // Decorative panels and railings stay against the wall, below its roofline.
  const start=Math.max(1,Math.floor((state.camera*.7-400)/950)),backActive=new Set();
  for(let i=start;i<start+Math.ceil(w/950)+3;i++){
