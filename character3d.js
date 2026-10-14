@@ -1379,6 +1379,34 @@ function positionGore(state,w,h){
  }
  window.bodyCameraParts=goreParts.map(p=>({joint:p.userData.joint,x:p.userData.worldX,y:p.userData.worldY,resting:!!p.userData.resting,floorY:p.userData.floorY,extent:p.userData.contactExtent,radius:p.userData.radius}));
 }
+const balconyPotTemplates=[],balconyPotInstances=new Map();
+async function loadBalconyPots(){
+ await Promise.allSettled(['flower_pot.glb','pot_flower_261120.glb'].map(async(file,index)=>{
+  try{const gltf=await new GLTFLoader().register(trafficMaterialCompatibility).loadAsync('./'+file);gltf.scene.updateMatrixWorld(true);const flat=new THREE.Group();
+   gltf.scene.traverse(mesh=>{if(!mesh.isMesh)return;const geometry=mesh.geometry.clone();geometry.applyMatrix4(mesh.matrixWorld);flat.add(new THREE.Mesh(geometry,mesh.material));});
+   const bounds=new THREE.Box3().setFromObject(flat),center=bounds.getCenter(new THREE.Vector3()),height=bounds.max.y-bounds.min.y;if(height<=0)throw Error('Empty flower-pot model');
+   for(const mesh of flat.children){mesh.geometry.translate(-center.x,-bounds.min.y,-center.z);mesh.geometry.scale(1/height,1/height,1/height);}balconyPotTemplates[index]=flat;
+  }catch(error){console.warn('Balcony flower pot unavailable',file,error);}
+ }));
+}
+function positionBalconyPots(state,w,h){
+ const active=new Set();
+ for(const balcony of state.hazards||[]){
+  if(!balcony.balcony||Math.abs(balcony.x-state.camera-w/2)>w/2+balcony.width)continue;
+  const count=balcony.width>=180?2:1;
+  for(let i=0;i<count;i++){
+   const key=balcony.id+':pot:'+i,seed=[...balcony.id].reduce((n,c)=>n+c.charCodeAt(0),0),variant=(seed+i)%2,template=balconyPotTemplates[variant]||balconyPotTemplates[1-variant];if(!template)continue;
+   active.add(key);let root=balconyPotInstances.get(key);if(!root){root=template.clone(true);root.userData.variant=variant;scene.add(root);balconyPotInstances.set(key,root);}
+   const height=Math.max(24,Math.min(38,h*.048)),offset=count===1?0:(i===0?-.27:.27)*balcony.width;
+   root.scale.setScalar(height);root.rotation.y=(seed*.37+i*1.7)%(Math.PI*2);
+   // Their bottom rests on the steel beam, at the same wall depth. Keep
+   // decoration separate from the beam's collision bounds and blood decals.
+   const top=balcony.balconyY-(balcony.beamThickness||10)/2;
+   root.position.set(balcony.x+offset-state.camera-w/2,h/2-top+(state.cameraY||0),-570);root.visible=true;
+  }
+ }
+ for(const [key,root] of balconyPotInstances)if(!active.has(key))root.visible=false;
+}
 const parkFencePosts=new Map();
 const industrialBeamTemplates=new Map(),industrialBeamInstances=new Map(),boardBeamSupports=new Map(),beamBackdropInstances=new Map();window.industrialBeamOverlayReady=false;
 async function loadIndustrialBeams(){
@@ -1513,6 +1541,7 @@ function animate(){
  positionNailBoards(state,w,h);
  positionLevelMachinery(state,w,h);
  positionIndustrialBeams(state,w,h);
+ positionBalconyPots(state,w,h);
  positionWeapons(state,w,h);
  positionWallDolls(state,w,h);
  positionSceneryBed(state,w,h);
@@ -1608,5 +1637,5 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();loadIndustrialBeams();loadScenerySigns();loadTrafficProps();loadCrows();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();loadIndustrialBeams();loadScenerySigns();loadTrafficProps();loadCrows();loadBalconyPots();animate();}
 

@@ -215,6 +215,20 @@
       "license": "SKETCHFAB Standard (https://sketchfab.com/licenses)",
       "source": "https://sketchfab.com/3d-models/game-ready-crow-7f41fdc16ea3442788355809271cc50d",
       "title": "Game ready crow"
+    },
+    {
+      "file": "flower_pot.glb",
+      "title": "Flower Pot",
+      "author": "himansu",
+      "source": "https://skfb.ly/6AEuU",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
+    },
+    {
+      "file": "pot_flower_261120.glb",
+      "title": "Pot_Flower_261120",
+      "author": "3D Error 404",
+      "source": "https://skfb.ly/6WMXr",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
     }
   ],
   "uploaded_files": [
@@ -327,7 +341,9 @@
     "vintage_windmill_animated_.glb_free_low_poly.glb",
     "western_cowboy_rigged.glb",
     "game_ready_crow.glb",
-    "u_a4gfvwagf1-crow-sound-effect-hd-336784.mp3"
+    "u_a4gfvwagf1-crow-sound-effect-hd-336784.mp3",
+    "flower_pot.glb",
+    "pot_flower_261120.glb"
   ],
   "custom_assets": "Meshy visuals, custom character and chair, dialogue and sound effects supplied by Tim / Flying Vee Studios.",
   "audio_sources": [
