@@ -130,12 +130,14 @@ function syncFlightSounds(){
  if(flyingSound)flyingSound.volume=.5*(characterVoice&&!characterVoice.paused?.7:1);if(jetEngineSound)jetEngineSound.volume=.28*duck;
 }
 function stopCharacterVoice(){voiceGeneration++;if(characterVoice){characterVoice.pause();characterVoice=null;}}
+const jetpackInstallVoices=new Map();
+for(const [character,file] of Object.entries({cowboy:'cowboy_jetpack_install.mp3',human:'human_jetpack_install.mp3',meshy:'dummy_jetpack_install.mp3'})){const voice=new Audio('./'+file);voice.preload='auto';voice.load();jetpackInstallVoices.set(character,voice);}
 function playCharacterVoice(stage){
- stopCharacterVoice();const character=$('characterSelect').value,pool=window.characterVoiceClips?.[character]?.[stage]||[];
+ stopCharacterVoice();const character=$('characterSelect').value,pool=stage==='jetpack'?[jetpackInstallVoices.get(character)?.src].filter(Boolean):window.characterVoiceClips?.[character]?.[stage]||[];
  if(!pool.length)return;
  const key=character+':'+stage,choices=pool.length>1?pool.filter(file=>file!==lastVoiceClip.get(key)):pool;
  const clip=choices[Math.floor(Math.random()*choices.length)],generation=voiceGeneration;
- lastVoiceClip.set(key,clip);const voice=new Audio('./'+clip.split('/').map(encodeURIComponent).join('/'));characterVoice=voice;voice.volume=.8;
+ lastVoiceClip.set(key,clip);const voice=stage==='jetpack'?jetpackInstallVoices.get(character):new Audio('./'+clip.split('/').map(encodeURIComponent).join('/'));if(stage==='jetpack')voice.currentTime=0;characterVoice=voice;voice.volume=.8;
  voice.onended=()=>{if(characterVoice===voice)characterVoice=null;};
  voice.play().catch(()=>{if(generation===voiceGeneration&&characterVoice===voice)characterVoice=null;});
 }
@@ -213,7 +215,7 @@ canvas.addEventListener('pointerdown',e=>{
 });
 $('removeAttachment').onclick=()=>removeAttachment(selectedAttachment);
 document.querySelectorAll('[data-part]').forEach(button=>button.onclick=()=>{selected=button.dataset.part;pending=null;closeAttachmentAction();document.querySelectorAll('[data-part]').forEach(b=>{b.classList.toggle('selected',b===button);b.setAttribute('aria-pressed',String(b===button));});startNotice(button.textContent.trim()+' selected. Connect a frame socket to an arm socket.');});
-$('jetpackToggle').onclick=()=>{if(!['build','charged'].includes(phase))reset(false);jetpackMounted=!jetpackMounted;$('jetpackToggle').classList.toggle('selected',jetpackMounted);$('jetpackToggle').setAttribute('aria-pressed',String(jetpackMounted));};
+$('jetpackToggle').onclick=()=>{if(!['build','charged'].includes(phase))reset(false);jetpackMounted=!jetpackMounted;$('jetpackToggle').classList.toggle('selected',jetpackMounted);$('jetpackToggle').setAttribute('aria-pressed',String(jetpackMounted));if(jetpackMounted)playCharacterVoice('jetpack');};
 $('setupButton').onclick=()=>$('setupDialog').showModal();$('startGame').onclick=()=>{$('setupDialog').close();ambienceEnabled=true;prepareBoingAudio();startMapAmbience();playCharacterVoice('before');};
 $('armLength').oninput=e=>{if(!e.target.checkValidity())return;armScale=e.target.value/100;$('armVal').textContent=e.target.value+'%';if(phase!=='build')reset(false);render()};$('angle').oninput=e=>{if(!e.target.checkValidity())return;releaseDeg=+e.target.value;$('angleVal').textContent=releaseDeg+'°';if(phase!=='build')reset(false);render()};$('reset').onclick=()=>{reset(true);playCharacterVoice('before');};$('charge').onclick=()=>{if(!connections.length){loadDemo()}reset(false);setPhase('charged');$('distanceText').textContent='0 ft';startNotice('<strong>Charged!</strong> The arm is pulled back. Press LAUNCH and see what happens.');render()};$('launch').onclick=()=>{if(phase!=='charged')return;phase='launching';omega=0;dummy=null;rag=null;flightStart=0;maxDist=0;setPhase('flying');phase='launching';startNotice('<strong>Launching!</strong> Stored elastic energy and leverage accelerate the arm.');};
 // Temporary industrial wall. A custom texture can replace these panels later.
