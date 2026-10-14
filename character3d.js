@@ -1067,7 +1067,10 @@ function positionGore(state,w,h){
    u.worldY+=u.vy*dt;
    if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
+   if(u.worldY<groundY-6)u.visualGrounded=false;
    if(u.worldY>=groundY){
+    if(!u.visualGrounded&&u.vy>45&&!window.launcherCushionContact?.(u.worldX))window.launcherPartGroundImpact?.(u.joint,u.vy);
+    u.visualGrounded=true;
     if(!u.pillowImpact&&window.launcherCushionContact?.(u.worldX)){window.launcherCushionImpact?.(u.worldX,u.vy,Math.sign(u.vx));u.pillowImpact=true;}
     u.worldY=groundY;
     // Keep the orientation earned during the tumble, not a prescribed side pose.
@@ -1141,7 +1144,7 @@ function positionGore(state,w,h){
 
   p.position.set(u.worldX-state.camera-w/2,h/2-u.worldY+(state.cameraY||0),65);
  }
- window.bodyCameraParts=goreParts.map(p=>({joint:p.userData.joint,x:p.userData.worldX,y:p.userData.worldY,floorY:p.userData.floorY,extent:p.userData.contactExtent,radius:p.userData.radius}));
+ window.bodyCameraParts=goreParts.map(p=>({joint:p.userData.joint,x:p.userData.worldX,y:p.userData.worldY,resting:!!p.userData.resting,floorY:p.userData.floorY,extent:p.userData.contactExtent,radius:p.userData.radius}));
 }
 function animate(){
  requestAnimationFrame(animate);

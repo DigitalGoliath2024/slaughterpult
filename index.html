@@ -99,10 +99,10 @@ function playBodyImpact(speed=200,part=null,type='machine'){
  if(type==='ground'){
   if(speed<45||(partLandingCooldowns.get(part)||0)>0)return;
   partLandingCooldowns.set(part,.1);if(landingBurstCooldown>0)return;
-  landingBurstCooldown=.04;stopCharacterVoice();playActionSound('landing',Math.max(.55,Math.min(1,speed/450)));return;
+  landingBurstCooldown=.04;stopFlightVoiceOnImpact();playActionSound('landing',Math.max(.55,Math.min(1,speed/450)));return;
  }
  if(speed<120||bodyImpactCooldown>0)return;
- bodyImpactCooldown=.7;stopCharacterVoice();playActionSound('landing');playActionSound('squish');
+ bodyImpactCooldown=.7;stopFlightVoiceOnImpact();playActionSound('landing');playActionSound('squish');
 }
 function terminateJetpack(){
  if(!rag?.jetStarted||rag.jetExploded)return;
@@ -112,6 +112,7 @@ function terminateJetpack(){
  rag.jetExplosion={x:(waist.x+chest.x)/2+dy/len*13,y:(waist.y+chest.y)/2-dx/len*13,age:0};
  playActionSound('explosion');
 }
+window.launcherPartGroundImpact=(part,speed)=>{if(rag&&phase==='airborne')playBodyImpact(speed,part,'ground');};
 function stopFlightSounds(){for(const sound of [flyingSound,jetEngineSound])if(sound)sound.pause();flyingSound=jetEngineSound=null;}
 function playFlightEffect(file,volume){const sound=new Audio('./audio/effects/'+file);sound.loop=false;sound.volume=volume;sound.play().catch(()=>{});return sound;}
 function startFlightSounds(){stopFlightSounds();if(jetpackMounted&&rag?.jetFuel>0)rag.jetStarted=true;playActionSound('launch');flyingSound=playFlightEffect('flying_character_sound.mp3',.5);flyingSound.loop=true;if(jetpackMounted&&rag?.jetFuel>0)jetEngineSound=playFlightEffect('freesound_community-jet-engine-6753.mp3',.28);}
@@ -120,7 +121,7 @@ function syncFlightSounds(){
  if(rag?.jetStarted&&!rag.jetExploded&&(rag.jetFuel<=0||rag.shredded||rag.softLanding))terminateJetpack();
  syncMapAmbience();impactQuietTime+=PHYSICS_STEP;landingBurstCooldown=Math.max(0,landingBurstCooldown-PHYSICS_STEP);
  for(const [part,time] of partLandingCooldowns)if(time<=PHYSICS_STEP)partLandingCooldowns.delete(part);else partLandingCooldowns.set(part,time-PHYSICS_STEP);
- if(rag?.landingPending&&rag.landingRestTime>=.6&&impactQuietTime>=.35&&activeActionSounds.size===0){rag.landingPending=false;playCharacterVoice('landed');}
+ if(rag?.landingPending&&rag.landingRestTime>=.6&&impactQuietTime>=.35&&activeActionSounds.size===0&&!(window.bodyCameraParts||[]).some(part=>part.resting===false)){rag.landingPending=false;playCharacterVoice('landed');}
  squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);boneCooldown=Math.max(0,boneCooldown-PHYSICS_STEP);bodyImpactCooldown=Math.max(0,bodyImpactCooldown-PHYSICS_STEP);
  for(const sound of activeActionSounds){if(sound.effectDuration){sound.effectAge+=PHYSICS_STEP;if(sound.effectAge>=sound.effectDuration){sound.pause();activeActionSounds.delete(sound);continue;}}const fade=sound.effectDuration?Math.min(1,(sound.effectDuration-sound.effectAge)/.07):1;sound.volume=sound.effectVolume*fade*(sound.effectKind==='landing'?1:(characterVoice&&!characterVoice.paused?.65:1)*(activeActionSounds.size>1?.8:1));}
  if(!rag||phase!=='airborne'){stopFlightSounds();return;}
@@ -129,6 +130,7 @@ function syncFlightSounds(){
  const duck=characterVoice&&!characterVoice.paused?.35:1;
  if(flyingSound)flyingSound.volume=.5*(characterVoice&&!characterVoice.paused?.7:1);if(jetEngineSound)jetEngineSound.volume=.28*duck;
 }
+function stopFlightVoiceOnImpact(){if(characterVoice?.voiceStage!=='landed')stopCharacterVoice();}
 function stopCharacterVoice(){voiceGeneration++;if(characterVoice){characterVoice.pause();characterVoice=null;}}
 const jetpackInstallVoices=new Map();
 for(const [character,file] of Object.entries({cowboy:'cowboy_jetpack_install.mp3',human:'human_jetpack_install.mp3',meshy:'dummy_jetpack_install.mp3'})){const voice=new Audio('./'+file);voice.preload='auto';voice.load();jetpackInstallVoices.set(character,voice);}
@@ -137,7 +139,7 @@ function playCharacterVoice(stage){
  if(!pool.length)return;
  const key=character+':'+stage,choices=pool.length>1?pool.filter(file=>file!==lastVoiceClip.get(key)):pool;
  const clip=choices[Math.floor(Math.random()*choices.length)],generation=voiceGeneration;
- lastVoiceClip.set(key,clip);const voice=stage==='jetpack'?jetpackInstallVoices.get(character):new Audio('./'+clip.split('/').map(encodeURIComponent).join('/'));if(stage==='jetpack')voice.currentTime=0;characterVoice=voice;voice.volume=.8;
+ lastVoiceClip.set(key,clip);const voice=stage==='jetpack'?jetpackInstallVoices.get(character):new Audio('./'+clip.split('/').map(encodeURIComponent).join('/'));if(stage==='jetpack')voice.currentTime=0;characterVoice=voice;voice.voiceStage=stage;voice.volume=.8;
  voice.onended=()=>{if(characterVoice===voice)characterVoice=null;};
  voice.play().catch(()=>{if(generation===voiceGeneration&&characterVoice===voice)characterVoice=null;});
 }
@@ -1143,7 +1145,7 @@ function updateRagdoll(dt){
     groundedThisFrame=true;
     const cushioned=!!cushionAt(n.x)&&!rag.shredded;
     if(cushioned)registerSoftLanding(n.x,incomingSpeed,Math.sign(vx));
-    if(!cushioned&&!wasGrounded&&n.y-n.py>0){playBodyImpact((n.y-n.py)/h,part,'ground');checkImpactForce(part,incomingSpeed,n.x,floor-n.r,'ground');}
+    if(!cushioned&&!wasGrounded&&n.y-n.py>0){if(!(window.bodyCameraParts||[]).some(p=>p.joint===part))playBodyImpact((n.y-n.py)/h,part,'ground');checkImpactForce(part,incomingSpeed,n.x,floor-n.r,'ground');}
     n.groundedContact=true;
     const downward=n.y-n.py;
     n.y=floor-n.r;
@@ -1330,5 +1332,5 @@ function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#11151b';ctx.fillRect(0,
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>s.surface?.kind==='grinder'&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,jetpackMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??5,jetActive:!!(jetpackMounted&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('setupDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=jetpack-explosion-20261014-20"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=ground-sound-sync-20261014-21"></script></body></html>
 
