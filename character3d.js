@@ -478,7 +478,8 @@ function positionLevelMachinery(state,w,h){
   colorCircusProps(root,state.level==='circus',Math.floor(hazard.x/100));
   root.visible=Math.abs(hazard.x-state.camera-w/2)<w/2+width;
   const height=template.userData.heightRatio*width/root.userData.facingWidth;
-  const centerY=hazard.sideways?floor-(template.userData.heightRatio*.5+.19)*width/root.userData.facingWidth-12:kind==='spiked'?floor-106:floor-height/2;
+  let centerY=hazard.sideways?floor-(template.userData.heightRatio*.5+.19)*width/root.userData.facingWidth-12:kind==='spiked'?floor-106:floor-height/2;
+  if(state.level==='trampoline'&&hazard.attachedWall)centerY=Math.max(centerY,h*.88+340-(Math.max(620,h*1.2)-70)+height/2+24);
   root.position.set(hazard.x-state.camera-w/2,h/2-centerY+(state.cameraY||0),35);
   window.machineBloodSurfaces[hazard.id]={top:centerY-height/2,bloodTop:kind==='hopper'&&template.userData.bloodHeightRatio?floor-template.userData.bloodHeightRatio*width/root.userData.facingWidth:undefined,centerY,height,width,kind,impactRadius:hazard.sideways?(template.userData.heightRatio*.5+.19)*width/root.userData.facingWidth:undefined,feedBelt:hazard.feedBelt,bloodLeft:hazard.x+(template.userData.bloodLeftRatio??-.48)*width/root.userData.facingWidth,bloodRight:hazard.x+(template.userData.bloodRightRatio??.48)*width/root.userData.facingWidth};
   if(kind==='hopper'||kind==='spiked'||kind==='twin')positionMachineLipBlood(root,template,hazard,state,width,centerY);
@@ -764,6 +765,10 @@ async function loadWeapons(){
   const sword=new THREE.Group(),bladeMat=new THREE.MeshStandardMaterial({color:0xb8c1c5,metalness:.75,roughness:.34}),gripMat=new THREE.MeshStandardMaterial({color:0x292321,roughness:.85});
   const shape=new THREE.Shape();shape.moveTo(-.055,.3);shape.lineTo(-.055,.84);shape.lineTo(0,1);shape.lineTo(.055,.84);shape.lineTo(.055,.3);shape.closePath();const blade=new THREE.Mesh(new THREE.ExtrudeGeometry(shape,{depth:.012,bevelEnabled:true,bevelThickness:.007,bevelSize:.006,bevelSegments:1,steps:1}),bladeMat);sword.add(blade);
   const guard=new THREE.Mesh(new THREE.BoxGeometry(.24,.025,.035),bladeMat);guard.position.y=.29;sword.add(guard);const grip=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,.25,8),gripMat);grip.position.y=.15;sword.add(grip);weaponTemplates.sword=sword;
+  const bat=new THREE.Group(),wood=new THREE.MeshStandardMaterial({color:0x976039,roughness:.72}),tape=new THREE.MeshStandardMaterial({color:0x30282b,roughness:.9});
+  const barrel=new THREE.Mesh(new THREE.CylinderGeometry(.075,.025,.78,10),wood);barrel.position.y=.57;bat.add(barrel);
+  const handle=new THREE.Mesh(new THREE.CylinderGeometry(.024,.024,.23,8),tape);handle.position.y=.115;bat.add(handle);
+  const knob=new THREE.Mesh(new THREE.CylinderGeometry(.04,.04,.025,8),wood);knob.position.y=.012;bat.add(knob);weaponTemplates.bat=bat;
   window.weaponOverlayReady=!!weaponTemplates.knife;
  }catch(e){console.warn('Weapon pack unavailable; original hazard visuals remain',e);}
 }
@@ -1223,6 +1228,7 @@ function positionGore(state,w,h){
  }
  window.bodyCameraParts=goreParts.map(p=>({joint:p.userData.joint,x:p.userData.worldX,y:p.userData.worldY,resting:!!p.userData.resting,floorY:p.userData.floorY,extent:p.userData.contactExtent,radius:p.userData.radius}));
 }
+const parkFencePosts=new Map();
 const industrialBeamTemplates=new Map(),industrialBeamInstances=new Map(),boardBeamSupports=new Map(),beamBackdropInstances=new Map();window.industrialBeamOverlayReady=false;
 async function loadIndustrialBeams(){
  try{
@@ -1267,6 +1273,16 @@ function positionIndustrialBeams(state,w,h){
  for(const [key,root] of industrialBeamInstances)if(!active.has(key))root.visible=false;
  for(const [key,root] of boardBeamSupports)if(!supportActive.has(key))root.visible=false;
  // Circus has spectators in bleachers, not walls to mount props on.
+ const fenceActive=new Set();
+ if(state.level==='trampoline'){
+  const floor=h*.88+340,height=Math.max(620,h*1.2)-70,start=Math.floor((state.camera-80)/360);
+  for(let i=start;i<start+Math.ceil(w/360)+3;i++){
+   fenceActive.add(i);let root=parkFencePosts.get(i);
+   if(!root){root=new THREE.Group();addIndustrialBeam(root,0,0,0,1,9,12,0,'thin');scene.add(root);parkFencePosts.set(i,root);}
+   root.scale.y=height;root.position.set(i*360-state.camera-w/2,h/2-floor+(state.cameraY||0),-20);root.visible=true;
+  }
+ }
+ for(const [key,root] of parkFencePosts)if(!fenceActive.has(key))root.visible=false;
  if(state.level==='circus'){for(const root of beamBackdropInstances.values())root.visible=false;return;}
  // Decorative panels and railings stay against the wall, below its roofline.
  const start=Math.max(1,Math.floor((state.camera*.7-400)/950)),backActive=new Set();

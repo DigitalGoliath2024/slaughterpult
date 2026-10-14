@@ -374,6 +374,18 @@ function drawTrampolineParkBackdrop(){
   for(let i=start;i<start+Math.ceil(W/wallWidth)+2;i++)ctx.drawImage(trampolineParkWall,0,0,trampolineParkWall.naturalWidth,sourceHeight,i*wallWidth-backX,top,wallWidth,wallHeight);
  }
 }
+// World-aligned fence: mounted hazards move with its mesh; artwork recedes behind it.
+function drawTrampolineFence(){
+ const floor=H*.88+340,top=floor-(Math.max(620,H*1.2)-70),left=-32,right=W+32,mesh=26;
+ ctx.save();ctx.beginPath();ctx.rect(left,top,right-left,floor-top);ctx.clip();
+ const shift=((camera%mesh)+mesh)%mesh;
+ for(const [color,offset] of [['rgba(6,12,17,.62)',1],['rgba(163,181,186,.58)',0]]){
+  ctx.strokeStyle=color;ctx.lineWidth=1;ctx.beginPath();
+  for(let x=left-(floor-top)-mesh-shift;x<right+(floor-top);x+=mesh){ctx.moveTo(x+offset,top);ctx.lineTo(x+floor-top+offset,floor);ctx.moveTo(x+offset,top);ctx.lineTo(x-(floor-top)+offset,floor);}ctx.stroke();
+ }
+ ctx.restore();
+ ctx.strokeStyle='#849398';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(left,top);ctx.lineTo(right,top);ctx.moveTo(left,floor-10);ctx.lineTo(right,floor-10);ctx.stroke();
+}
 function prepareCircusWall(){
  if(circusWallPanel||!circusWallImage.complete||!circusWallImage.naturalWidth)return circusWallPanel;
  circusWallPanel=document.createElement('canvas');circusWallPanel.width=circusWallImage.naturalWidth;circusWallPanel.height=Math.round(circusWallImage.naturalHeight*.91);
@@ -399,14 +411,19 @@ function drawCircusBackdrop(){
   const panX=Math.max(-extraX,Math.min(extraX,camera*.035)),panY=Math.max(-extraY,Math.min(extraY,cameraY*.06));
   ctx.drawImage(trampolineSkyVideo,-extraX-panX,cameraY-extraY-panY,width,height);
  }
- const wall=prepareCircusWall();if(wall){const height=Math.max(680,H*1.18),width=wall.width*height/wall.height,bottom=H*.88,top=bottom-height,backX=camera*.42,start=Math.floor(backX/width)-1;for(let i=start;i<start+Math.ceil(W/width)+2;i++)ctx.drawImage(wall,i*width-backX,top,width,height);drawCircusPennants(top,backX);}
- const floor=H*.88;ctx.fillStyle='#34243e';ctx.fillRect(0,floor,W,H-floor+Math.max(0,cameraY));
+ const wall=prepareCircusWall();if(wall){const height=Math.max(580,H*.98),width=wall.width*height/wall.height,bottom=H*.88-150,top=bottom-height,backX=camera*.30,start=Math.floor(backX/width)-1;for(let i=start;i<start+Math.ceil(W/width)+2;i++)ctx.drawImage(wall,i*width-backX,top,width,height);drawCircusPennants(top,backX);}
+ const floor=H*.88;
+ // Reuse the uploaded circus artwork's straw/dirt foreground as a setback apron.
+ ctx.fillStyle='#746043';ctx.fillRect(0,floor-150,W,150);
+ if(circusWallImage.complete&&circusWallImage.naturalWidth){const tile=600,pan=camera*.65,start=Math.floor(pan/tile)-1;for(let i=start;i<start+Math.ceil(W/tile)+2;i++)ctx.drawImage(circusWallImage,0,circusWallImage.naturalHeight*.91,circusWallImage.naturalWidth,circusWallImage.naturalHeight*.09,i*tile-pan,floor-150,tile,150);}
+ const shade=ctx.createLinearGradient(0,floor-150,0,floor);shade.addColorStop(0,'rgba(20,15,10,.1)');shade.addColorStop(1,'rgba(20,15,10,.65)');ctx.fillStyle=shade;ctx.fillRect(0,floor-150,W,150);
+ ctx.fillStyle='#34243e';ctx.fillRect(0,floor,W,H-floor+Math.max(0,cameraY));
  const palette=['#c73560','#e9b74b','#287e8c','#7651a6'];
  for(let i=Math.floor(camera/80)-1;i<Math.ceil((camera+W)/80)+1;i++){const x=i*80-camera;ctx.fillStyle=palette[Math.abs(i)%4];ctx.globalAlpha=.38;ctx.beginPath();ctx.moveTo(x,floor);ctx.lineTo(x+76,floor);ctx.lineTo(x+112,H+Math.max(0,cameraY));ctx.lineTo(x-30,H+Math.max(0,cameraY));ctx.fill();}ctx.globalAlpha=1;ctx.strokeStyle='#efc977';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(0,floor);ctx.lineTo(W,floor);ctx.stroke();
 }
 function drawSky(){
  if(currentLevel==='circus'){drawCircusBackdrop();return;}
- if(currentLevel==='trampoline'){drawTrampolineParkBackdrop();drawTrampolineTerrain();return;}
+ if(currentLevel==='trampoline'){drawTrampolineParkBackdrop();drawTrampolineFence();drawTrampolineTerrain();return;}
  const floor=H*.88,sky=levelSkyImages[currentLevel];
  // One panoramic sky band: mirrored horizontal joins keep long flights moving
  // without vertical repeats, exposed borders, or changes to the artwork's aspect.
@@ -791,8 +808,8 @@ const COURSES={
   {id:'grinder',kind:'grinder',x:5500,width:240,groundOffset:340,points:3000,label:''},
   {id:'recovery1',kind:'trampoline',x:4240,width:280,offset:290,slope:-.08,vx:360,vy:-1450,freeBounce:true,variant:1,points:200},
   {id:'recovery2',kind:'trampoline',x:4840,width:300,offset:285,slope:-.10,vx:440,vy:-1600,freeBounce:true,variant:2,points:200},
-  {id:'wall-bat-roller4',kind:'roller',x:4500,width:270,groundOffset:-280,attachedWall:true,impactLauncher:true,motorSpeed:7,points:900,label:''},
-  {id:'wall-knife-roller1',kind:'roller',x:5180,width:240,groundOffset:-940,attachedWall:true,motorSpeed:5,points:1400,label:''}
+  {id:'wall-bat-roller4',kind:'roller',x:4500,width:270,groundOffset:40,attachedWall:true,impactLauncher:true,motorSpeed:7,points:900,label:''},
+  {id:'wall-knife-roller1',kind:'roller',x:5180,width:240,groundOffset:-80,attachedWall:true,motorSpeed:5,points:1400,label:''}
  ]
 };
 // Pair knives with an unobstructed belt; don't pull them across intervening machines.
@@ -857,7 +874,7 @@ function ensureCourseCoverage(level,reach){
    add('bounce2','trampoline',2020,280,250,{offset:level==='circus'?-25:290,slope:-.10,vx:450,vy:-1600,freeBounce:true,variant:(section+1)%3});
    add('belt2','conveyor',2460,360,450);add('hopper2','grinder',2840,230,2000);
    add('bounce3','trampoline',3280,260,250,{offset:level==='circus'?-25:290,slope:-.06,vx:360,vy:-1450,freeBounce:true,variant:(section+2)%3});
-   if(level==='trampoline'){add('wall-knife-roller1','roller',1250,240,1400,{groundOffset:340-1200,attachedWall:true,motorSpeed:5});add('wall-bat-roller4','roller',2220,270,900,{groundOffset:340-680,attachedWall:true,impactLauncher:true,motorSpeed:7});}
+   if(level==='trampoline'){add('wall-knife-roller1','roller',1250,240,1400,{groundOffset:-80,attachedWall:true,motorSpeed:5});add('wall-bat-roller4','roller',2220,270,900,{groundOffset:40,attachedWall:true,impactLauncher:true,motorSpeed:7});}
   }else{
    add('belt1','conveyor',180,360,400);add('roller1','roller',452,200,1200,{feedBelt:level+'-extension'+section+'-belt1'});
    add('hopper1','grinder',800,220,1800);add('roller4','roller',1160,230,1500);add('belt2','conveyor',1560,360,450);add('hopper2','grinder',1920,230,2000);
@@ -1094,7 +1111,7 @@ function bounceBodyOffMachine(part,n){
  if(rag.shredded||rag.softLanding||rag.pinned[part])return;
  // Keep the powered conveyor's established top contact and transport.
  const belt=LEVEL_HAZARDS.find(h=>h.kind==='conveyor'&&Math.abs(n.x-h.x)<h.width/2&&Math.abs(n.y+n.r-(H*.88+(h.groundOffset||0)-72))<8);
- const hit=machineCollision(n.px,n.py,n.x,n.y,n.r,belt?.id);if(!hit)return;
+ const hit=machineCollision(n.px,n.py,n.x,n.y,n.r,belt?.id);if(!hit)return;if(hit.hazard.impactLauncher)return;
  let vx=n.x-n.px,vy=n.y-n.py;const inward=vx*hit.nx+vy*hit.ny;
  if(inward<0){if(hit.hazard.kind==='beam'){markWall(hit.x,hit.y,1,hit.hazard,'impact');if(!hitHazards.has(hit.hazard.id)){hitHazards.add(hit.hazard.id);hazardPoints+=hit.hazard.points;}}vx-=1.45*inward*hit.nx;vy-=1.45*inward*hit.ny;playBodyImpact(-inward/PHYSICS_STEP);checkImpactForce(part,-inward/PHYSICS_STEP,hit.x,hit.y,'machine');}
  if(rag.shredded)return;n.x=hit.x;n.y=hit.y;n.px=n.x-vx;n.py=n.y-vy;
@@ -1117,7 +1134,7 @@ function hazardHit(x,y,part=null){
     }
    }continue;
   }
-  if(x<h.x-h.width/2||x>h.x+h.width/2)continue;
+  if(h.impactLauncher&&n){if(Math.max(x,n.px)<h.x-h.width/2-n.r||Math.min(x,n.px)>h.x+h.width/2+n.r)continue;}else if(x<h.x-h.width/2||x>h.x+h.width/2)continue;
   if(h.kind==='ramp'&&n){
    const surface=rampY(h,x);
    // Nails are drawn every 14px, with tips 20px ABOVE the board face.
@@ -1188,10 +1205,10 @@ function hazardHit(x,y,part=null){
   if(h.kind==='roller'&&n){
    const machine=window.machineBloodSurfaces?.[h.id]??{kind:/(?:roller[135]|roller2)$/.test(h.id)?'twin':'spiked',width:h.width,height:h.width*(/(?:roller[135]|roller2)$/.test(h.id)?.733:.326)};
    const cx=h.x,cy=machine.centerY??(machine.kind==='spiked'?floor-106:floor-machine.height*.5),dx=x-cx,dy=y-cy;
-   const touches=machine?.kind==='spiked'
+   const touches=(h.impactLauncher&&segmentHitsMachine(n.px,n.py,x,y,{left:cx-machine.width*.5,right:cx+machine.width*.5,top:cy-(machine.impactRadius??h.width*.38),bottom:cy+(machine.impactRadius??h.width*.38)},n.r))|| (machine?.kind==='spiked'
     ?Math.pow(dx/(machine.width*.5+n.r),2)+Math.pow(dy/((machine.impactRadius??(h.impactLauncher?h.width*.38:machine.height*.5))+n.r),2)<1
     :machine?.kind==='twin'?Math.abs(dx)<machine.width*.39&&[floor-machine.height*.79,floor-machine.height*.465].some(rollerY=>Math.abs(y-rollerY)<machine.height*.18+n.r)
-    :Math.hypot(dx,dy)<100;
+    :Math.hypot(dx,dy)<100);
    if(touches&&h.impactLauncher){
     if(!rag.spinnerHits)rag.spinnerHits=new Map();
     if(levelClock-(rag.spinnerHits.get(h.id)??-99)>.65){rag.spinnerHits.set(h.id,levelClock);if(!hitHazards.has(h.id)){hitHazards.add(h.id);hazardPoints+=h.points;}
@@ -1673,5 +1690,5 @@ function render(){if(currentLevel!=='circus')syncTrampolineSkyVideo();drawFlipCa
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller'||s.surface?.kind==='beam')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:LEVEL_HAZARDS,machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=circus-bleachers-floor-spinners-20261014-43"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=park-fence-mounts-20261014-44"></script></body></html>
 
