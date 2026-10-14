@@ -201,6 +201,13 @@
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
       "source": "https://skfb.ly/pMGHx",
       "title": "Low Poly Wet Floor Sign / Kaygan Zemin Tabelas\u0131"
+    },
+    {
+      "author": "Blender3D",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+      "source": "https://skfb.ly/6WOBG",
+      "title": "Traffic Props",
+      "file": "traffic_props.glb"
     }
   ],
   "uploaded_files": [
@@ -304,6 +311,7 @@
     "splat_squish_sound_6.mp3",
     "toy__grinder_beam_ugc_a_000_1x1.glb",
     "toy__grinder_ugc_a_000_1x1.glb",
+    "traffic_props.glb",
     "tramp_park_sky.png",
     "tramp_park_wall.png",
     "trampoline.glb",
@@ -436,6 +444,13 @@
       "source": "https://skfb.ly/otxqN",
       "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
       "file": "pizza_time_neon_sign.glb"
+    },
+    {
+      "file": "traffic_props.glb",
+      "title": "Traffic Props",
+      "author": "Blender3D",
+      "source": "https://skfb.ly/6WOBG",
+      "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)"
     }
   ]
 }

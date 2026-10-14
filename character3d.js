@@ -604,6 +604,46 @@ async function loadCushions(){
  for(const result of results)if(result.status==='rejected')console.warn('Cushion asset failed',result.reason);
  window.cushionOverlayReady=cushionTemplates.some(Boolean);
 }
+const trafficTemplates=new Map(),trafficInstances=new Map();let trafficLastTime=0,trafficReset=-1,trafficPrevious=new Map();
+async function loadTrafficProps(){
+ try{const gltf=await new GLTFLoader().loadAsync('./traffic_props.glb');gltf.scene.updateMatrixWorld(true);
+ for(const [kind,name] of [['cone','traffic_cone_tall'],['fold','traffic_sign.002'],['gate','traffic_sign'],['rail','Cube.009']]){
+  const source=gltf.scene.getObjectByName(name);if(!source)continue;const flat=new THREE.Group();source.traverse(o=>{if(!o.isMesh)return;const geometry=o.geometry.clone();geometry.applyMatrix4(o.matrixWorld);geometry.rotateX(-Math.PI/2);geometry.rotateY(Math.PI/2);flat.add(new THREE.Mesh(geometry,o.material));});
+  const bounds=new THREE.Box3().setFromObject(flat),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
+  for(const mesh of flat.children){mesh.geometry.translate(-center.x,-bounds.min.y,-center.z);mesh.geometry.scale(1/size.y,1/size.y,1/size.y);}flat.userData.widthRatio=size.x/size.y;trafficTemplates.set(kind,flat);
+ }
+ }catch(error){console.warn('Traffic props unavailable',error);}
+}
+function trafficSegmentHit(a,b,box){
+ let enter=0,exit=1;for(const [p,d,min,max] of [[a.x,b.x-a.x,box.left,box.right],[a.y,b.y-a.y,box.top,box.bottom]]){if(Math.abs(d)<1e-8){if(p<min||p>max)return false;continue;}let t0=(min-p)/d,t1=(max-p)/d;if(t0>t1)[t0,t1]=[t1,t0];enter=Math.max(enter,t0);exit=Math.min(exit,t1);if(enter>exit)return false;}return true;
+}
+function positionTrafficProps(state,w,h){
+ const now=performance.now()/1000,dt=Math.max(0,Math.min(.12,trafficLastTime?now-trafficLastTime:0));trafficLastTime=now;
+ if(trafficReset!==state.goreResetId){for(const root of trafficInstances.values()){root.userData.knocked=false;root.userData.dx=0;root.userData.vx=0;root.userData.angle=0;root.userData.spin=0;}trafficPrevious.clear();trafficReset=state.goreResetId;}
+ if(state.level!=='slide'){for(const root of trafficInstances.values())root.visible=false;trafficPrevious.clear();return;}
+ const random=n=>{const a=Math.sin(n*12.9898+29.19)*43758.5453;return a-Math.floor(a);},active=new Set(),bins=new Set(),contacts=[];
+ if(state.rag&&!state.shredded)for(const [joint,n] of Object.entries(state.rag))contacts.push({key:'body:'+joint,...n,radius:9});
+ for(const part of window.bodyCameraParts||[])contacts.push({key:'gore:'+part.joint,...part,radius:part.radius||8});
+ for(const pillow of state.cushions||[]){if(pillow.depth||pillow.stack)continue;const bin=Math.floor(pillow.x/1400);if(bins.has(bin)||random(bin+93)<.25)continue;if((state.hazards||[]).some(machine=>!machine.attachedWall&&machine.kind!=='soft'&&Math.abs(pillow.x-machine.x)<machine.width/2+115))continue;bins.add(bin);
+  const count=random(bin+27)>.45?3:2;
+  for(let i=0;i<count;i++){
+   const key='traffic:'+bin+':'+i,kind=i===0?['fold','gate','rail'][Math.floor(random(bin+11)*3)]:'cone',template=trafficTemplates.get(kind);if(!template)continue;
+   const origin=pillow.x+(i-(count-1)/2)*54,height=kind==='cone'?48:64;
+   if(Math.abs(origin-state.camera-w/2)>w/2+350)continue;active.add(key);let root=trafficInstances.get(key);
+   if(!root){root=template.clone(true);root.userData={...root.userData,dx:0,vx:0,angle:0,spin:0,knocked:false};root.scale.setScalar(height);root.rotation.y=(random(bin+i+81)-.5)*.4;scene.add(root);trafficInstances.set(key,root);}
+   const data=root.userData,ground=window.launcherGroundYAt?.(origin+data.dx)??h*.88,width=template.userData.widthRatio*height;
+   if(!data.knocked)for(const n of contacts){const previous=trafficPrevious.get(n.key)||{x:n.x-(n.vx||0)*dt,y:n.y-(n.vy||0)*dt};if(trafficSegmentHit(previous,n,{left:origin-width/2-n.radius,right:origin+width/2+n.radius,top:ground-height-n.radius,bottom:ground+n.radius})){
+    const vx=n.vx??(dt?(n.x-previous.x)/dt:0),speed=Math.hypot(vx,n.vy??(dt?(n.y-previous.y)/dt:0));if(speed<25)continue;data.knocked=true;data.direction=vx<0?-1:1;data.vx=data.direction*Math.min(380,Math.max(70,speed*.22));data.spin=-data.direction*4;break;
+   }}
+   for(let remain=dt;remain>0;){const step=Math.min(remain,1/120);remain-=step;if(data.knocked){const target=-data.direction*Math.PI/2;data.spin+=((target-data.angle)*18-data.spin*7)*step;data.angle+=data.spin*step;data.dx+=data.vx*step;data.vx*=Math.exp(-3.5*step);}}
+   root.rotation.z=data.angle;root.position.set(origin+data.dx-state.camera-w/2,h/2-ground+(state.cameraY||0),45);root.visible=true;
+   root.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(root);root.position.y+=(h/2-ground+(state.cameraY||0))-box.min.y;
+  }
+ }
+ for(const [key,root] of trafficInstances)if(!active.has(key))root.visible=false;
+ trafficPrevious=new Map(contacts.map(n=>[n.key,{x:n.x,y:n.y}]));
+}
+
 const scenerySignTemplates=[],scenerySignInstances=new Map();let pizzaSignTemplate=null,wetFloorTemplate=null;
 function prepareScenerySign(source,sideFacing=false,neon=true){
  const flat=new THREE.Group();source.updateWorldMatrix(true,true);
@@ -1411,6 +1451,7 @@ function animate(){
  positionScenerySigns(state,w,h);
  positionTrampolines(state,w,h);
  positionGore(state,w,h);
+ positionTrafficProps(state,w,h);
  if(model&&window.characterOverlayReady&&!window.seatLoading){
   model.visible=true;
   const {rag,tip,phase,theta}=state;
@@ -1496,5 +1537,5 @@ function drawBasket(state,w,h){
  basketCtx.fill();basketCtx.stroke();
  basketCtx.restore();
 }
-if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();loadIndustrialBeams();loadScenerySigns();animate();}
+if(renderer){loadChair();load('cowboy');loadLevelMachinery();loadJetpack();loadRocket();loadWeapons();loadWallDolls();loadSceneryBed();loadBackdropMachines();loadCushions();loadTrampolines();loadGoreAsset();loadNailBoard();loadIndustrialBeams();loadScenerySigns();loadTrafficProps();animate();}
 
