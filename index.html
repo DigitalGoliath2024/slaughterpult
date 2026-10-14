@@ -53,12 +53,28 @@ const actionSounds={
  knife:[['body_in_kniferoller.mp3',.65]],
  bone:[['human_bones_breaking_2.mp3',.7],['human_bones_breaking_3.mp3',.5],['human_bones_breaking_4.mp3',.3]],
  launch:[['catapult_launch_with_#1-1791930256015.mp3',.35],['catapult_launch_with_#2-1791930221469.mp3',.55]],
- squish:[['splat_squish_sound_#1-1791930022493.mp3',.85],['splat_squish_sound_#2-1791930016713.mp3',1],['splat_squish_sound_#2-1791930038748.mp3',.5],['splat_squish_sound_#4-1791930006652.mp3',.7],['splat_squish_sound_#4-1791930030413.mp3',.85]]
+ squish:[['splat_squish_sound_5.mp3',.55],['splat_squish_sound_6.mp3',.55],['splat_squish_sound_#1-1791930022493.mp3',.85],['splat_squish_sound_#2-1791930016713.mp3',1],['splat_squish_sound_#2-1791930038748.mp3',.5],['splat_squish_sound_#4-1791930006652.mp3',.7],['splat_squish_sound_#4-1791930030413.mp3',.85]]
 };
+const wetSoundClips={drip:['blood_dripping_1.mp3','blood_dripping_2.mp3'],conveyor:['convyer_blood_fall.mp3']};
+const wetAudioBank=new Map(),wetSounds=new Set(),wetCooldowns=new Map(),lastWetClip=new Map();
+for(const pool of Object.values(wetSoundClips))for(const file of pool){const sound=new Audio('./'+encodeURIComponent(file));sound.preload='auto';sound.load();wetAudioBank.set(file,sound);}
+function stopWetSounds(){for(const sound of wetSounds)sound.pause();wetSounds.clear();wetCooldowns.clear();}
+function playWetSound(kind,x,y){
+ if(kind==='drip'&&(!rag?.voiceLanded||(rag.landingRestTime||0)<.6||(window.bodyCameraParts||[]).some(part=>part.resting===false)))return;
+ if(x<camera||x>camera+W||y<cameraY||y>cameraY+H||(wetCooldowns.get(kind)||0)>0||wetSounds.size>=2)return;
+ const pool=wetSoundClips[kind],choices=pool.length>1?pool.filter(file=>file!==lastWetClip.get(kind)):pool,file=choices[Math.floor(Math.random()*choices.length)],sound=wetAudioBank.get(file);
+ if(wetSounds.has(sound))return;lastWetClip.set(kind,file);wetCooldowns.set(kind,kind==='conveyor'?.35:1.1);
+ sound.pause();sound.currentTime=0;sound.wetVolume=kind==='conveyor'?.16:.12;sound.wetAge=0;sound.volume=sound.wetVolume;
+ wetSounds.add(sound);sound.onended=()=>wetSounds.delete(sound);sound.onerror=sound.onended;sound.play().catch(()=>wetSounds.delete(sound));
+}
+function syncWetSounds(){
+ for(const [kind,time] of wetCooldowns)if(time<=PHYSICS_STEP)wetCooldowns.delete(kind);else wetCooldowns.set(kind,time-PHYSICS_STEP);
+ for(const sound of wetSounds){sound.wetAge+=PHYSICS_STEP;if(sound.wetAge>=1.2){sound.pause();wetSounds.delete(sound);continue;}sound.volume=sound.wetVolume*Math.min(1,(1.2-sound.wetAge)/.1)*(characterVoice&&!characterVoice.paused?.6:activeActionSounds.size?.7:1);}
+}
 const actionAudioBank=new Map(),effectVoiceLimits={landing:2,bone:1};
 for(const [kind,pool] of Object.entries(actionSounds))for(const [file] of pool){const voices=[];for(let i=0;i<(effectVoiceLimits[kind]||3);i++){const sound=new Audio('./'+encodeURIComponent(file));sound.preload='auto';sound.load();voices.push(sound);}actionAudioBank.set(file,voices);}
 const activeActionSounds=new Set(),lastActionClip=new Map(),partLandingCooldowns=new Map();let squishCooldown=0,boneCooldown=0,bodyImpactCooldown=0,impactQuietTime=0,landingBurstCooldown=0;
-function stopActionSounds(){for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();partLandingCooldowns.clear();squishCooldown=boneCooldown=bodyImpactCooldown=impactQuietTime=landingBurstCooldown=0;}
+function stopActionSounds(){stopWetSounds();for(const sound of activeActionSounds)sound.pause();activeActionSounds.clear();partLandingCooldowns.clear();squishCooldown=boneCooldown=bodyImpactCooldown=impactQuietTime=landingBurstCooldown=0;}
 function playActionSound(kind,strength=1){
  if(kind==='bone'&&(boneCooldown>0||Math.random()>.25))return;
  if(kind==='squish'&&squishCooldown>0)return;
@@ -99,7 +115,7 @@ function playBodyImpact(speed=200,part=null,type='machine'){
  if(type==='ground'){
   if(speed<45||(partLandingCooldowns.get(part)||0)>0)return;
   partLandingCooldowns.set(part,.1);if(landingBurstCooldown>0)return;
-  landingBurstCooldown=.04;stopFlightVoiceOnImpact();playActionSound('landing',Math.max(.55,Math.min(1,speed/450)));return;
+  landingBurstCooldown=.04;stopFlightVoiceOnImpact();playActionSound('landing',Math.max(.55,Math.min(1,speed/450)));if(rag?.shredded||speed>300)playActionSound('squish');return;
  }
  if(speed<120||bodyImpactCooldown>0)return;
  bodyImpactCooldown=.7;stopFlightVoiceOnImpact();playActionSound('landing');playActionSound('squish');
@@ -119,7 +135,7 @@ function startFlightSounds(){stopFlightSounds();if(jetpackMounted&&rag?.jetFuel>
 function syncFlightSounds(){
  if(rag?.jetExplosion)rag.jetExplosion.age+=PHYSICS_STEP;
  if(rag?.jetStarted&&!rag.jetExploded&&(rag.jetFuel<=0||rag.shredded||rag.softLanding))terminateJetpack();
- syncMapAmbience();impactQuietTime+=PHYSICS_STEP;landingBurstCooldown=Math.max(0,landingBurstCooldown-PHYSICS_STEP);
+ syncWetSounds();syncMapAmbience();impactQuietTime+=PHYSICS_STEP;landingBurstCooldown=Math.max(0,landingBurstCooldown-PHYSICS_STEP);
  for(const [part,time] of partLandingCooldowns)if(time<=PHYSICS_STEP)partLandingCooldowns.delete(part);else partLandingCooldowns.set(part,time-PHYSICS_STEP);
  if(rag?.landingPending&&rag.landingRestTime>=.6&&impactQuietTime>=.35&&activeActionSounds.size===0&&!characterVoice&&!(window.bodyCameraParts||[]).some(part=>part.resting===false)){rag.landingPending=false;playCharacterVoice('landed');}
  squishCooldown=Math.max(0,squishCooldown-PHYSICS_STEP);boneCooldown=Math.max(0,boneCooldown-PHYSICS_STEP);bodyImpactCooldown=Math.max(0,bodyImpactCooldown-PHYSICS_STEP);
@@ -451,6 +467,7 @@ function stepPersistentDrips(dt){
   const p=bloodSurfacePosition(source.stain);
   source.timer=.65+Math.random()*1.75;
   if(!p||p.y>=groundYAt(p.x)-5||p.x<camera-100||p.x>camera+W+100||bloodDrops.length>=500)continue;
+  playWetSound('drip',p.x,p.y);
   bloodDrops.push({x:p.x+(Math.random()-.5)*3,y:p.y+4,vx:(Math.random()-.5)*5,vy:14+Math.random()*12,
    size:1.3+Math.random()*1.3,angle:Math.PI/2,spin:0,sprite:Math.floor(Math.random()*bloodSprites.length),life:0,
    drip:true,sourceId:source.stain.surface?.id});
@@ -471,6 +488,7 @@ function stepConveyorBlood(dt){
   stain.x+=CONVEYOR_SPEED*dt;const end=belt.x+belt.width/2;
   if(stain.x<end-2)continue;
   // A finite stain leaves the belt once, then its droplets follow normal blood physics.
+  playWetSound('conveyor',end,H*.88-77);
   const count=Math.min(18,Math.max(4,Math.ceil(stain.size*2)));
   for(let j=0;j<count&&bloodDrops.length<500;j++)bloodDrops.push({x:end+3+Math.random()*5,y:H*.88-77-2,vx:CONVEYOR_SPEED*(.3+Math.random()*.5),vy:-20+Math.random()*65,size:1.3+Math.random()*2.5,angle:0,spin:0,sprite:Math.floor(Math.random()*bloodSprites.length),life:0,drip:true,sourceId:belt.id});
   wallStains.splice(i,1);
