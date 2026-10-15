@@ -1030,7 +1030,7 @@ function spaceCourseMachines(hazards){
   }previous=h;
  }
 }
-for(const [level,hazards] of Object.entries(COURSES)){if(level!=='circus'&&level!=='slide')for(const [i,x] of [2450,3950].entries())hazards.push({id:level+'-wall-beam'+i,kind:'beam',x,width:240,wallRise:i?300:390,beamThickness:24,beamVariant:i?'thin':'beam',groundOffset:level==='trampoline'?340:0,attachedWall:true,points:150});spaceCourseMachines(hazards);}
+for(const [level,hazards] of Object.entries(COURSES)){if(level==='trampoline')for(const [i,x] of [2450,3950].entries())hazards.push({id:level+'-wall-beam'+i,kind:'beam',x,width:240,wallRise:i?300:390,beamThickness:24,beamVariant:i?'thin':'beam',groundOffset:level==='trampoline'?340:0,attachedWall:true,points:150});spaceCourseMachines(hazards);}
 const courseEnds=new Map(),courseSections=new Map();
 function ensureCourseCoverage(level,reach){
  const hazards=COURSES[level];let end=courseEnds.get(level)??Math.max(...hazards.map(h=>h.x+h.width/2));
@@ -1051,7 +1051,7 @@ function ensureCourseCoverage(level,reach){
    add('hopper1','grinder',800,220,1800);add('roller4','roller',1160,230,1500);add('belt2','conveyor',1560,360,450);add('hopper2','grinder',1920,230,2000);
    add('press','press',2240,150,1400);add('board','ramp',2570,250,350,{y:150+section%3*25,slope:section%2?.32:-.32});
   }
-  if(level!=='circus'&&level!=='slide'){add('wall-beam1','beam',650,240,150,{attachedWall:true,wallRise:350,beamThickness:24});add('wall-beam2','beam',2140,200,150,{attachedWall:true,wallRise:270,beamThickness:20,beamVariant:'thin'});}
+  if(level==='trampoline'){add('wall-beam1','beam',650,240,150,{attachedWall:true,wallRise:350,beamThickness:24});add('wall-beam2','beam',2140,200,150,{attachedWall:true,wallRise:270,beamThickness:20,beamVariant:'thin'});}
   spaceCourseMachines(hazards);end=Math.max(...hazards.map(h=>h.x+machineFootprint(h)/2));
  }
  courseEnds.set(level,end);cushionLayouts.delete(level);cushionBins.delete(level);cushionBloodBins.delete(level);return true;
