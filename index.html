@@ -676,7 +676,7 @@ function drawBBQConcreteFloor(floor,wallBottom){
  }
 }
 function drawInfernoBackdrop(){
- const floor=H*.88,ceiling=infernoCeiling(),wallHeight=(floor-ceiling)*.32,wallBottom=floor-70,wallTop=wallBottom-wallHeight;
+ const floor=H*.88,ceiling=infernoCeiling(),wallHeight=(floor-ceiling)*.32,wallBottom=floor-70-Math.max(120,H*.20),wallTop=wallBottom-wallHeight;
  // Match Circus/Trampoline: a distant camera-relative panorama behind the
  // world-aligned wall, so rising above the roof reveals its parking-lot foreground.
  ctx.fillStyle='#626d76';ctx.fillRect(0,cameraY,W,H);
