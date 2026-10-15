@@ -946,10 +946,7 @@ function bbqTemplate(source,park=false){
 }
 function bbqEffectTextures(){
  if(bbqFlameTexture)return;
- const flame=document.createElement('canvas');flame.width=64;flame.height=96;const f=flame.getContext('2d');
- const glow=f.createLinearGradient(0,90,0,0);glow.addColorStop(0,'#fff2a0');glow.addColorStop(.30,'#ffc135');glow.addColorStop(.65,'#f5590c');glow.addColorStop(1,'rgba(183,23,0,0)');f.fillStyle=glow;
- f.beginPath();f.moveTo(12,86);f.bezierCurveTo(0,52,32,38,30,5);f.bezierCurveTo(50,27,39,40,52,55);f.bezierCurveTo(66,76,45,96,12,86);f.fill();
- bbqFlameTexture=new THREE.CanvasTexture(flame);bbqFlameTexture.colorSpace=THREE.SRGBColorSpace;
+ const flame=window.launcherFlameCanvas(2);bbqFlameTexture=new THREE.CanvasTexture(flame);bbqFlameTexture.colorSpace=THREE.SRGBColorSpace;
  const smoke=document.createElement('canvas');smoke.width=smoke.height=64;const t=smoke.getContext('2d'),g=t.createRadialGradient(32,32,1,32,32,31);g.addColorStop(0,'rgba(190,187,178,.6)');g.addColorStop(.55,'rgba(154,153,147,.3)');g.addColorStop(1,'rgba(130,130,130,0)');t.fillStyle=g;t.fillRect(0,0,64,64);bbqSmokeTexture=new THREE.CanvasTexture(smoke);
 }
 async function loadBBQScenery(){
@@ -972,36 +969,30 @@ function makeBBQProp(kind,height,yaw,x,z){
  return group;
 }
 function positionBBQScenery(state,w,h){
+ window.bbqTruckBounds=[];
  if(state.level!=='inferno'){for(const setup of bbqSetups.values())setup.visible=false;return;}
  if(!bbqTemplates.size)return;
- const random=n=>{const v=Math.sin(n*12.9898+19.71)*43758.5453;return v-Math.floor(v);},active=new Set(),time=performance.now()/1000;
- const start=Math.max(0,Math.floor((state.camera-700)/1100)-1);
- for(let bin=start;bin<start+Math.ceil(w/1100)+4;bin++){
-  active.add(bin);let setup=bbqSetups.get(bin);
-  if(!setup){
-   setup=new THREE.Group();setup.userData.worldX=850+bin*1100+random(bin+20)*240;
-   const flip=random(bin+33)>.5?1:-1,yaw=(flip<0?Math.PI:0)+(random(bin+45)-.5)*.6;
-   const props=[];
-   const park=bin%2===0,grillKind=park?'park':'grill';
-   props.push(makeBBQProp(grillKind,park?100:76,yaw,0,-175));
-   if(random(bin+16)<.60){props.push(makeBBQProp('truck',135,yaw+flip*.15,-flip*235,-240));props.push(makeBBQProp('table',62,yaw-flip*.3,flip*125,-225));}
-   else if(random(bin+17)<.55)props.push(makeBBQProp('table',62,yaw,flip*115,-225));
-   for(const prop of props)if(prop)setup.add(prop);
-   // A late-loading model can fill an incomplete setup on a later frame.
-   setup.userData.templateCount=bbqTemplates.size;scene.add(setup);bbqSetups.set(bin,setup);
+ const active=new Set(),time=performance.now()/1000;
+ for(const slot of window.launcherBBQLayout?.(state.camera-600,state.camera+w+600)||[]){
+  active.add(slot.id);let prop=bbqSetups.get(slot.id);
+  if(!prop){const kind=slot.kind==='truck'?'truck':slot.kind==='table'?'table':Math.round(slot.x)%2?'park':'grill';prop=makeBBQProp(kind,slot.height,slot.yaw,0,slot.kind==='truck'?35:-100);if(!prop)continue;
+   scene.add(prop);bbqSetups.set(slot.id,prop);
   }
-  if(setup.userData.templateCount!==bbqTemplates.size){for(const prop of setup.children)prop.traverse(o=>{if(o.isSprite)o.material.dispose();});scene.remove(setup);bbqSetups.delete(bin);continue;}
-  setup.visible=true;
-  for(const prop of setup.children){
-   const x=setup.userData.worldX+prop.userData.offsetX,ground=(window.launcherGroundYAt?.(x)??h*.88)-24;
-   prop.position.set(x-state.camera-w/2,h/2-ground+(state.cameraY||0),prop.userData.depth);
-   for(const effect of prop.userData.effects?.children||[]){const i=effect.userData.index;
-    if(effect.userData.flame){const flicker=.75+.25*Math.sin(time*11+bin*2+i*3);effect.scale.set(14*flicker,(21+i*3)*flicker,1);effect.material.opacity=.55+flicker*.3;}
-    else{const age=(time*.24+i/7+bin*.13)%1;effect.position.set(Math.sin(time*.6+bin)*age*20+age*16,10+age*100,i*.5);effect.scale.setScalar(16+age*42);effect.material.opacity=Math.sin(age*Math.PI)*.34;}
-   }
+  prop.visible=true;const floor=window.launcherGroundYAt?.(slot.x)??h*.88;
+  prop.position.set(slot.x-state.camera-w/2,h/2-floor+(state.cameraY||0),prop.userData.depth);
+  prop.updateMatrixWorld(true);
+  // Seat the real mesh bounds on the floor (not a guessed model origin).
+  let bounds=new THREE.Box3().setFromObject(prop.children[0]);if(bounds.max.x-bounds.min.x>slot.width){prop.scale.x*=slot.width/(bounds.max.x-bounds.min.x);prop.updateMatrixWorld(true);bounds=new THREE.Box3().setFromObject(prop.children[0]);}prop.position.y+=h/2-floor+(state.cameraY||0)-bounds.min.y;
+  if(slot.kind==='truck'){
+   prop.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(prop.children[0]);
+   window.bbqTruckBounds.push({id:slot.id,left:box.min.x+state.camera+w/2,right:box.max.x+state.camera+w/2,top:h/2-box.max.y+(state.cameraY||0),bottom:floor});
+  }
+  for(const effect of prop.userData.effects?.children||[]){const i=effect.userData.index;
+   if(effect.userData.flame){const f=.8+.2*Math.sin(time*13+slot.x+i*2);effect.position.set((i-1)*5,7+Math.sin(time*9+i)*2,2);effect.scale.set(13*f,(23+i*2)*f,1);effect.material.opacity=.5+f*.2;effect.material.rotation=Math.sin(time*8+i)*.10;}
+   else{const age=(time*.24+i/7+slot.x*.013)%1;effect.position.set(Math.sin(time*.6+slot.x)*age*14+age*12,10+age*85,i*.5);effect.scale.setScalar(14+age*34);effect.material.opacity=Math.sin(age*Math.PI)*.27;}
   }
  }
- for(const [bin,setup] of bbqSetups)if(!active.has(bin))setup.visible=false;
+ for(const [id,prop] of bbqSetups)if(!active.has(id))prop.visible=false;
 }
 
 const wallDolls=[];
@@ -1857,4 +1848,5 @@ if(renderer){
   loadBBQScenery,loadJetpack,loadRocket,loadTrampolines,loadCarcasses,loadWallDolls,loadSceneryBed,loadBackdropMachines
  ]));
 }
+
 
