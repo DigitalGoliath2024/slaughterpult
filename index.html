@@ -648,8 +648,8 @@ function stepInfernoFire(dt){
  if(infernoFireParticles.length>450)infernoFireParticles.splice(0,infernoFireParticles.length-450);
  window.launcherInfernoBurns=infernoBurns;
 }
-const bbqWallImage=new Image(),bbqSkyImage=new Image();
-bbqWallImage.src='./bbq_wall.png';bbqSkyImage.src='./bbq_sky.png';
+const bbqWallImage=new Image(),bbqSkyImage=new Image(),bbqFloorImage=new Image();
+bbqWallImage.src='./bbq_wall.png';bbqSkyImage.src='./bbq_sky.png';bbqFloorImage.src='./bbq_floor.png';
 const bbqFeatherPanels=new WeakMap();
 function bbqFeatherPanel(image){
  let panel=bbqFeatherPanels.get(image);if(panel)return panel;
@@ -658,35 +658,26 @@ function bbqFeatherPanel(image){
  paint.globalCompositeOperation='destination-in';
  const mask=paint.createLinearGradient(0,0,panel.width*.06,0);mask.addColorStop(0,'rgba(0,0,0,0)');mask.addColorStop(1,'rgba(0,0,0,1)');
  paint.fillStyle=mask;paint.fillRect(0,0,panel.width,panel.height);
+ if(image===bbqFloorImage){const topMask=paint.createLinearGradient(0,0,0,panel.height*.08);topMask.addColorStop(0,'rgba(0,0,0,0)');topMask.addColorStop(1,'rgba(0,0,0,1)');paint.fillStyle=topMask;paint.fillRect(0,0,panel.width,panel.height);}
  bbqFeatherPanels.set(image,panel);return panel;
 }
 function drawBBQRepeatingImage(image,y,height,pan){
  if(!image.complete||!image.naturalWidth||!image.naturalHeight)return;
  const width=height*image.naturalWidth/image.naturalHeight,step=width*.94,start=Math.floor(pan/step)-1;
  const feathered=bbqFeatherPanel(image);
- for(let i=start;i<=Math.ceil((pan+W)/step);i++)ctx.drawImage(i===start?image:feathered,i*step-pan,y,width,height);
+ for(let i=start;i<=Math.ceil((pan+W)/step);i++)ctx.drawImage(i===start&&image!==bbqFloorImage?image:feathered,i*step-pan,y,width,height);
 }
-let bbqConcreteTexture=null;
-function drawBBQConcreteFloor(floor){
- const depth=Math.max(0,cameraY+H-floor);if(!depth)return;
- if(!bbqConcreteTexture){
-  const tile=document.createElement('canvas');tile.width=tile.height=256;
-  const paint=tile.getContext('2d');paint.fillStyle='#77766e';paint.fillRect(0,0,256,256);
-  const random=n=>{const v=Math.sin(n*73.43+19.1)*43758.5453;return v-Math.floor(v);};
-  for(let i=0;i<11000;i++){const light=random(i+31)>.5;paint.fillStyle=light?'rgba(220,216,201,.075)':'rgba(32,33,30,.07)';paint.fillRect(random(i)*256,random(i+9)*256,1+random(i+71)*2,1);}
-  for(let i=0;i<14;i++){const x=random(i+900)*256,y=random(i+1200)*256,r=8+random(i+1400)*23,g=paint.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(42,40,33,.09)');g.addColorStop(1,'rgba(42,40,33,0)');paint.fillStyle=g;paint.fillRect(x-r,y-r,r*2,r*2);}
-  bbqConcreteTexture=ctx.createPattern(tile,'repeat');
+function drawBBQConcreteFloor(floor,wallBottom){
+ const bottom=cameraY+H;if(bottom<=wallBottom-40)return;
+ ctx.fillStyle='#797064';ctx.fillRect(0,wallBottom,W,Math.max(0,bottom-wallBottom));
+ if(bbqFloorImage.complete&&bbqFloorImage.naturalWidth){
+  // Overlap the aisle floor with a soft top fade; keep the new artwork's proportions.
+  const height=Math.max(H*.70,bottom-wallBottom+48),y=wallBottom-height*.08;
+  drawBBQRepeatingImage(bbqFloorImage,y,height,camera*.20);
  }
- ctx.save();const shift=((camera%256)+256)%256;ctx.translate(-shift,floor);
- ctx.fillStyle=bbqConcreteTexture;ctx.fillRect(0,0,W+256,depth);ctx.restore();
- // Fine expansion joints and a softer, darker edge under the warehouse.
- ctx.save();ctx.strokeStyle='rgba(42,43,39,.26)';ctx.lineWidth=1;
- const spacing=310,start=Math.floor(camera/spacing);
- for(let i=start;i<start+Math.ceil(W/spacing)+2;i++){const x=i*spacing-camera;ctx.beginPath();ctx.moveTo(x,floor);ctx.lineTo(x+depth*.18,floor+depth);ctx.stroke();}
- const shade=ctx.createLinearGradient(0,floor,0,floor+Math.max(30,depth));shade.addColorStop(0,'rgba(27,29,26,.28)');shade.addColorStop(.28,'rgba(27,29,26,.04)');shade.addColorStop(1,'rgba(27,29,26,0)');ctx.fillStyle=shade;ctx.fillRect(0,floor,W,depth);ctx.restore();
 }
 function drawInfernoBackdrop(){
- const floor=H*.88,ceiling=infernoCeiling(),wallHeight=(floor-ceiling)*.43,wallTop=floor-wallHeight;
+ const floor=H*.88,ceiling=infernoCeiling(),wallHeight=(floor-ceiling)*.32,wallBottom=floor-70,wallTop=wallBottom-wallHeight;
  // Match Circus/Trampoline: a distant camera-relative panorama behind the
  // world-aligned wall, so rising above the roof reveals its parking-lot foreground.
  ctx.fillStyle='#626d76';ctx.fillRect(0,cameraY,W,H);
@@ -700,7 +691,7 @@ function drawInfernoBackdrop(){
  ctx.fillStyle='#261e19';ctx.fillRect(0,wallTop,W,wallHeight);
  drawBBQRepeatingImage(bbqWallImage,wallTop,wallHeight,camera*.20);
  ctx.restore();
- drawBBQConcreteFloor(floor);
+ drawBBQConcreteFloor(floor,wallBottom);
 }
 function drawInfernoMachines(){
  if(currentLevel!=='inferno')return;
@@ -1268,7 +1259,7 @@ function ensureCourseCoverage(level,reach){
 function bbqTruckSlots(){
  const blocked=COURSES.inferno.map(h=>[h.x-machineFootprint(h)/2-60,h.x+machineFootprint(h)/2+60]).sort((a,b)=>a[0]-b[0]);
  const trucks=[];let cursor=700;
- for(const [a,b] of blocked){if(a-cursor>390){const x=(cursor+a)/2;trucks.push({id:'bbq-truck-'+Math.round(cursor),kind:'truck',x,width:350,height:135,yaw:trucks.length%2?Math.PI:0});}cursor=Math.max(cursor,b);}
+ for(const [a,b] of blocked){if(a-cursor>415){const x=(cursor+a)/2;trucks.push({id:'bbq-truck-'+Math.round(cursor),kind:'truck',x,width:375,height:150,yaw:trucks.length%2?Math.PI:0});}cursor=Math.max(cursor,b);}
  return trucks;
 }
 function bbqGroundLayout(left,right){
