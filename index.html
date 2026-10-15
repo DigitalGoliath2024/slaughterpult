@@ -683,7 +683,13 @@ function drawBBQEquipmentFloor(floor){
  // The playable concrete follows the machines at full world speed.
  if(bbqFloorImage.complete&&bbqFloorImage.naturalWidth){
   drawBBQRepeatingImage(bbqFloorImage,floor,Math.max(H*.55,depth),camera);
-  ctx.fillStyle='rgba(40,36,31,.12)';ctx.fillRect(0,floor,W,depth);
+  // A warm charcoal mask gives the foreground its own worn industrial finish.
+  ctx.fillStyle='rgba(43,32,25,.18)';ctx.fillRect(0,floor,W,depth);
+  const finish=ctx.createLinearGradient(0,floor,0,floor+Math.max(80,H*.16));
+  finish.addColorStop(0,'rgba(27,22,18,.30)');
+  finish.addColorStop(.35,'rgba(58,43,31,.10)');
+  finish.addColorStop(1,'rgba(20,17,15,.22)');
+  ctx.fillStyle=finish;ctx.fillRect(0,floor,W,depth);
  }
  ctx.strokeStyle='rgba(35,32,29,.30)';ctx.lineWidth=1;
  const step=280,start=Math.floor(camera/step)-1;
