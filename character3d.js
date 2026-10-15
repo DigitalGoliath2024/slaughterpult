@@ -507,7 +507,7 @@ function positionLevelMachinery(state,w,h){
   }
   {root.updateMatrixWorld(true);support.updateMatrixWorld(true);const bodyParts=root.children.filter(part=>!part.userData.bloodDecal),parts=bodyParts.map(part=>part.userData.motorAxis?part.children[0]:part).filter(Boolean);const boxes=parts.map(part=>new THREE.Box3().setFromObject(part));const bounds=new THREE.Box3();for(const box of boxes)bounds.union(box);const convert=box=>({left:box.min.x+state.camera+w/2,right:box.max.x+state.camera+w/2,top:h/2-box.max.y+(state.cameraY||0),bottom:h/2-box.min.y+(state.cameraY||0)});const surface=window.machineBloodSurfaces[hazard.id];surface.hitBounds=convert(bounds);surface.hitBoxes=boxes.map(convert);for(const post of support.children)surface.hitBoxes.push(convert(new THREE.Box3().setFromObject(post)));}
  }
- for(const [key,root] of machineryInstances)if(!active.has(key)){root.visible=false;root.userData.support.visible=false;}
+ for(const [key,root] of machineryInstances)if(!active.has(key)){root.visible=false;root.userData.support.visible=false;if(state.level==='inferno'&&key.startsWith('inferno:')){scene.remove(root);scene.remove(root.userData.support);machineryInstances.delete(key);}}
 }
 const trampolineTemplates=[],trampolineInstances=new Map();
 window.trampolineOverlayReady=false;
@@ -771,7 +771,10 @@ function positionCushions(state,w,h){
   const ground=window.launcherGroundYAt?window.launcherGroundYAt(pillow.x):h*.88;
   root.position.set(pillow.x+(pillow.dx||0)-state.camera-w/2,h/2-ground-pillow.depth+(pillow.stack||0)+(state.cameraY||0)+root.userData.halfHeight*squash,pillow.depth?90:36);
  }
- for(const [id,root] of cushionInstances)if(!active.has(id))root.visible=false;
+ for(const [id,root] of cushionInstances)if(!active.has(id)){
+  root.visible=false;
+  if(state.level==='inferno'&&id.startsWith('inferno-')){scene.remove(root);cushionInstances.delete(id);root.traverse(mesh=>{if(mesh.isMesh)for(const material of Array.isArray(mesh.material)?mesh.material:[mesh.material]){if(material.userData.pillowPaint)material.map.dispose();material.dispose();}});}
+ }
  for(const impact of window.pillowBloodImpacts||[]){
   const root=cushionInstances.get(impact.id);if(!root)continue;
   root.updateMatrixWorld(true);
@@ -921,7 +924,7 @@ function positionCarcasses(state,w,h){
 const carcassHookMaterial=new THREE.LineBasicMaterial({color:0x899398});
 
 
-const bbqTemplates=new Map(),bbqSetups=new Map();let bbqFlameTexture=null,bbqSmokeTexture=null;
+const bbqTemplates=new Map(),bbqSetups=new Map(),bbqPropPools=new Map();let bbqFlameTexture=null,bbqSmokeTexture=null;
 function bbqTemplate(source,park=false){
  source.updateWorldMatrix(true,true);const flat=new THREE.Group(),hot=new THREE.Box3();let hasHot=false;
  source.traverse(mesh=>{
@@ -982,24 +985,29 @@ function positionBBQScenery(state,w,h){
  const active=new Set(),time=performance.now()/1000;
  for(const slot of window.launcherBBQLayout?.(state.camera-600,state.camera+w+600)||[]){
   active.add(slot.id);let prop=bbqSetups.get(slot.id);
-  if(!prop){const kind=slot.kind==='truck'?'truck':slot.kind==='table'?'table':Math.round(slot.x)%2?'park':'grill';prop=makeBBQProp(kind,slot.height,slot.yaw,0,slot.kind==='truck'?35:-100);if(!prop)continue;
+  if(!prop){const kind=slot.kind==='truck'?'truck':slot.kind==='table'?'table':Math.round(slot.x)%2?'park':'grill';prop=bbqPropPools.get(kind)?.pop()||makeBBQProp(kind,slot.height,slot.yaw,0,slot.kind==='truck'?35:-100);if(!prop)continue;prop.children[0].rotation.y=slot.yaw;prop.userData.floorBounds=null;if(prop.userData.effects){const fire=bbqTemplates.get(kind).userData.fire.clone().multiplyScalar(slot.height).applyAxisAngle(new THREE.Vector3(0,1,0),slot.yaw);prop.userData.effects.position.copy(fire);}
    scene.add(prop);bbqSetups.set(slot.id,prop);
   }
   prop.visible=true;const floor=window.launcherGroundYAt?.(slot.x)??h*.88;
   prop.position.set(slot.x-state.camera-w/2,h/2-floor+(state.cameraY||0),prop.userData.depth);
-  prop.updateMatrixWorld(true);
-  // Seat the real mesh bounds on the floor (not a guessed model origin).
-  let bounds=new THREE.Box3().setFromObject(prop.children[0]);if(bounds.max.x-bounds.min.x>slot.width){prop.scale.x*=slot.width/(bounds.max.x-bounds.min.x);prop.updateMatrixWorld(true);bounds=new THREE.Box3().setFromObject(prop.children[0]);}prop.position.y+=h/2-floor+(state.cameraY||0)-bounds.min.y;
-  if(slot.kind==='truck'){
-   prop.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(prop.children[0]);
-   window.bbqTruckBounds.push({id:slot.id,left:box.min.x+state.camera+w/2,right:box.max.x+state.camera+w/2,top:h/2-box.max.y+(state.cameraY||0),bottom:floor});
+  if(!prop.userData.floorBounds){
+   // Measure once in local scene coordinates, not by scanning every truck mesh each frame.
+   prop.updateMatrixWorld(true);let box=new THREE.Box3().setFromObject(prop.children[0]);
+   if(box.max.x-box.min.x>slot.width){prop.scale.x*=slot.width/(box.max.x-box.min.x);prop.updateMatrixWorld(true);box=new THREE.Box3().setFromObject(prop.children[0]);}
+   prop.userData.floorBounds={left:box.min.x-prop.position.x,right:box.max.x-prop.position.x,height:box.max.y-box.min.y,offset:prop.position.y-box.min.y};
   }
+  const bounds=prop.userData.floorBounds;prop.position.y+=bounds.offset;
+  if(slot.kind==='truck')window.bbqTruckBounds.push({id:slot.id,left:slot.x+bounds.left,right:slot.x+bounds.right,top:floor-bounds.height,bottom:floor});
   for(const effect of prop.userData.effects?.children||[]){const i=effect.userData.index;
    if(effect.userData.flame){const f=.8+.2*Math.sin(time*13+slot.x+i*2);effect.position.set((i-1)*5,7+Math.sin(time*9+i)*2,2);effect.scale.set(13*f,(23+i*2)*f,1);effect.material.opacity=.5+f*.2;effect.material.rotation=Math.sin(time*8+i)*.10;}
    else{const age=(time*.24+i/7+slot.x*.013)%1;effect.position.set(Math.sin(time*.6+slot.x)*age*14+age*12,10+age*85,i*.5);effect.scale.setScalar(14+age*34);effect.material.opacity=Math.sin(age*Math.PI)*.27;}
   }
  }
- for(const [id,prop] of bbqSetups)if(!active.has(id))prop.visible=false;
+ for(const [id,prop] of bbqSetups)if(!active.has(id)){
+  prop.visible=false;scene.remove(prop);bbqSetups.delete(id);
+  const kind=prop.userData.kind;if(!bbqPropPools.has(kind))bbqPropPools.set(kind,[]);
+  const pool=bbqPropPools.get(kind);if(pool.length<4)pool.push(prop);else prop.traverse(o=>{if(o.isSprite)o.material.dispose();});
+ }
 }
 
 const wallDolls=[];
@@ -1122,7 +1130,7 @@ function positionWeapons(state,w,h){
   if(hazard.kind==='press')root.position.y=h/2-(state.pressBottom+8)+(state.cameraY||0);
   for(const {rotor,shift} of root.userData.rotors)rotor.rotation.z=(state.machineryClock||0)*(shift<0?-2.6:2.6);
  }
- for(const [id,root] of weaponStations)if(!active.has(id))root.visible=false;
+ for(const [id,root] of weaponStations)if(!active.has(id)){root.visible=false;if(state.level==='inferno'){scene.remove(root);weaponStations.delete(id);}}
  // Main grinder weapons are parented directly to the powered drum.
  if(grinderDrum&&!grinderDrum.userData.weaponsMounted){
   grinderDrum.userData.rotatingBlade=true;
@@ -1647,8 +1655,8 @@ function positionIndustrialBeams(state,w,h){
    }root.position.set(x,h/2-floor+(state.cameraY||0),20);root.visible=true;
   }
  }
- for(const [key,root] of industrialBeamInstances)if(!active.has(key))root.visible=false;
- for(const [key,root] of boardBeamSupports)if(!supportActive.has(key))root.visible=false;
+ for(const [key,root] of industrialBeamInstances)if(!active.has(key)){root.visible=false;if(state.level==='inferno'&&key.startsWith('inferno:')){scene.remove(root);industrialBeamInstances.delete(key);}}
+ for(const [key,root] of boardBeamSupports)if(!supportActive.has(key)){root.visible=false;if(state.level==='inferno'&&key.startsWith('inferno:')){scene.remove(root);boardBeamSupports.delete(key);}}
  // Circus has spectators in bleachers, not walls to mount props on.
  const fenceActive=new Set();
  if(state.level==='trampoline'){
@@ -1868,3 +1876,4 @@ if(renderer){
   loadCushions,loadJetpack,loadRocket,loadCrows,loadBackdropMachines
  ])).then(()=>{window.sceneCoreReady=true;prepareCourseAssets(document.getElementById('courseSelect').value);});
 }else window.sceneCoreReady=true;
+
