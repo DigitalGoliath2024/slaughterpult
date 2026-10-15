@@ -1577,7 +1577,7 @@ function positionIndustrialBeams(state,w,h){
   }
  }
  for(const [key,root] of parkFencePosts)if(!fenceActive.has(key))root.visible=false;
- if(state.level==='circus'){for(const root of beamBackdropInstances.values())root.visible=false;return;}
+ if(state.level==='circus'||state.level==='factory'){for(const root of beamBackdropInstances.values())root.visible=false;return;}
  // Decorative panels and railings stay against the wall, below its roofline.
  const start=Math.max(1,Math.floor((state.camera*.7-400)/950)),backActive=new Set();
  for(let i=start;i<start+Math.ceil(w/950)+3;i++){
