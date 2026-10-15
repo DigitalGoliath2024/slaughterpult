@@ -1623,11 +1623,11 @@ const industrialBeamTemplates=new Map(),industrialBeamInstances=new Map(),boardB
 async function loadIndustrialBeams(){
  try{
   const gltf=await new GLTFLoader().loadAsync('./beam_industrial_pack_n1.glb');gltf.scene.updateMatrixWorld(true);
-  const selections={beam:'beam_big_03_',thin:'beam_mid_03_',brace:'beam_pum_03_',rail:'railing_04_',panel:'panel_mas_03_',grid:'grid_broke_01_'};
+  const selections={beam:'beam_big_03_',thin:'beam_mid_03_',brace:'beam_pum_03_',truss:'beam_big_pum_03_',rail:'railing_04_',panel:'panel_mas_03_',grid:'grid_broke_01_'};
   for(const [kind,prefix] of Object.entries(selections)){
    let source;gltf.scene.traverse(o=>{if(o.isMesh&&o.name.startsWith(prefix))source=o;});if(!source)continue;
    const geometry=source.geometry.clone();geometry.applyMatrix4(source.matrixWorld);geometry.computeBoundingBox();let size=geometry.boundingBox.getSize(new THREE.Vector3());
-   if(['beam','thin','brace'].includes(kind)){const axis=size.y>size.x&&size.y>size.z?new THREE.Vector3(0,1,0):size.z>size.x?new THREE.Vector3(0,0,1):new THREE.Vector3(1,0,0);geometry.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(axis,new THREE.Vector3(1,0,0)));geometry.computeBoundingBox();}
+   if(['beam','thin','brace','truss'].includes(kind)){const axis=size.y>size.x&&size.y>size.z?new THREE.Vector3(0,1,0):size.z>size.x?new THREE.Vector3(0,0,1):new THREE.Vector3(1,0,0);geometry.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(axis,new THREE.Vector3(1,0,0)));geometry.computeBoundingBox();}
    const center=geometry.boundingBox.getCenter(new THREE.Vector3());size=geometry.boundingBox.getSize(new THREE.Vector3());geometry.translate(-center.x,-center.y,-center.z);geometry.scale(1/size.x,1/size.y,1/size.z);geometry.userData.sharedAsset=true;
    const mesh=new THREE.Mesh(geometry,source.material);mesh.userData.sourceMesh=source.name;mesh.userData.nativeRatio=size.clone().divideScalar(size.x);industrialBeamTemplates.set(kind,mesh);
   }
@@ -1637,6 +1637,30 @@ async function loadIndustrialBeams(){
 function addIndustrialBeam(parent,x1,y1,x2,y2,width=20,depth=26,z=0,kind='beam'){
  const template=industrialBeamTemplates.get(kind)||industrialBeamTemplates.get('beam');if(!template)return null;
  const root=new THREE.Group(),mesh=template.clone();root.position.set((x1+x2)/2,(y1+y2)/2,z);root.rotation.z=Math.atan2(y2-y1,x2-x1);mesh.scale.set(Math.hypot(x2-x1,y2-y1),width,depth);root.add(mesh);parent.add(root);return root;
+}
+const bbqBurnerSupports=new Map();
+function positionBBQBurnerSupports(state,w,h){
+ const active=new Set();
+ if(state.level==='inferno'&&!bbqFloorOutOfView(state,h)&&industrialBeamTemplates.has('truss')){
+  for(const burner of state.burnerSupports||[]){
+   if(Math.abs(burner.x-state.camera-w/2)>w/2+200)continue;
+   active.add(burner.id);let root=bbqBurnerSupports.get(burner.id);
+   const floor=h*.88,rise=Math.max(40,floor-burner.y-34);
+   if(!root){root=new THREE.Group();scene.add(root);bbqBurnerSupports.set(burner.id,root);}
+   if(root.userData.rise!==rise){
+    root.clear();root.userData.rise=rise;
+    // Twin braced truss uprights meet the underside of the sideways burner.
+    for(const x of [-43,-3]){
+     addIndustrialBeam(root,x,0,x,rise,17,18,-45,'truss');
+     addIndustrialBeam(root,x-13,2,x+13,2,5,26,-45,'beam');
+    }
+    addIndustrialBeam(root,-55,rise,9,rise,8,24,-45,'beam');
+   }
+   root.position.set(burner.x-state.camera-w/2,h/2-floor+(state.cameraY||0),0);root.visible=true;
+   // Decorative only: never register these posts as hazards or collision surfaces.
+  }
+ }
+ for(const [id,root] of bbqBurnerSupports)if(!active.has(id)){scene.remove(root);bbqBurnerSupports.delete(id);}
 }
 function beamRise(hazard,h){return Math.min(hazard.wallRise||340,h*.62);}
 function positionIndustrialBeams(state,w,h){
@@ -1753,6 +1777,7 @@ function animate(){
  positionNailBoards(state,w,h);
  positionLevelMachinery(state,w,h);
  positionIndustrialBeams(state,w,h);
+ positionBBQBurnerSupports(state,w,h);
  positionWeapons(state,w,h);
  positionWallDolls(state,w,h);
  positionCarcasses(state,w,h);
