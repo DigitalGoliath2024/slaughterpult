@@ -207,6 +207,8 @@ function playFlightEffect(file,volume,folder='./audio/effects/'){const sound=new
 function startFlightSounds(){stopFlightSounds();if((jetpackMounted||rocketMounted)&&rag?.jetFuel>0)rag.jetStarted=true;playActionSound('launch');if(connections.some(c=>c.type==='piston'||c.type==='pistonPlus'))playActionSound('ram');flyingSound=playFlightEffect('flying_character_sound.mp3',.5);flyingSound.loop=true;if((jetpackMounted||rocketMounted)&&rag?.jetFuel>0){jetEngineSound=rocketMounted?playFlightEffect('rocket_sound.mp3',.34,'./'):playFlightEffect('freesound_community-jet-engine-6753.mp3',.28);jetEngineSound.loop=rocketMounted;}}
 function syncFlightSounds(){
  if(rag?.jetExplosion)rag.jetExplosion.age+=PHYSICS_STEP;
+ // Fuel burns on the fixed flight clock, independent of the attached limb graph.
+ if(phase==='airborne'&&rag?.jetStarted&&!rag.jetExploded)rag.jetFuel=rag.jetFuel<=PHYSICS_STEP+1e-9?0:rag.jetFuel-PHYSICS_STEP;
  if(rag?.jetStarted&&!rag.jetExploded&&(rag.jetFuel<=0||rag.shredded||rag.softLanding))terminateJetpack();
  syncWetSounds();syncMapAmbience();impactQuietTime+=PHYSICS_STEP;landingBurstCooldown=Math.max(0,landingBurstCooldown-PHYSICS_STEP);
  for(const [part,time] of partLandingCooldowns)if(time<=PHYSICS_STEP)partLandingCooldowns.delete(part);else partLandingCooldowns.set(part,time-PHYSICS_STEP);
@@ -1973,8 +1975,10 @@ function checkWaistBend(){
 function jetpackForce(step){
  if(!(jetpackMounted||rocketMounted)||!rag||rag.shredded||rag.softLanding||rag.jetFuel<=0)return null;
  const hip=rag.nodes.waist||rag.nodes.hip,chest=rag.nodes.chest,dx=chest.x-hip.x,dy=chest.y-hip.y,len=Math.hypot(dx,dy)||1;
- rag.jetFuel=rag.jetFuel<=step+1e-9?0:rag.jetFuel-step;const nodes=new Set(['chest']);for(let i=0;i<rag.links.length;i++)for(const link of rag.links)if(!link.broken){if(nodes.has(link.a))nodes.add(link.b);if(nodes.has(link.b))nodes.add(link.a);}
- return {x:dx/len*(rocketMounted?30000:4200)*LAUNCH_POWER,y:dy/len*(rocketMounted?30000:4200)*LAUNCH_POWER,spin:rocketMounted?.35:.6,nodes};
+ const nodes=new Set(['chest']);for(let i=0;i<rag.links.length;i++)for(const link of rag.links)if(!link.broken){if(nodes.has(link.a))nodes.add(link.b);if(nodes.has(link.b))nodes.add(link.a);}
+ const forward=((chest.x-chest.px)*dx+(chest.y-chest.py)*dy)/(len*step);
+ const power=(rocketMounted?30000*Math.max(0,1-Math.max(0,forward)/3600):4200)*LAUNCH_POWER;
+ return {x:dx/len*power,y:dy/len*power,spin:rocketMounted?.35:.6,nodes};
 }
 function updateRagdoll(dt){
  if(!rag)return;
@@ -2060,6 +2064,11 @@ function updateRagdoll(dt){
     n.y=ground-n.r;n.py=n.y;n.groundedContact=true;groundedThisFrame=true;
    }
   }
+ }
+ // Bound bulk rocket travel without changing relative limb velocities or spin.
+ if(rocketMounted&&!rag.shredded){
+  const nodes=Object.values(rag.nodes),vx=nodes.reduce((sum,n)=>sum+(n.x-n.px)/dt,0)/nodes.length,vy=nodes.reduce((sum,n)=>sum+(n.y-n.py)/dt,0)/nodes.length,speed=Math.hypot(vx,vy);
+  if(speed>4200){const excess=1-4200/speed;for(const n of nodes){n.px+=vx*excess*dt;n.py+=vy*excess*dt;}}
  }
  const hip=rag.nodes.hip;
  dummy.x=hip.x;dummy.y=hip.y;
@@ -2246,6 +2255,7 @@ function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:[...LEVEL_HAZARDS,...alleyBalconies()],machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();drawSplashBlood(dt);requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
 </script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=bbq-no-ceiling-20261015"></script></body></html>
+
 
 
 
