@@ -544,10 +544,10 @@ function infernoStations(left=camera-900,right=camera+W+900){
  for(let i=start;i<=Math.ceil((right-820)/1100);i++){
   const x=820+i*1100;result.push({id:'air:'+i,type:'air',x,width:240});
   result.push({id:'floor:'+i,type:'fire',dir:'up',x:x+330,width:70,reach:560});
-  result.push({id:'ceiling:'+i,type:'fire',dir:'down',x:x+650,width:70,reach:650});
+  result.push({id:'floor-pair:'+i,type:'fire',dir:'up',x:x+650,width:70,reach:650});
   if(i%2)result.push({id:'side:'+i,type:'fire',dir:'right',x:x+890,width:70,reach:380});
  }
- return result;
+ return result.filter(v=>!bbqTruckSlots().some(t=>Math.abs(v.x-t.x)<t.width/2+(v.type==='air'?155:105)));
 }
 function infernoAirAcceleration(x,y,vy){
  const floor=H*.88,height=floor-y;if(height<0||height>680)return 0;
@@ -610,15 +610,16 @@ function infernoFlameTexture(seed=0){
 }
 const infernoFlameTextures=[0,1,2,3].map(infernoFlameTexture);
 const infernoSmokeTexture=(()=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d'),g=x.createRadialGradient(64,64,1,64,64,64);g.addColorStop(0,'rgba(120,127,131,.45)');g.addColorStop(.4,'rgba(66,73,78,.24)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,128,128);return c;})();
-function infernoDrawParticle(p){
+window.launcherFlameCanvas=infernoFlameTexture;
+function infernoDrawParticle(p,paint=ctx){
  const age=1-p.life/p.max,x=p.x-camera,y=p.y;
  const size=p.size*(1+age*(p.smoke?.8:.35));
- ctx.save();ctx.translate(x,y);ctx.rotate((p.rotation||0)+(p.smoke?0:Math.sin(levelClock*7+(p.variant||0))*.12));
- ctx.globalAlpha=Math.max(0,1-age)*(p.smoke?.34:.76);
- ctx.globalCompositeOperation=p.smoke?'source-over':'lighter';
+ paint.save();paint.translate(x,y);paint.rotate((p.rotation||0)+(p.smoke?0:Math.sin(levelClock*7+(p.variant||0))*.12));
+ paint.globalAlpha=Math.max(0,1-age)*(p.smoke?.34:.76);
+ paint.globalCompositeOperation=p.smoke?'source-over':'lighter';
  const image=p.smoke?infernoSmokeTexture:infernoFlameTextures[(p.variant||0)%4];
  const width=size*2,height=p.smoke?width:width*2.4;
- ctx.drawImage(image,-width/2,-height*.88,width,height);ctx.restore();
+ paint.drawImage(image,-width/2,-height*.88,width,height);paint.restore();
 }
 const infernoBurns=new Map(),infernoFireParticles=[];let infernoBurnReset=-1;
 function stepInfernoFire(dt){
@@ -638,7 +639,7 @@ function stepInfernoFire(dt){
    if(!levelFailed&&!rag.resultAwarded&&!hitHazards.has('inferno:fire:'+vent.id)){hitHazards.add('inferno:fire:'+vent.id);hazardPoints+=100;showScorePopup('FIRE',100,part.x,part.y);}break;
   }
   const burn=infernoBurns.get(part.joint);
-  if(burn&&burn.life>0){burn.x=part.x;burn.y=part.y;if(physicsRandom()<dt*42){const smoke=physicsRandom()<.24,life=smoke?.8+physicsRandom()*1.4:.22+physicsRandom()*.38;infernoFireParticles.push({x:part.x+(physicsRandom()-.5)*12,y:part.y,vx:(physicsRandom()-.5)*30,vy:smoke?-24-physicsRandom()*35:-28-physicsRandom()*55,life,max:life,size:8+physicsRandom()*8,smoke,variant:Math.floor(physicsRandom()*4),rotation:(physicsRandom()-.5)*.55});}}
+  if(burn&&burn.life>0){const dx=part.x-burn.x,dy=part.y-burn.y;for(const p of infernoFireParticles)if(p.joint===part.joint&&!p.smoke){p.x+=dx;p.y+=dy;}burn.x=part.x;burn.y=part.y;if(physicsRandom()<dt*42){const smoke=physicsRandom()<.24,life=smoke?.8+physicsRandom()*1.4:.22+physicsRandom()*.38;infernoFireParticles.push({x:part.x+(physicsRandom()-.5)*12,y:part.y,vx:(physicsRandom()-.5)*30,vy:smoke?-24-physicsRandom()*35:-28-physicsRandom()*55,life,max:life,size:8+physicsRandom()*8,joint:part.joint,smoke,variant:Math.floor(physicsRandom()*4),rotation:(physicsRandom()-.5)*.55});}}
  }
  for(const vent of vents){if(!infernoVentOn(vent))continue;const p=infernoVentOrigin(vent);if(physicsRandom()<dt*100){const speed=vent.reach*2,axis=vent.dir==='right'?0:vent.dir==='down'?1:-1;
   infernoFireParticles.push({x:p.x,y:p.y,vx:axis===0?speed:(physicsRandom()-.5)*80,vy:axis===0?(physicsRandom()-.5)*80:speed*axis,life:.5,max:.5,size:14+physicsRandom()*12,variant:Math.floor(physicsRandom()*4),rotation:vent.dir==='down'?Math.PI:vent.dir==='right'?Math.PI/2:0});
@@ -656,15 +657,15 @@ function drawInfernoBackdrop(){
  ctx.fillStyle='rgba(80,17,4,.25)';ctx.fillRect(0,ceiling,W,floor-ceiling);
  ctx.fillStyle='#29201b';ctx.fillRect(0,floor,W,H+Math.max(0,cameraY)-floor);
  ctx.fillStyle='#262b2d';ctx.fillRect(0,ceiling-35,W,40);ctx.strokeStyle='#89908b';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(0,ceiling+5);ctx.lineTo(W,ceiling+5);ctx.stroke();
- for(let i=Math.floor(camera/460)-1;i<(camera+W)/460+1;i++){const x=i*460-camera;ctx.strokeStyle='#575952';ctx.lineWidth=13;ctx.beginPath();ctx.moveTo(x,ceiling+5);ctx.lineTo(x+110,ceiling+100);ctx.stroke();}
+ 
 }
 function drawInfernoMachines(){
  if(currentLevel!=='inferno')return;
  const floor=H*.88;ctx.save();ctx.translate(-camera,0);
  for(const vent of infernoStations()){
   if(vent.type==='air'){
-   const x=vent.x-120;ctx.fillStyle='#34454b';ctx.fillRect(x,floor-18,240,24);ctx.strokeStyle='#8eaaa9';ctx.lineWidth=4;ctx.strokeRect(x,floor-18,240,24);
-   ctx.strokeStyle='#131d20';ctx.lineWidth=5;for(let j=0;j<15;j++){ctx.beginPath();ctx.moveTo(x+10+j*16,floor-15);ctx.lineTo(x+10+j*16,floor+3);ctx.stroke();}
+   const x=vent.x-120;ctx.fillStyle='#34454b';ctx.fillRect(x,floor-10,240,12);ctx.strokeStyle='#8eaaa9';ctx.lineWidth=2;ctx.strokeRect(x,floor-10,240,12);
+   ctx.strokeStyle='#131d20';ctx.lineWidth=5;for(let j=0;j<15;j++){ctx.beginPath();ctx.moveTo(x+10+j*16,floor-6);ctx.lineTo(x+18+j*16,floor-6);ctx.stroke();}
    for(let j=0;j<14;j++){const phase=(levelClock*.65+j*.071)%1,yy=floor-phase*620,xx=vent.x+Math.sin(j*4.3)*85;
     ctx.globalAlpha=(1-phase)*.30;ctx.strokeStyle='#b4e4e9';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(xx,yy);ctx.quadraticCurveTo(xx+Math.sin(levelClock*2+j)*9,yy-22,xx,yy-48);ctx.stroke();}ctx.globalAlpha=1;
   }else{
@@ -685,7 +686,7 @@ function drawInfernoFire(){
   const glow=ctx.createRadialGradient(x,y,0,x,y,42);
   glow.addColorStop(0,'rgba(255,106,25,'+(.14*flicker*Math.min(1,burn.life))+')');glow.addColorStop(1,'rgba(255,70,10,0)');ctx.fillStyle=glow;ctx.fillRect(x-42,y-42,84,84);
  }ctx.restore();
- for(const p of infernoFireParticles)infernoDrawParticle(p);
+ for(const p of infernoFireParticles)if(!p.joint||p.smoke)infernoDrawParticle(p);
 }
 
 function drawSky(){
@@ -1187,7 +1188,7 @@ COURSES.inferno=[
  {id:'inferno-fire-roller',kind:'roller',x:1660,width:240,points:1200,label:'',motorSpeed:4.5},
  {id:'inferno-press1',kind:'press',x:2180,width:150,points:1100,label:''},
  {id:'inferno-hopper1',kind:'grinder',x:2680,width:200,points:1800,label:''},
- {id:'inferno-suspended-roller',kind:'roller',x:3550,width:220,points:1400,label:'',groundOffset:-330,attachedWall:true,motorSpeed:5},
+ {id:'inferno-suspended-roller',kind:'roller',x:3550,width:220,points:1400,label:'',motorSpeed:5},
  {id:'inferno-belt2',kind:'conveyor',x:4120,width:350,points:400,label:''},
  {id:'inferno-press2',kind:'press',x:4550,width:160,points:1300,label:''},
  {id:'inferno-final-roller',kind:'roller',x:5150,width:260,points:1500,label:'',motorSpeed:5},
@@ -1202,7 +1203,7 @@ function ensureCourseCoverage(level,reach){
   const section=(courseSections.get(level)||0)+1;courseSections.set(level,section);const start=end+140,offset=level==='trampoline'?340:0;
   const add=(id,kind,x,width,points,extra={})=>{hazards.push({id:level+'-extension'+section+'-'+id,kind,x:start+x,width,points,label:'',groundOffset:offset,...extra});};
   if(level==='inferno'){
-   add('belt','conveyor',200,320,400);add('fire-roller','roller',650,250,1400,{motorSpeed:5});add('press','press',1150,155,1300);add('suspended-roller','roller',1780,220,1500,{groundOffset:-340,attachedWall:true,motorSpeed:5});add('hopper','grinder',2500,230,2200);
+   add('belt','conveyor',200,320,400);add('fire-roller','roller',650,250,1400,{motorSpeed:5});add('press','press',1150,155,1300);add('suspended-roller','roller',1780,220,1500,{motorSpeed:5});add('hopper','grinder',2800,230,2200);
   }else if(level==='trampoline'||level==='circus'){
    add('belt1','conveyor',180,360,400);add('roller1','roller',452,200,1200,{feedBelt:level+'-extension'+section+'-belt1'});
    add('bounce1','trampoline',790,260,250,{offset:level==='circus'?-25:290,slope:-.08,vx:380,vy:-1500,freeBounce:true,variant:section%3});
@@ -1221,6 +1222,38 @@ function ensureCourseCoverage(level,reach){
  }
  courseEnds.set(level,end);cushionLayouts.delete(level);cushionBins.delete(level);cushionBloodBins.delete(level);return true;
 }
+function bbqTruckSlots(){
+ const blocked=COURSES.inferno.map(h=>[h.x-machineFootprint(h)/2-60,h.x+machineFootprint(h)/2+60]).sort((a,b)=>a[0]-b[0]);
+ const trucks=[];let cursor=700;
+ for(const [a,b] of blocked){if(a-cursor>390){const x=(cursor+a)/2;trucks.push({id:'bbq-truck-'+Math.round(cursor),kind:'truck',x,width:350,height:135,yaw:trucks.length%2?Math.PI:0});}cursor=Math.max(cursor,b);}
+ return trucks;
+}
+function bbqGroundLayout(left,right){
+ const trucks=bbqTruckSlots(),hazards=COURSES.inferno,blocked=[...trucks.map(t=>[t.x-t.width/2-45,t.x+t.width/2+45]),...hazards.map(h=>[h.x-machineFootprint(h)/2-50,h.x+machineFootprint(h)/2+50]),...infernoStations(650,right+1000).map(v=>[v.x-(v.type==='air'?150:100),v.x+(v.type==='air'?150:100)])].sort((a,b)=>a[0]-b[0]);
+ const result=trucks.filter(t=>t.x+t.width/2>=left&&t.x-t.width/2<=right);let cursor=700;
+ for(const [a,b] of blocked){
+  const width=a-cursor;
+  if(width>100&&a>=left&&cursor<=right){
+   const x=width>250?a-60:(cursor+a)/2;
+   result.push({id:'bbq-gap-'+Math.round(cursor),kind:'grill',x,width:85,height:90,yaw:Math.floor(cursor/100)%2?Math.PI:0});
+   if(width>250)result.push({id:'bbq-table-'+Math.round(cursor),kind:'table',x:cursor+65,width:100,height:62,yaw:Math.PI});
+  }cursor=Math.max(cursor,b);if(cursor>right+1000)break;
+ }return result;
+}
+window.launcherBBQLayout=bbqGroundLayout;
+function hitBBQTruck(part,n){
+ if(currentLevel!=='inferno'||!rag||rag.shredded||rag.softLanding)return;
+ for(const truck of window.bbqTruckBounds||[]){
+  // Swept segment against the actual visible truck bounds, expanded by node radius.
+  const box={left:truck.left-n.r,right:truck.right+n.r,top:truck.top-n.r,bottom:truck.bottom+n.r};
+  let lo=0,hi=1;const dx=n.x-n.px,dy=n.y-n.py;
+  for(const [start,d,min,max] of [[n.px,dx,box.left,box.right],[n.py,dy,box.top,box.bottom]]){
+   if(Math.abs(d)<1e-9){if(start<min||start>max){hi=-1;break;}}
+   else{const a=(min-start)/d,b=(max-start)/d;lo=Math.max(lo,Math.min(a,b));hi=Math.min(hi,Math.max(a,b));}
+  }
+  if(lo<=hi&&hi>=0&&lo<=1){const x=n.px+dx*Math.max(0,lo),y=n.py+dy*Math.max(0,lo);playBodyImpact();shredRagdoll(x,y,part);return;}
+ }
+}
 let LEVEL_HAZARDS=COURSES.slide;
 // Keep comfortable piles in the ground gaps between dangerous machines.
 const cushionLayouts=new Map(),cushionBins=new Map(),cushionBloodBins=new Map();window.pillowBloodImpacts=[];
@@ -1228,6 +1261,7 @@ function cushionLayoutFor(level){
  if(cushionLayouts.has(level))return cushionLayouts.get(level);
  const hazards=COURSES[level],end=Math.max(...hazards.map(h=>h.x+h.width/2))+480;
  const blocked=[...hazards.filter(h=>!h.attachedWall&&h.kind!=='soft'),...(level==='inferno'?infernoStations(650,end).filter(v=>v.type==='air'):[])].map(h=>[h.x-h.width/2-24,h.x+h.width/2+24]).sort((a,b)=>a[0]-b[0]);
+ if(level==='inferno'){for(const prop of bbqGroundLayout(650,end))blocked.push([prop.x-prop.width/2-30,prop.x+prop.width/2+30]);blocked.sort((a,b)=>a[0]-b[0]);}
  const zones=[];let cursor=650;
  for(const [left,right] of blocked){if(left-cursor>55)zones.push([cursor,left]);cursor=Math.max(cursor,right);}
  if(end-cursor>55)zones.push([cursor,end]);
@@ -1903,7 +1937,7 @@ function updateRagdoll(dt){
    n.x+=vx;n.y+=vy+650*h*h*(hanging?3:1)*(currentLevel==='trampoline'?1:part==='lh'||part==='rh'?1.55:part==='le'||part==='re'?1.2:1);
    if(currentLevel==='inferno')applyInfernoAir(n,h);
    const pinsBefore=Object.keys(rag.pinned).length;
-   hazardHit(n.x,n.y,part);
+   hitBBQTruck(part,n);hazardHit(n.x,n.y,part);
    bounceBodyOffMachine(part,n);
    if(Object.keys(rag.pinned).length>pinsBefore){checkImpactForce(part,incomingSpeed,n.x,n.y,'nail');}
    if(n.y+n.r>floor){
@@ -2126,7 +2160,14 @@ function drawJetpackExplosion(){
 }
 function drawLauncherOverlay(){
  if(!launcherOverlayCtx)return;if(launcherOverlay.width!==canvas.width||launcherOverlay.height!==canvas.height){launcherOverlay.width=canvas.width;launcherOverlay.height=canvas.height;}
- const overlay=launcherOverlayCtx;overlay.setTransform(DPR,0,0,DPR,0,0);overlay.clearRect(0,0,W,H);drawScorePopups(overlay);if(camera>=750)return;overlay.save();overlay.translate(-camera,-cameraY);
+ const overlay=launcherOverlayCtx;overlay.setTransform(DPR,0,0,DPR,0,0);overlay.clearRect(0,0,W,H);
+ if(currentLevel==='inferno'){overlay.save();overlay.translate(0,-cameraY);
+  const positions=new Map((window.bodyCameraParts||[]).map(p=>[p.joint,p]));
+  for(const [joint,burn] of infernoBurns)if(burn.life>0){const anchor=positions.get(joint)||rag?.nodes[joint]||burn;
+   for(let i=0;i<2;i++)infernoDrawParticle({x:anchor.x+(i-.5)*7,y:anchor.y+5,life:Math.min(1,burn.life),max:1,size:12+Math.sin(levelClock*19+i*3)*2,variant:(Math.floor(levelClock*10)+i)%4,rotation:Math.sin(levelClock*11+i)*.16},overlay);
+  }
+  for(const p of infernoFireParticles)if(p.joint&&!p.smoke)infernoDrawParticle(p,overlay);overlay.restore();
+ }drawScorePopups(overlay);if(camera>=750)return;overlay.save();overlay.translate(-camera,-cameraY);
  for(const [index,c] of connections.entries()){
   const f=framePoint(c.f),a=armPoint(c.a);if(index===hoveredAttachment||index===selectedAttachment){overlay.strokeStyle='#ffe2ab';overlay.lineWidth=25;overlay.lineCap='round';overlay.globalAlpha=.25;overlay.beginPath();overlay.moveTo(f.x,f.y);overlay.lineTo(a.x,a.y);overlay.stroke();overlay.globalAlpha=1;}
   spring(f,a,c.type,overlay);if(c.type==='weight'){overlay.fillStyle='#78868f';overlay.fillRect(a.x-17,a.y+5,34,34);overlay.strokeStyle='#ccd4d8';overlay.lineWidth=2;overlay.strokeRect(a.x-17,a.y+5,34,34);}
@@ -2141,7 +2182,8 @@ function render(){if(currentLevel!=='circus')syncTrampolineSkyVideo();drawFlipCa
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller'||s.surface?.kind==='beam')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:[...LEVEL_HAZARDS,...alleyBalconies()],machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();drawSplashBlood(dt);requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=bbq-cleanup-20261015"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=bbq-grounded-20261015"></script></body></html>
+
 
 
 
