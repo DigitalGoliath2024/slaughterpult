@@ -589,7 +589,7 @@ function infernoStations(left=camera-900,right=camera+W+900){
   result.push({id:'floor-pair:'+i,type:'fire',dir:'up',x:x+650,width:70,reach:650});
   if(i%2)result.push({id:'side:'+i,type:'fire',dir:'right',x:x+890,width:70,reach:380});
  }
- return result.filter(v=>!bbqTruckSlots().some(t=>Math.abs(v.x-t.x)<t.width/2+(v.type==='air'?155:105)));
+ const trucks=bbqTruckSlots();return result.filter(v=>!trucks.some(t=>Math.abs(v.x-t.x)<t.width/2+(v.type==='air'?155:105)));
 }
 function infernoAirAcceleration(x,y,vy){
  const floor=H*.88,height=floor-y;if(height<0||height>680)return 0;
@@ -1308,7 +1308,7 @@ function ensureCourseCoverage(level,reach){
   const section=(courseSections.get(level)||0)+1;courseSections.set(level,section);const start=end+140,offset=level==='trampoline'?340:0;
   const add=(id,kind,x,width,points,extra={})=>{hazards.push({id:level+'-extension'+section+'-'+id,kind,x:start+x,width,points,label:'',groundOffset:offset,...extra});};
   if(level==='inferno'){
-   add('belt','conveyor',200,320,400);add('fire-roller','roller',650,250,1400,{motorSpeed:5});add('press','press',1150,155,1300);add('suspended-roller','roller',1780,220,1500,{motorSpeed:5});add('hopper','grinder',2800,230,2200);
+   add('belt','conveyor',200,320,400);add('fire-roller','roller',650,250,1400,{motorSpeed:5});add('press','press',1150,155,1300);add('suspended-roller','roller',2250,220,1500,{motorSpeed:5});add('hopper','grinder',3500,230,2200);
   }else if(level==='trampoline'||level==='circus'){
    add('belt1','conveyor',180,360,400);add('roller1','roller',452,200,1200,{feedBelt:level+'-extension'+section+'-belt1'});
    add('bounce1','trampoline',790,260,250,{offset:level==='circus'?-25:290,slope:-.08,vx:380,vy:-1500,freeBounce:true,variant:section%3});
@@ -1327,11 +1327,13 @@ function ensureCourseCoverage(level,reach){
  }
  courseEnds.set(level,end);cushionLayouts.delete(level);cushionBins.delete(level);cushionBloodBins.delete(level);return true;
 }
+let bbqTruckSlotCache=null,bbqTruckSlotKey='';
 function bbqTruckSlots(){
+ const key=COURSES.inferno.length+':'+COURSES.inferno.at(-1).x;if(key===bbqTruckSlotKey)return bbqTruckSlotCache;
  const blocked=COURSES.inferno.map(h=>[h.x-machineFootprint(h)/2-60,h.x+machineFootprint(h)/2+60]).sort((a,b)=>a[0]-b[0]);
  const trucks=[];let cursor=700;
  for(const [a,b] of blocked){if(a-cursor>440){const x=(cursor+a)/2;trucks.push({id:'bbq-truck-'+Math.round(cursor),kind:'truck',x,width:431.25,height:172.5,yaw:trucks.length%2?Math.PI:0});}cursor=Math.max(cursor,b);}
- return trucks;
+ bbqTruckSlotKey=key;bbqTruckSlotCache=trucks;return trucks;
 }
 function bbqGroundLayout(left,right){
  const trucks=bbqTruckSlots(),hazards=COURSES.inferno,blocked=[...trucks.map(t=>[t.x-t.width/2-45,t.x+t.width/2+45]),...hazards.map(h=>[h.x-machineFootprint(h)/2-50,h.x+machineFootprint(h)/2+50]),...infernoStations(650,right+1000).map(v=>[v.x-(v.type==='air'?150:100),v.x+(v.type==='air'?150:100)])].sort((a,b)=>a[0]-b[0]);
@@ -1348,7 +1350,10 @@ function bbqGroundLayout(left,right){
 window.launcherBBQLayout=bbqGroundLayout;
 function hitBBQTruck(part,n){
  if(currentLevel!=='inferno'||!rag||rag.shredded||rag.softLanding)return;
- for(const truck of window.bbqTruckBounds||[]){
+ const rendered=new Map((window.bbqTruckBounds||[]).map(t=>[t.id,t]));
+ for(const slot of bbqTruckSlots()){
+  if(slot.x+slot.width/2<Math.min(n.px,n.x)-n.r||slot.x-slot.width/2>Math.max(n.px,n.x)+n.r)continue;
+  const floor=groundYAt(slot.x),truck=rendered.get(slot.id)||{left:slot.x-slot.width/2,right:slot.x+slot.width/2,top:floor-slot.height,bottom:floor};
   // Swept segment against the actual visible truck bounds, expanded by node radius.
   const box={left:truck.left-n.r,right:truck.right+n.r,top:truck.top-n.r,bottom:truck.bottom+n.r};
   let lo=0,hi=1;const dx=n.x-n.px,dy=n.y-n.py;
@@ -2043,7 +2048,7 @@ function updateRagdoll(dt){
    const wasGrounded=!!n.groundedContact;if(n.y+n.r<floor-6)n.groundedContact=false;
    const pin=rag.pinned[part];if(pin){n.x=pin.x;n.y=pin.y;n.px=n.x;n.py=n.y;continue;}
    const grounded=rag.groundTime>0;
-   const drag=hanging?(grounded?.94:.965):(grounded?.982:currentLevel==='trampoline'?.99995:.999);
+   const baseDrag=hanging?(grounded?.94:.965):(grounded?.982:currentLevel==='trampoline'?.99995:.999),drag=Math.pow(baseDrag,h/BASE_PHYSICS_STEP);
    const vx=(n.x-n.px)*drag,vy=(n.y-n.py)*drag;
    const incomingSpeed=Math.hypot(vx,vy)/Math.max(h,.00001);n.stepImpactSpeed=incomingSpeed;
    n.px=n.x;n.py=n.y;
@@ -2191,18 +2196,31 @@ function followBodyCamera(target,dt){
 // 650 pixels/s² represents Earth gravity (32.174 feet/s²).
 const FEET_PER_PIXEL=32.174/650;
 const LAUNCH_POWER=.75;
-const PHYSICS_STEP=1/120;let physicsAccumulator=0,physicsSeed=1;
+const BASE_PHYSICS_STEP=1/120;let PHYSICS_STEP=BASE_PHYSICS_STEP,physicsAccumulator=0,physicsSeed=1;
 function physicsRandom(){physicsSeed=(Math.imul(1664525,physicsSeed)+1013904223)>>>0;return physicsSeed/4294967296;}
 function bodyDistanceX(body){
  const masses={head:3,neck:1,chest:8,waist:5,hip:6,ls:1,rs:1,le:1,re:1,lh:.5,rh:.5,lk:2,rk:2,lf:1,rf:1};let total=0,x=0;
  for(const [id,n] of Object.entries(body.nodes)){const mass=masses[id]||1;x+=n.x*mass;total+=mass;}return x/total;
 }
+function setPhysicsStep(step){
+ if(rag&&step!==PHYSICS_STEP){const ratio=step/PHYSICS_STEP;for(const n of Object.values(rag.nodes)){n.px=n.x-(n.x-n.px)*ratio;n.py=n.y-(n.y-n.py)*ratio;}}
+ PHYSICS_STEP=step;
+}
 function simulate(dt){
  physicsAccumulator+=Math.min(.25,Math.max(0,dt));
- while(physicsAccumulator+1e-10>=PHYSICS_STEP){
-  if(phase==='launching'||phase==='airborne')frameTime+=PHYSICS_STEP;else frameTime=0;
-  simulateStep(PHYSICS_STEP);syncFlightSounds();stepApparatusEffects(PHYSICS_STEP,levelClock*1000);stepInfernoFire(PHYSICS_STEP);
-  physicsAccumulator=Math.max(0,physicsAccumulator-PHYSICS_STEP);
+ while(physicsAccumulator+1e-10>=BASE_PHYSICS_STEP){
+  let slices=1;
+  if(currentLevel==='inferno'&&rag&&phase==='airborne'&&!rag.shredded&&!rag.softLanding){
+   const travel=Math.max(...Object.values(rag.nodes).map(n=>Math.hypot(n.x-n.px,n.y-n.py)));
+   slices=Math.min(32,Math.max(1,Math.ceil(travel/6)));
+  }
+  const step=BASE_PHYSICS_STEP/slices;setPhysicsStep(step);
+  for(let i=0;i<slices;i++){
+   if(phase==='launching'||phase==='airborne')frameTime+=step;else frameTime=0;
+   simulateStep(step);syncFlightSounds();stepApparatusEffects(step,levelClock*1000);stepInfernoFire(step);
+  }
+  setPhysicsStep(BASE_PHYSICS_STEP);
+  physicsAccumulator=Math.max(0,physicsAccumulator-BASE_PHYSICS_STEP);
  }
 }
 function simulateStep(dt){
@@ -2299,7 +2317,8 @@ function render(){if(currentLevel!=='circus')syncTrampolineSkyVideo();drawFlipCa
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller'||s.surface?.kind==='beam')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:[...LEVEL_HAZARDS,...alleyBalconies()],machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();drawSplashBlood(dt);requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=bbq-no-ceiling-20261015"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=bbq-speed-20261015"></script></body></html>
+
 
 
 
