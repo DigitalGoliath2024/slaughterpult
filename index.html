@@ -677,7 +677,7 @@ const bloodSprites=Array.from({length:5},(_,variant)=>{
   t.beginPath();t.arc(Math.cos(a)*dist,Math.sin(a)*dist,1.3+(k%3),0,Math.PI*2);t.fill();}
  return tile;
 });
-const splashBloodCanvas=$('splashTitleBlood'),splashBloodCtx=splashBloodCanvas.getContext('2d');let splashBloodParticles=[],splashBloodAnchors=[],splashBloodKey='',splashBloodTimer=.15,splashBloodAnchorIndex=0;
+const splashBloodCanvas=$('splashTitleBlood'),splashBloodCtx=splashBloodCanvas.getContext('2d');let splashBloodParticles=[],splashBloodAnchors=[],splashBloodKey='',splashBloodTimer=.15;
 function drawSplashBlood(dt){
  if(!$('introDialog').open||document.hidden){splashBloodParticles=[];splashBloodTimer=.10;return;}
  const title=$('introTitle'),rect=title.getBoundingClientRect(),records=document.querySelector('.splashRecords').getBoundingClientRect(),width=rect.width,height=rect.height;if(!width||!height)return;
@@ -701,7 +701,7 @@ function drawSplashBlood(dt){
  if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;
  dt=Math.min(dt,.05);splashBloodTimer-=dt;
  if(splashBloodTimer<=0&&splashBloodAnchors.length){
-  const anchor=splashBloodAnchors[splashBloodAnchorIndex++%splashBloodAnchors.length];
+  const anchor=splashBloodAnchors[Math.floor(Math.random()*splashBloodAnchors.length)];
   splashBloodParticles.push({...anchor,startY:anchor.y,age:0,vy:0,vx:(Math.random()-.5)*4,size:2.5+Math.random()*3,sprite:Math.floor(Math.random()*bloodSprites.length),ooze:false,oozeAge:0,reach:anchor.long?Math.max(100,records.bottom-records.top-8):35+Math.random()*60});
   splashBloodTimer=.07+Math.random()*.09;
  }
