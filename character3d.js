@@ -1339,14 +1339,19 @@ function positionGore(state,w,h){
    else if(u.joint!=='rh')p.rotation.z+=u.spin*dt*30;
    if(u.worldX>end){u.conveyorId=null;u.visualGrounded=false;u.bounces=0;belt=null;}
   }
+  if(state.level==='inferno'&&!belt){
+   const lift=window.launcherInfernoAir?.(u.worldX,u.worldY,u.vy)||0;
+   if(lift>800){u.resting=false;u.visualGrounded=false;u.freeTravel=true;}
+  }
   if(!belt&&!u.resting){
    const oldX=u.worldX,oldY=u.worldY;
-   u.vy+=780*dt;
+   u.vy+=(780-(state.level==='inferno'?(window.launcherInfernoAir?.(u.worldX,u.worldY,u.vy)||0):0))*dt;
    u.vx*=Math.exp(-.34*dt);
    u.worldX+=u.vx*dt;
    // Keep debris within a plausible vicinity of the impact site.
    if(!u.freeTravel)u.worldX=THREE.MathUtils.clamp(u.worldX,u.originX-165,u.originX+165);
    u.worldY+=u.vy*dt;
+   if(state.level==='inferno'){const ceiling=(window.launcherInfernoCeiling?.()??-600)+30+contactExtent;if(u.worldY<ceiling){u.worldY=ceiling;u.vy=Math.abs(u.vy)*.25;}}
    if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
    window.launcherDebrisTravel?.(u.joint,oldX,oldY,u.worldX,u.worldY,Math.max(contactExtent,u.halfWidth||u.radius||8));
