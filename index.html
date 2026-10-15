@@ -160,10 +160,10 @@ function startMapAmbience(){
  }
  if(ambienceSound.paused&&!document.hidden)ambienceSound.play().catch(()=>{});
 }
-const bbqAnnouncementBank=new Map();let bbqAnnouncementSound=null,bbqAnnouncementLast=-1,bbqAnnouncementNext=0,bbqMusicGain=1,bbqMixLast=0;
+const bbqAnnouncementBank=new Map();let bbqAnnouncementSound=null,bbqAnnouncementLast=0,bbqAnnouncementNext=0,bbqMusicGain=1,bbqMixLast=0;
 function prepareBBQAnnouncements(){
  if(bbqAnnouncementBank.size)return;
- for(let i=1;i<=4;i++){const sound=new Audio('./bbq_worker_'+i+'.mp3');sound.preload='metadata';bbqAnnouncementBank.set(i,sound);}
+ for(let i=1;i<=6;i++){const sound=new Audio('./bbq_worker_'+i+'.mp3');sound.preload='metadata';bbqAnnouncementBank.set(i,sound);}
 }
 function stopBBQAnnouncement(){
  if(bbqAnnouncementSound){bbqAnnouncementSound.pause();bbqAnnouncementSound.currentTime=0;bbqAnnouncementSound=null;}
@@ -183,7 +183,7 @@ function syncBBQAnnouncements(now){
  if(!bbqAnnouncementNext){bbqAnnouncementNext=now+8000+Math.random()*6000;return;}
  if(now<bbqAnnouncementNext)return;
  if(characterSpeaking){bbqAnnouncementNext=now+2000;return;}
- const choices=[1,2,3,4].filter(i=>i!==bbqAnnouncementLast),index=choices[Math.floor(Math.random()*choices.length)];
+ const index=bbqAnnouncementLast%6+1;
  const sound=bbqAnnouncementBank.get(index);bbqAnnouncementLast=index;bbqAnnouncementSound=sound;sound.currentTime=0;mixVolume(sound,0,'voices');
  const finish=()=>{if(bbqAnnouncementSound!==sound)return;bbqAnnouncementSound=null;bbqAnnouncementNext=performance.now()+20000+Math.random()*20000;};
  sound.onended=finish;sound.onerror=finish;sound.play().catch(finish);
