@@ -1443,6 +1443,7 @@ function exciteCushions(x,speed=200,direction=0){
 window.launcherCushionImpact=exciteCushions;
 function stepCushions(dt){
  for(const pillow of cushionLayoutFor(currentLevel)){
+  if(!pillow.compression&&!pillow.compressionV&&!pillow.slideV&&!(rag?.softLanding&&Math.abs(pillow.x-rag.softLandingX)<85))continue;
   const target=rag?.softLanding&&Math.abs(pillow.x+(pillow.dx||0)-rag.softLandingX)<65?.13:0;
   pillow.compressionV+=((target-pillow.compression)*36-pillow.compressionV*9)*dt;
   pillow.compression=Math.max(0,Math.min(.42,pillow.compression+pillow.compressionV*dt));
@@ -2056,6 +2057,16 @@ function checkBBQRocketGroundImpact(part,node,speed){
  return true;
 }
 function updateRagdoll(dt){
+ let slices=1;
+ if(currentLevel==='inferno'&&rag&&!rag.shredded&&!rag.softLanding){
+  const travel=Math.max(...Object.values(rag.nodes).map(n=>Math.hypot(n.x-n.px,n.y-n.py)));
+  slices=Math.min(16,Math.max(1,Math.ceil(travel/6)));
+ }
+ const previous=PHYSICS_STEP;setPhysicsStep(dt/slices);
+ for(let i=0;i<slices;i++)updateRagdollStep(dt/slices);
+ setPhysicsStep(previous);
+}
+function updateRagdollStep(dt){
  if(!rag)return;
  const floor=H*.88;
  rag.impactCooldown=Math.max(0,rag.impactCooldown-dt);
@@ -2232,17 +2243,9 @@ function setPhysicsStep(step){
 function simulate(dt){
  physicsAccumulator+=Math.min(.25,Math.max(0,dt));
  while(physicsAccumulator+1e-10>=BASE_PHYSICS_STEP){
-  let slices=1;
-  if(currentLevel==='inferno'&&rag&&phase==='airborne'&&!rag.shredded&&!rag.softLanding){
-   const travel=Math.max(...Object.values(rag.nodes).map(n=>Math.hypot(n.x-n.px,n.y-n.py)));
-   slices=Math.min(32,Math.max(1,Math.ceil(travel/6)));
-  }
-  const step=BASE_PHYSICS_STEP/slices;setPhysicsStep(step);
-  for(let i=0;i<slices;i++){
-   if(phase==='launching'||phase==='airborne')frameTime+=step;else frameTime=0;
-   simulateStep(step);syncFlightSounds();stepApparatusEffects(step,levelClock*1000);stepInfernoFire(step);
-  }
-  setPhysicsStep(BASE_PHYSICS_STEP);
+  if(phase==='launching'||phase==='airborne')frameTime+=BASE_PHYSICS_STEP;else frameTime=0;
+  // Course generation, camera, scoring, audio and particles run once per base tick.
+  simulateStep(BASE_PHYSICS_STEP);syncFlightSounds();stepApparatusEffects(BASE_PHYSICS_STEP,levelClock*1000);stepInfernoFire(BASE_PHYSICS_STEP);
   physicsAccumulator=Math.max(0,physicsAccumulator-BASE_PHYSICS_STEP);
  }
 }
@@ -2338,9 +2341,10 @@ function drawLauncherOverlay(){
 
 function render(){if(currentLevel!=='circus')syncTrampolineSkyVideo();drawFlipCallout();ctx.clearRect(0,0,W,H);ctx.fillStyle='#11151b';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(0,-cameraY);drawSky();drawCushionFallback();drawContactShadows();drawHazards();drawInfernoMachines();drawApparatusEffects();drawInfernoFire();drawGore();if(camera<750)catapult();if(dummy){drawRag()}drawJetpackFallback();drawJetpackExplosion();if(phase==='build'||phase==='charged'||phase==='done'){ctx.save();ctx.translate(-camera,0);for(let i=0;i<frameOffsets.length;i++){const p=framePoint(i);ctx.fillStyle=pending?.kind==='frame'&&pending.index===i?'#fff':'#37decc';ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);ctx.fill();ctx.fillStyle='#0c2636';ctx.font='bold 9px system-ui';ctx.fillText('F'+(i+1),p.x+9,p.y-7)}for(let i=0;i<armOffsets.length;i++){const p=armPoint(i);ctx.fillStyle=pending?.kind==='arm'&&pending.index===i?'#fff':'#ffc049';ctx.beginPath();ctx.arc(p.x,p.y,6,0,2*Math.PI);ctx.fill();ctx.fillStyle='#342716';ctx.font='bold 9px system-ui';ctx.fillText('A'+(i+1),p.x+9,p.y-7)}ctx.restore()}ctx.restore()}
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller'||s.surface?.kind==='beam')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
-function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;updateIntroLoader(now);simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:[...LEVEL_HAZARDS,...alleyBalconies()],machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();drawSplashBlood(dt);requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
+function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;updateIntroLoader(now);simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:levelClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:[...LEVEL_HAZARDS,...alleyBalconies()],machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel).filter(p=>Math.abs(p.x-camera-W/2)<W/2+240),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();drawSplashBlood(dt);requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=loading-gate-20261015"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=bbq-stream-20261015"></script></body></html>
+
 
 
 
