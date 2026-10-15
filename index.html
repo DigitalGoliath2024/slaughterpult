@@ -675,6 +675,29 @@ function drawBBQConcreteFloor(floor,wallBottom){
   drawBBQRepeatingImage(bbqFloorImage,y,height,camera*.20);
  }
 }
+function drawBBQEquipmentFloor(floor){
+ const bottom=cameraY+H,depth=bottom-floor;if(depth<=0)return;
+ ctx.save();ctx.beginPath();ctx.rect(0,floor,W,depth);ctx.clip();
+ const shade=ctx.createLinearGradient(0,floor,0,floor+Math.max(H*.12,60));shade.addColorStop(0,'#5b5750');shade.addColorStop(1,'#82796b');
+ ctx.fillStyle=shade;ctx.fillRect(0,floor,W,depth);
+ // The playable concrete follows the machines at full world speed.
+ if(bbqFloorImage.complete&&bbqFloorImage.naturalWidth){
+  drawBBQRepeatingImage(bbqFloorImage,floor,Math.max(H*.55,depth),camera);
+  ctx.fillStyle='rgba(40,36,31,.12)';ctx.fillRect(0,floor,W,depth);
+ }
+ ctx.strokeStyle='rgba(35,32,29,.30)';ctx.lineWidth=1;
+ const step=280,start=Math.floor(camera/step)-1;
+ for(let i=start;i<start+Math.ceil(W/step)+3;i++){const x=i*step-camera;ctx.beginPath();ctx.moveTo(x,floor);ctx.lineTo(x+depth*.2,bottom);ctx.stroke();}
+ const lip=ctx.createLinearGradient(0,floor,0,floor+10);lip.addColorStop(0,'rgba(20,18,15,.42)');lip.addColorStop(1,'rgba(20,18,15,0)');ctx.fillStyle=lip;ctx.fillRect(0,floor,W,10);
+ ctx.restore();
+ // A subtle edge and footprints make the real support plane readable.
+ ctx.save();ctx.strokeStyle='rgba(170,156,135,.45)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,floor-.5);ctx.lineTo(W,floor-.5);ctx.stroke();
+ const footprints=[...LEVEL_HAZARDS.filter(h=>!h.attachedWall).map(h=>({x:h.x,width:machineFootprint(h)})),...bbqGroundLayout(camera-500,camera+W+500)];
+ for(const prop of footprints){const x=prop.x-camera;if(x<-prop.width||x>W+prop.width)continue;
+  const radius=prop.width*.55;ctx.save();ctx.translate(x,floor+2);ctx.scale(1,.07);
+  const shadow=ctx.createRadialGradient(0,0,0,0,0,radius);shadow.addColorStop(0,'rgba(19,16,13,.34)');shadow.addColorStop(1,'rgba(19,16,13,0)');ctx.fillStyle=shadow;ctx.fillRect(-radius,-radius,radius*2,radius*2);ctx.restore();
+ }ctx.restore();
+}
 function drawInfernoBackdrop(){
  const floor=H*.88,ceiling=infernoCeiling(),wallHeight=(floor-ceiling)*.32,wallBottom=floor-70-Math.max(120,H*.20),wallTop=wallBottom-wallHeight;
  // Match Circus/Trampoline: a distant camera-relative panorama behind the
@@ -691,6 +714,7 @@ function drawInfernoBackdrop(){
  drawBBQRepeatingImage(bbqWallImage,wallTop,wallHeight,camera*.20);
  ctx.restore();
  drawBBQConcreteFloor(floor,wallBottom);
+ drawBBQEquipmentFloor(floor);
 }
 function drawInfernoMachines(){
  if(currentLevel!=='inferno')return;
@@ -812,7 +836,7 @@ function drawFactoryFloor(floor){
  ctx.fillStyle=edge;ctx.fillRect(0,floor,W,13);ctx.restore();
 }
 function drawContactShadows(){
- if(currentLevel!=='factory'||!rag)return;
+ if(!['factory','inferno'].includes(currentLevel)||!rag)return;
  const floor=H*.88;
  const parts=window.bodyCameraParts||[];
  ctx.save();ctx.translate(-camera,0);ctx.fillStyle='rgba(0,0,0,.28)';
