@@ -143,7 +143,7 @@ for(const key of Object.keys(soundDefaults)){if(key==='muted')continue;$('sound-
 $('soundMute').onchange=()=>{soundSettings.muted=$('soundMute').checked;applySoundSettings();};$('restoreSound').onclick=()=>{Object.assign(soundSettings,soundDefaults);syncSoundControls();applySoundSettings();};
 let characterVoice=null,pendingCharacterVoice=null,voiceGeneration=0;const lastVoiceClip=new Map();
 let flyingSound=null,jetEngineSound=null;
-const mapAmbience={inferno:['background_factory.mp3',.18],slide:['background_horror_ally.mp3',.11],factory:['background_factory.mp3',.18],trampoline:['background_trampoline.mp3',.22],circus:['background_trampoline.mp3',.16]};
+const mapAmbience={inferno:['freesound_community-shopping-centre-24655.mp3',.18],slide:['background_horror_ally.mp3',.11],factory:['background_factory.mp3',.18],trampoline:['background_trampoline.mp3',.22],circus:['background_trampoline.mp3',.16]};
 let menuAmbience=null,menuAudioActive=false,ageAccepted=false;
 function startMenuAmbience(){
  if(!ageAccepted)return;menuAudioActive=true;if(ambienceSound)ambienceSound.pause();
@@ -160,8 +160,42 @@ function startMapAmbience(){
  }
  if(ambienceSound.paused&&!document.hidden)ambienceSound.play().catch(()=>{});
 }
-function syncMapAmbience(){if(ambienceSound)mixVolume(ambienceSound,mapAmbience[ambienceLevel][1]*(characterVoice&&!characterVoice.paused?.65:1)*(phase==='airborne'?.75:1),'ambience');}
-document.addEventListener?.('visibilitychange',()=>{if(document.hidden){if(ambienceSound)ambienceSound.pause();if(menuAmbience)menuAmbience.pause();}else if(menuAudioActive)startMenuAmbience();else startMapAmbience();});
+const bbqAnnouncementBank=new Map();let bbqAnnouncementSound=null,bbqAnnouncementLast=-1,bbqAnnouncementNext=0,bbqMusicGain=1,bbqMixLast=0;
+function prepareBBQAnnouncements(){
+ if(bbqAnnouncementBank.size)return;
+ for(let i=1;i<=4;i++){const sound=new Audio('./bbq_worker_'+i+'.mp3');sound.preload='metadata';bbqAnnouncementBank.set(i,sound);}
+}
+function stopBBQAnnouncement(){
+ if(bbqAnnouncementSound){bbqAnnouncementSound.pause();bbqAnnouncementSound.currentTime=0;bbqAnnouncementSound=null;}
+ bbqAnnouncementNext=0;
+}
+function syncBBQAnnouncements(now){
+ const allowed=currentLevel==='inferno'&&ambienceEnabled&&!menuAudioActive&&!document.hidden&&!soundSettings.muted&&!$('setupDialog').open&&!$('gameMenu').open&&!$('soundDialog').open;
+ if(!allowed){stopBBQAnnouncement();return;}
+ prepareBBQAnnouncements();
+ const characterSpeaking=characterVoice&&!characterVoice.paused;
+ if(bbqAnnouncementSound){
+  const sound=bbqAnnouncementSound,time=sound.currentTime||0;
+  const fade=Math.min(1,time/.25,Number.isFinite(sound.duration)?Math.max(0,(sound.duration-time)/.45):1);
+  mixVolume(sound,.52*Math.max(0,fade)*(characterSpeaking?.4:1),'voices');
+  return;
+ }
+ if(!bbqAnnouncementNext){bbqAnnouncementNext=now+8000+Math.random()*6000;return;}
+ if(now<bbqAnnouncementNext)return;
+ if(characterSpeaking){bbqAnnouncementNext=now+2000;return;}
+ const choices=[1,2,3,4].filter(i=>i!==bbqAnnouncementLast),index=choices[Math.floor(Math.random()*choices.length)];
+ const sound=bbqAnnouncementBank.get(index);bbqAnnouncementLast=index;bbqAnnouncementSound=sound;sound.currentTime=0;mixVolume(sound,0,'voices');
+ const finish=()=>{if(bbqAnnouncementSound!==sound)return;bbqAnnouncementSound=null;bbqAnnouncementNext=performance.now()+20000+Math.random()*20000;};
+ sound.onended=finish;sound.onerror=finish;sound.play().catch(finish);
+}
+function syncMapAmbience(){
+ const now=performance.now(),dt=bbqMixLast?Math.min(.1,(now-bbqMixLast)/1000):.016;bbqMixLast=now;
+ syncBBQAnnouncements(now);
+ const paPlaying=!!(bbqAnnouncementSound&&!bbqAnnouncementSound.paused);
+ bbqMusicGain+=((paPlaying?.42:1)-bbqMusicGain)*(1-Math.exp(-dt/.35));
+ if(ambienceSound)mixVolume(ambienceSound,mapAmbience[ambienceLevel][1]*(characterVoice&&!characterVoice.paused?.65:1)*(phase==='airborne'?.75:1)*(ambienceLevel==='inferno'?bbqMusicGain:1),'ambience');
+}
+document.addEventListener?.('visibilitychange',()=>{if(document.hidden){stopBBQAnnouncement();if(ambienceSound)ambienceSound.pause();if(menuAmbience)menuAmbience.pause();}else if(menuAudioActive)startMenuAmbience();else startMapAmbience();});
 const actionSounds={
  explosion:[['explosion_1.mp3',.7]],
  landing:[['body_landing_on_ceme_1-1791933948614.mp3',.9],['body_landing_on_ceme_2-1791933948615.mp3',.9]],
@@ -268,7 +302,7 @@ function syncFlightSounds(){
  if(!rag||phase!=='airborne'){stopFlightSounds();return;}
  if(rag.voiceLanded&&flyingSound){flyingSound.pause();flyingSound=null;}
  if((!(jetpackMounted||rocketMounted)||rag.jetFuel<=0||rag.shredded||rag.softLanding)&&jetEngineSound){jetEngineSound.pause();jetEngineSound=null;}
- const duck=characterVoice&&!characterVoice.paused?.35:1;
+ const duck=(characterVoice&&!characterVoice.paused||bbqAnnouncementSound&&!bbqAnnouncementSound.paused)?.35:1;
  if(flyingSound)mixVolume(flyingSound,.5*(characterVoice&&!characterVoice.paused?.7:1),'wind');if(jetEngineSound)mixVolume(jetEngineSound,(rocketMounted?.34:.28)*duck,'engines');
 }
 function stopFlightVoiceOnImpact(){if(characterVoice?.voiceStage!=='landed')stopCharacterVoice();}
@@ -2391,6 +2425,7 @@ function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;updateIntroLoader(now);simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:conveyorClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:[...(currentLevel==='inferno'?LEVEL_HAZARDS.filter(h=>Math.abs(h.x-camera-W/2)<W/2+machineFootprint(h)/2+800):LEVEL_HAZARDS),...alleyBalconies()],burnerSupports:currentLevel==='inferno'?infernoStations().filter(v=>v.dir==='right').map(v=>({id:v.id,x:v.x,y:infernoVentOrigin(v).y})):[],machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel).filter(p=>Math.abs(p.x-camera-W/2)<W/2+240),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();drawSplashBlood(dt);requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
 </script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=bbq-braced-burners-20261015"></script></body></html>
+
 
 
 
