@@ -1714,6 +1714,11 @@ function alleyBalconies(){
  return result;
 }
 window.launcherBalconyHit=(id,x,y)=>{const h=alleyBalconies().find(h=>h.id===id);if(h&&phase==='airborne'&&!rag?.resultAwarded)scoreHazard(h,x,y);};
+function hiddenBBQMachine(hazard){
+ if(currentLevel!=='inferno')return false;
+ const modelActive=hazard.kind==='roller'?window.rollerOverlayReady:hazard.kind==='grinder'?window.grinderOverlayReady:false;
+ return !!modelActive&&(!window.machineBloodSurfaces?.[hazard.id]||window.machineBloodSurfaces[hazard.id].visible===false);
+}
 function machineCollision(x0,y0,x1,y1,radius=8,skipId=null){
  const extent=typeof radius==='number'?{left:radius,right:radius,top:radius,bottom:radius}:radius;
  radius=Math.max(extent.left,extent.right);
@@ -1721,6 +1726,7 @@ function machineCollision(x0,y0,x1,y1,radius=8,skipId=null){
  for(let bin=Math.floor((Math.min(x0,x1)-radius)/100);bin<=Math.floor((Math.max(x0,x1)+radius)/100);bin++)for(const hazard of bloodHazardsAt(bin*100))candidates.add(hazard);
  for(const balcony of alleyBalconies())candidates.add(balcony);
  for(const hazard of candidates){
+  if(hiddenBBQMachine(hazard))continue;
   if(hazard.id===skipId||!['roller','grinder','press','conveyor','door','beam'].includes(hazard.kind)||hazard.kind==='door'&&gateOpen())continue;
   const floor=H*.88+(hazard.groundOffset||0),machine=window.machineBloodSurfaces?.[hazard.id];
   let box=hazard.hitBounds??machine?.hitBounds;
@@ -1773,6 +1779,7 @@ function hazardHit(x,y,part=null){
   candidates=nearby;
  }
  for(const h of candidates){
+  if(hiddenBBQMachine(h))continue;
   const floor=H*.88+(h.groundOffset||0);
   if(h.kind==='trampoline')continue;
   const n=part&&rag.nodes[part];
@@ -2383,7 +2390,7 @@ function render(){if(currentLevel!=='circus')syncTrampolineSkyVideo();drawFlipCa
 function machineLipBlood(){return [...new Set([...wallStains,...[...dripSources.values()].map(source=>source.stain)])].filter(s=>(s.surface?.kind==='grinder'||s.surface?.kind==='roller'||s.surface?.kind==='beam')&&Math.abs(s.x-camera-W/2)<W/2+300).map(s=>({id:s.seed,machineId:s.surface.id,size:s.size,...bloodSurfacePosition(s)}));}
 function tick(now){let dt=Math.min(.25,(now-lastTime)/1000||.016);lastTime=now;updateIntroLoader(now);simulate(dt);window.launcherVisualState={W,H,level:currentLevel,levelClock,machineryClock:conveyorClock,conveyorSpeed:CONVEYOR_SPEED,jetpackMounted,rocketMounted,jetExploded:!!rag?.jetExploded,jetFuel:rag?.jetFuel??(rocketMounted?8:5),jetActive:!!((jetpackMounted||rocketMounted)&&rag&&!rag.shredded&&!rag.softLanding&&rag.jetFuel>0),pressBottom:pressBottomY(),camera,cameraY,phase,theta,pivot:{x:pivot.x,y:pivot.y},armScale,tip:cradlePoint(),hazards:[...(currentLevel==='inferno'?LEVEL_HAZARDS.filter(h=>Math.abs(h.x-camera-W/2)<W/2+machineFootprint(h)/2+800):LEVEL_HAZARDS),...alleyBalconies()],machineLipBlood:machineLipBlood(),goreResetId:window.goreResetId,groundTime:rag?.groundTime||0,groundY:supportYAt(rag?.nodes.hip.x||0),cushions:cushionLayoutFor(currentLevel).filter(p=>Math.abs(p.x-camera-W/2)<W/2+240),softLanding:!!rag?.softLanding,shredded:!!rag?.shredded,shredOutlet:rag?.shredOutlet||null,waistBroken:!!rag?.waistBroken,headDetached:!!rag?.injuries?.has('neck:head'),injuries:rag?[...rag.injuries]:[],rag:rag?Object.fromEntries(Object.entries(rag.nodes).map(([key,n])=>[key,{x:n.x,y:n.y,vx:(n.x-n.px)/PHYSICS_STEP,vy:(n.y-n.py)/PHYSICS_STEP}])):null};render();drawLauncherOverlay();drawSplashBlood(dt);requestAnimationFrame(tick)}resize();loadDemo();hydraulicUI();setPhase('build');document.querySelectorAll('[data-preview]').forEach(c=>drawPartPreview(c,c.dataset.preview));$('ageDialog').showModal();requestAnimationFrame(tick);
 })();
-</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=bbq-frame-budget-20261015"></script></body></html>
+</script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"}}</script><script type="module" src="./character3d.js?v=bbq-visible-collision-20261015"></script></body></html>
 
 
 
