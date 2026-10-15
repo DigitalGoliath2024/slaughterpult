@@ -954,7 +954,18 @@ async function loadBBQScenery(){
  await Promise.allSettled([
   (async()=>{try{const gltf=await new GLTFLoader().register(trafficMaterialCompatibility).loadAsync('./park_bbq_grill.glb');bbqTemplates.set('park',bbqTemplate(gltf.scene,true));}catch(error){console.warn('Park grill unavailable',error);}})(),
   (async()=>{try{const gltf=await new GLTFLoader().register(trafficMaterialCompatibility).loadAsync('./dae_5_finished_props_-_forest_loner.glb');gltf.scene.updateMatrixWorld(true);
-   for(const [kind,name] of [['grill','SM_grill'],['truck','SM_Truck'],['table','SM_picnicTable']]){const source=gltf.scene.getObjectByName(name);if(source)bbqTemplates.set(kind,bbqTemplate(source));}
+   for(const [kind,name] of [['grill','SM_grill'],['truck','SM_Truck'],['table','SM_picnicTable']]){const source=gltf.scene.getObjectByName(name);if(source){
+    if(kind==='truck')source.traverse(mesh=>{if(!mesh.isMesh)return;
+     const originals=Array.isArray(mesh.material)?mesh.material:[mesh.material];
+     const materials=originals.map(original=>{const material=original.clone();
+      // The supplied truck atlas uses BLEND for the whole body. Render its
+      // panels in the opaque pass; retain only true holes in the alpha atlas.
+      material.transparent=false;material.opacity=1;material.alphaTest=.05;
+      material.depthWrite=true;material.depthTest=true;material.side=THREE.DoubleSide;material.needsUpdate=true;return material;});
+     mesh.material=Array.isArray(mesh.material)?materials:materials[0];
+    });
+    bbqTemplates.set(kind,bbqTemplate(source));
+   }}
   }catch(error){console.warn('BBQ picnic props unavailable',error);}})()
  ]);
 }
