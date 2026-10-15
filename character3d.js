@@ -22,8 +22,6 @@ try {
 const chairURL='./Meshy_AI_catapult_seat_3d_1013060518_image-to-3d-texture_optimized.glb';
 async function loadChair(){
  try{
-  const response=await fetch(chairURL,{method:'HEAD'});
-  if(!response.ok)throw Error('Chair GLB not uploaded');
   const gltf=await new GLTFLoader().loadAsync(chairURL);
   seatRoot=new THREE.Group();
   // 3D seat stays fixed on the arm, not on the airborne ragdoll.
@@ -142,8 +140,6 @@ async function load(id){
  const mine=++ticket;window.characterOverlayReady=false;window.characterLoading=true;
  status.textContent='Checking '+id+' character file…';
  try {
-  const check=await fetch(urls[id],{method:'HEAD',cache:'no-store'});
-  if(!check.ok)throw new Error('Model file missing: '+urls[id]);
   status.textContent='Loading '+id+' model…';
   const g=await new GLTFLoader().loadAsync(urls[id]);if(mine!==ticket)return;
   if(model)scene.remove(model);
@@ -1845,19 +1841,30 @@ function drawBasket(state,w,h){
 // Limit loader groups to two so model parsing and image decoding do not all
 // compete for the first interactive frames.
 const sceneAssetQueue=[];let sceneAssetLoads=0;
-function queueSceneAssets(jobs){sceneAssetQueue.push(...jobs);pumpSceneAssets();}
+const sceneAssetPromises=new Map();window.sceneCoreReady=false;
+function queueSceneAssets(jobs,priority=false){
+ const promises=jobs.map(job=>{
+  if(sceneAssetPromises.has(job))return sceneAssetPromises.get(job);
+  let finish;const promise=new Promise(resolve=>finish=resolve);sceneAssetPromises.set(job,promise);
+  const task={job,finish};if(priority)sceneAssetQueue.unshift(task);else sceneAssetQueue.push(task);return promise;
+ });pumpSceneAssets();return Promise.all(promises);
+}
 function pumpSceneAssets(){
- while(sceneAssetLoads<2&&sceneAssetQueue.length){const job=sceneAssetQueue.shift();sceneAssetLoads++;
-  scheduleSceneWork(()=>{Promise.resolve().then(job).catch(error=>console.warn('Scene asset unavailable',error)).finally(()=>{sceneAssetLoads--;pumpSceneAssets();});});
+ while(sceneAssetLoads<2&&sceneAssetQueue.length){const {job,finish}=sceneAssetQueue.shift();sceneAssetLoads++;
+  scheduleSceneWork(()=>{Promise.resolve().then(job).catch(error=>console.warn('Scene asset unavailable',error)).finally(()=>{sceneAssetLoads--;finish();pumpSceneAssets();});});
  }
 }
+function prepareCourseAssets(level){
+ const jobs={slide:[loadTrafficProps,loadScenerySigns,loadSceneryBed,loadBalconyPots],factory:[loadCarcasses,loadWallDolls,loadBackdropMachines],trampoline:[loadTrampolines,loadWallDolls,loadTrafficProps,loadScenerySigns,loadBackdropMachines],circus:[loadTrampolines,loadTrafficProps,loadScenerySigns,loadBackdropMachines],inferno:[loadBBQScenery,loadBackdropMachines]};
+ if(renderer)return queueSceneAssets(jobs[level]||[],true);
+ return Promise.resolve();
+}
+document.getElementById('courseSelect').addEventListener('change',event=>prepareCourseAssets(event.target.value));
 if(renderer){
  animate();
+ // Shared gameplay assets get bandwidth first; other courses' GLBs wait until selected.
  Promise.allSettled([loadChair(),load('cowboy')]).then(()=>queueSceneAssets([
   loadIndustrialBeams,loadLevelMachinery,loadNailBoard,loadWeapons,loadGoreAsset,
-  loadCushions,loadTrafficProps,loadScenerySigns,loadCrows,loadBalconyPots,
-  loadBBQScenery,loadJetpack,loadRocket,loadTrampolines,loadCarcasses,loadWallDolls,loadSceneryBed,loadBackdropMachines
- ]));
-}
-
-
+  loadCushions,loadJetpack,loadRocket,loadCrows,loadBackdropMachines
+ ])).then(()=>{window.sceneCoreReady=true;prepareCourseAssets(document.getElementById('courseSelect').value);});
+}else window.sceneCoreReady=true;
