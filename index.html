@@ -1976,9 +1976,7 @@ function jetpackForce(step){
  if(!(jetpackMounted||rocketMounted)||!rag||rag.shredded||rag.softLanding||rag.jetFuel<=0)return null;
  const hip=rag.nodes.waist||rag.nodes.hip,chest=rag.nodes.chest,dx=chest.x-hip.x,dy=chest.y-hip.y,len=Math.hypot(dx,dy)||1;
  const nodes=new Set(['chest']);for(let i=0;i<rag.links.length;i++)for(const link of rag.links)if(!link.broken){if(nodes.has(link.a))nodes.add(link.b);if(nodes.has(link.b))nodes.add(link.a);}
- const forward=((chest.x-chest.px)*dx+(chest.y-chest.py)*dy)/(len*step);
- const power=(rocketMounted?30000*Math.max(0,1-Math.max(0,forward)/3600):4200)*LAUNCH_POWER;
- return {x:dx/len*power,y:dy/len*power,spin:rocketMounted?.35:.6,nodes};
+ return {x:dx/len*(rocketMounted?30000:4200)*LAUNCH_POWER,y:dy/len*(rocketMounted?30000:4200)*LAUNCH_POWER,spin:rocketMounted?.35:.6,nodes};
 }
 function updateRagdoll(dt){
  if(!rag)return;
@@ -2064,11 +2062,6 @@ function updateRagdoll(dt){
     n.y=ground-n.r;n.py=n.y;n.groundedContact=true;groundedThisFrame=true;
    }
   }
- }
- // Bound bulk rocket travel without changing relative limb velocities or spin.
- if(rocketMounted&&!rag.shredded){
-  const nodes=Object.values(rag.nodes),vx=nodes.reduce((sum,n)=>sum+(n.x-n.px)/dt,0)/nodes.length,vy=nodes.reduce((sum,n)=>sum+(n.y-n.py)/dt,0)/nodes.length,speed=Math.hypot(vx,vy);
-  if(speed>4200){const excess=1-4200/speed;for(const n of nodes){n.px+=vx*excess*dt;n.py+=vy*excess*dt;}}
  }
  const hip=rag.nodes.hip;
  dummy.x=hip.x;dummy.y=hip.y;
