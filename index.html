@@ -667,16 +667,16 @@ function drawBBQRepeatingImage(image,y,height,pan){
  for(let i=start;i<=Math.ceil((pan+W)/step);i++)ctx.drawImage(i===start?image:feathered,i*step-pan,y,width,height);
 }
 function drawInfernoBackdrop(){
- const floor=H*.88,ceiling=infernoCeiling();
+ const floor=H*.88,ceiling=infernoCeiling(),wallHeight=(floor-ceiling)*.62,wallTop=floor-wallHeight;
  // One vertical sky panel, repeating only horizontally; rooftop stays at wall height.
  ctx.fillStyle='#626d76';ctx.fillRect(0,cameraY,W,H);
- ctx.save();ctx.beginPath();ctx.rect(0,cameraY,W,Math.max(0,ceiling-cameraY+1));ctx.clip();
+ ctx.save();ctx.beginPath();ctx.rect(0,cameraY,W,Math.max(0,wallTop-cameraY+1));ctx.clip();
  const skyHeight=Math.max(H*1.8,bbqSkyImage.naturalWidth?W*bbqSkyImage.naturalHeight/bbqSkyImage.naturalWidth:0);
- drawBBQRepeatingImage(bbqSkyImage,ceiling-skyHeight,skyHeight,camera*.18);
+ drawBBQRepeatingImage(bbqSkyImage,wallTop-skyHeight,skyHeight,camera*.18);
  ctx.restore();
- ctx.save();ctx.beginPath();ctx.rect(0,ceiling,W,floor-ceiling);ctx.clip();
- ctx.fillStyle='#261e19';ctx.fillRect(0,ceiling,W,floor-ceiling);
- drawBBQRepeatingImage(bbqWallImage,ceiling,floor-ceiling,camera*.35);
+ ctx.save();ctx.beginPath();ctx.rect(0,wallTop,W,wallHeight);ctx.clip();
+ ctx.fillStyle='#261e19';ctx.fillRect(0,wallTop,W,wallHeight);
+ drawBBQRepeatingImage(bbqWallImage,wallTop,wallHeight,camera*.25);
  ctx.restore();
  ctx.fillStyle='#29201b';ctx.fillRect(0,floor,W,Math.max(0,cameraY+H-floor));
 }
