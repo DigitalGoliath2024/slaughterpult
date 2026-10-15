@@ -562,15 +562,17 @@ document.addEventListener('visibilitychange',syncTrampolineSkyVideo);
 // Artwork coordinates keep fixtures welded to each repeating wall panel.
 function drawWallLighting(level,x,y,width,height,tile){
  const time=performance.now()/1000,seed=((tile*1664525+1013904223)>>>0),scale=width/1536;
- const light=(u,v,color,strength=1,slowFlash=false)=>{
-  const px=x+u*width,py=y+v*height,r=48*scale,pulse=slowFlash?.12+.88*(.5-.5*Math.cos(time*Math.PI/2)):.92+.08*Math.sin(time*.8+tile+u*9);
+ const light=(u,v,color,strength=1,emergencyPulse=false)=>{
+  const px=x+u*width,py=y+v*height,r=48*scale,pulse=emergencyPulse?.06+.94*Math.pow(.5-.5*Math.cos(time*Math.PI*2/.85),2):.92+.08*Math.sin(time*.8+tile+u*9);
   ctx.save();ctx.globalCompositeOperation='screen';ctx.globalAlpha=Math.min(1,strength*1.65)*pulse;
-  const glow=ctx.createRadialGradient(px,py,2,px,py+r*.5,r);glow.addColorStop(0,color);glow.addColorStop(.35,color.replace('0.45','0.18'));glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.ellipse(px,py+r*.5,r,r*1.4,0,0,Math.PI*2);ctx.fill();ctx.restore();
+  const glow=ctx.createRadialGradient(px,py,2,px,py+r*.5,r);glow.addColorStop(0,color);glow.addColorStop(.35,color.replace('0.45','0.18'));glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.ellipse(px,py+r*.5,r,r*1.4,0,0,Math.PI*2);ctx.fill();
+  if(emergencyPulse){ctx.globalCompositeOperation='source-over';ctx.globalAlpha=.95;ctx.fillStyle='rgb('+Math.round(65+160*pulse)+',5,14)';ctx.beginPath();ctx.arc(px,py,Math.max(2,4*scale),0,Math.PI*2);ctx.fill();}
+  ctx.restore();
  };
  if(level==='slide'){
   light(.164,.445,'rgba(255,193,105,0.45)');light(.887,.470,'rgba(255,193,105,0.45)',.85);
  }else if(level==='factory'){
-  // Four-second fade up/down on the red door beacon in each wall panel.
+  // Fast deep-red emergency pulse: one bright peak every 0.85 seconds.
   light(.128,.58,'rgba(200,8,16,0.45)',1,true);light(.12,.465,'rgba(210,231,236,0.45)',.6);light(.911,.603,'rgba(255,205,116,0.45)',.8);
  }else if(level==='trampoline'){
   for(const [u,v] of [[.206,.03],[.611,.02],[.716,.096],[.239,.226]])light(u,v,'rgba(139,206,228,0.45)',.55);
