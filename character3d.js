@@ -454,7 +454,9 @@ function colorCircusProps(root,circus,index=0){
  root.traverse(o=>{if(!o.isMesh||o.userData.bloodDecal)return;if(!o.userData.originalCircusMaterials){const mats=Array.isArray(o.material)?o.material:[o.material];o.userData.originalCircusMaterials=mats.map(m=>m.color.clone());o.material=Array.isArray(o.material)?mats.map(m=>m.clone()):mats[0].clone();}const mats=Array.isArray(o.material)?o.material:[o.material];mats.forEach((m,i)=>{m.color.copy(o.userData.originalCircusMaterials[i]);if(circus)m.color.lerp(new THREE.Color(colors[(index+piece+i)%colors.length]),.6);});piece++;});
 }
 
+function bbqFloorOutOfView(state,h){return state.level==='inferno'&&h*.88-(state.cameraY||0)>h+300;}
 function positionLevelMachinery(state,w,h){
+ if(bbqFloorOutOfView(state,h)){window.machineBloodSurfaces={};window.apparatusVents=[];for(const root of machineryInstances.values()){root.visible=false;root.userData.support.visible=false;}return;}
  const active=new Set();window.machineBloodSurfaces={};window.apparatusVents=[];
  for(const hazard of state.hazards||[]){
   if(!['grinder','roller'].includes(hazard.kind))continue;
@@ -745,6 +747,7 @@ function positionScenerySigns(state,w,h){
 }
 
 function positionCushions(state,w,h){
+ if(bbqFloorOutOfView(state,h)){for(const root of cushionInstances.values())root.visible=false;return;}
  if(!window.cushionOverlayReady)return;
  const active=new Set();
  if(cushionResetSeen!==state.goreResetId){
@@ -979,6 +982,7 @@ function makeBBQProp(kind,height,yaw,x,z){
  return group;
 }
 function positionBBQScenery(state,w,h){
+ if(bbqFloorOutOfView(state,h)){window.bbqTruckBounds=[];for(const prop of bbqSetups.values())prop.visible=false;return;}
  window.bbqTruckBounds=[];
  if(state.level!=='inferno'){for(const setup of bbqSetups.values())setup.visible=false;return;}
  if(!bbqTemplates.size)return;
@@ -1116,6 +1120,7 @@ function makeWeaponStation(hazard){
  root.userData.rotors=rotors;scene.add(root);return root;
 }
 function positionWeapons(state,w,h){
+ if(bbqFloorOutOfView(state,h)){for(const root of weaponStations.values())root.visible=false;return;}
  if(!window.weaponOverlayReady)return;
  const active=new Set();
  for(const hazard of state.hazards||[]){
@@ -1635,6 +1640,7 @@ function addIndustrialBeam(parent,x1,y1,x2,y2,width=20,depth=26,z=0,kind='beam')
 }
 function beamRise(hazard,h){return Math.min(hazard.wallRise||340,h*.62);}
 function positionIndustrialBeams(state,w,h){
+ if(bbqFloorOutOfView(state,h)){for(const root of industrialBeamInstances.values())root.visible=false;for(const root of boardBeamSupports.values())root.visible=false;return;}
  if(!window.industrialBeamOverlayReady)return;const active=new Set(),supportActive=new Set();
  for(const hazard of state.hazards||[]){
   if(Math.abs(hazard.x-state.camera-w/2)>w/2+hazard.width+200)continue;
@@ -1876,4 +1882,5 @@ if(renderer){
   loadCushions,loadJetpack,loadRocket,loadCrows,loadBackdropMachines
  ])).then(()=>{window.sceneCoreReady=true;prepareCourseAssets(document.getElementById('courseSelect').value);});
 }else window.sceneCoreReady=true;
+
 
