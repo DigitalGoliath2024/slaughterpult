@@ -1433,7 +1433,7 @@ function positionGore(state,w,h){
    // Keep debris within a plausible vicinity of the impact site.
    if(!u.freeTravel)u.worldX=THREE.MathUtils.clamp(u.worldX,u.originX-165,u.originX+165);
    u.worldY+=u.vy*dt;
-   if(state.level==='inferno'){const ceiling=(window.launcherInfernoCeiling?.()??-600)+30+contactExtent;if(u.worldY<ceiling){u.worldY=ceiling;u.vy=Math.abs(u.vy)*.25;}}
+
    if(u.joint!=='rh')p.rotation.z+=u.joint==='head'?(u.vx/Math.max(7,u.radius||15))*dt:u.spin*dt*60;
    if(u.joint!=='rh')p.rotation.x+=u.spin*dt*15;
    window.launcherDebrisTravel?.(u.joint,oldX,oldY,u.worldX,u.worldY,Math.max(contactExtent,u.halfWidth||u.radius||8));
