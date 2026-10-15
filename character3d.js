@@ -499,7 +499,7 @@ function positionLevelMachinery(state,w,h){
   for(const part of root.children)if(part.userData.motorAxis)part.rotation[part.userData.motorAxis]=clock*(hazard.motorSpeed||2.6)*part.userData.motorSign*(state.level==='circus'&&hazard.impactLauncher?-1:1);
   const support=root.userData.support;support.visible=root.visible;
   if(kind==='spiked'&&!support.children.length&&apparatusTemplates.length){
-   for(const side of [-1,1]){const post=apparatusTemplates[(Math.abs(hazard.x)+ (side>0?1:0))%apparatusTemplates.length].clone(true);post.userData.side=side;post.rotation.y=side<0?Math.PI:0;post.scale.setScalar(106);support.add(post);}
+   for(const side of [-1,1]){const index=(Math.floor(Math.abs(hazard.x))+(side>0?1:0))%apparatusTemplates.length;const template=apparatusTemplates[index];if(!template)continue;const post=template.clone(true);post.userData.side=side;post.rotation.y=side<0?Math.PI:0;post.scale.setScalar(106);support.add(post);}
   }
   colorCircusProps(support,state.level==='circus',Math.floor(hazard.x/200));
   for(const post of support.children){
