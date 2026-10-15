@@ -160,6 +160,15 @@ function startMapAmbience(){
  }
  if(ambienceSound.paused&&!document.hidden)ambienceSound.play().catch(()=>{});
 }
+const bbqAnnouncementBag=[];
+function nextBBQAnnouncement(){
+ if(!bbqAnnouncementBag.length){
+  bbqAnnouncementBag.push(1,2,3,4,5,6);
+  for(let i=bbqAnnouncementBag.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[bbqAnnouncementBag[i],bbqAnnouncementBag[j]]=[bbqAnnouncementBag[j],bbqAnnouncementBag[i]];}
+  if(bbqAnnouncementBag[0]===bbqAnnouncementLast){const j=1+Math.floor(Math.random()*5);[bbqAnnouncementBag[0],bbqAnnouncementBag[j]]=[bbqAnnouncementBag[j],bbqAnnouncementBag[0]];}
+ }
+ return bbqAnnouncementBag.shift();
+}
 const bbqAnnouncementBank=new Map();let bbqAnnouncementSound=null,bbqAnnouncementLast=0,bbqAnnouncementNext=0,bbqMusicGain=1,bbqMixLast=0;
 function prepareBBQAnnouncements(){
  if(bbqAnnouncementBank.size)return;
@@ -183,7 +192,7 @@ function syncBBQAnnouncements(now){
  if(!bbqAnnouncementNext){bbqAnnouncementNext=now+8000+Math.random()*6000;return;}
  if(now<bbqAnnouncementNext)return;
  if(characterSpeaking){bbqAnnouncementNext=now+2000;return;}
- const index=bbqAnnouncementLast%6+1;
+ const index=nextBBQAnnouncement();
  const sound=bbqAnnouncementBank.get(index);bbqAnnouncementLast=index;bbqAnnouncementSound=sound;sound.currentTime=0;mixVolume(sound,0,'voices');
  const finish=()=>{if(bbqAnnouncementSound!==sound)return;bbqAnnouncementSound=null;bbqAnnouncementNext=performance.now()+20000+Math.random()*20000;};
  sound.onended=finish;sound.onerror=finish;sound.play().catch(finish);
