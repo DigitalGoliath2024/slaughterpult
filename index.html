@@ -687,12 +687,15 @@ function drawBBQConcreteFloor(floor){
 }
 function drawInfernoBackdrop(){
  const floor=H*.88,ceiling=infernoCeiling(),wallHeight=(floor-ceiling)*.43,wallTop=floor-wallHeight;
- // One vertical sky panel, repeating only horizontally; rooftop stays at wall height.
+ // Match Circus/Trampoline: a distant camera-relative panorama behind the
+ // world-aligned wall, so rising above the roof reveals its parking-lot foreground.
  ctx.fillStyle='#626d76';ctx.fillRect(0,cameraY,W,H);
- ctx.save();ctx.beginPath();ctx.rect(0,cameraY,W,Math.max(0,wallTop-cameraY+1));ctx.clip();
- const skyHeight=Math.max(H*1.8,bbqSkyImage.naturalWidth?W*bbqSkyImage.naturalHeight/bbqSkyImage.naturalWidth:0);
- drawBBQRepeatingImage(bbqSkyImage,wallTop-skyHeight,skyHeight,camera*.18);
- ctx.restore();
+ if(bbqSkyImage.complete&&bbqSkyImage.naturalWidth&&bbqSkyImage.naturalHeight){
+  const scale=Math.max(W*1.25/bbqSkyImage.naturalWidth,H*1.35/bbqSkyImage.naturalHeight);
+  const skyHeight=bbqSkyImage.naturalHeight*scale;
+  const cropY=Math.max(0,Math.min(skyHeight-H,(skyHeight-H)*.5+cameraY*.12));
+  drawBBQRepeatingImage(bbqSkyImage,cameraY-cropY,skyHeight,camera*.18);
+ }
  ctx.save();ctx.beginPath();ctx.rect(0,wallTop,W,wallHeight);ctx.clip();
  ctx.fillStyle='#261e19';ctx.fillRect(0,wallTop,W,wallHeight);
  drawBBQRepeatingImage(bbqWallImage,wallTop,wallHeight,camera*.20);
