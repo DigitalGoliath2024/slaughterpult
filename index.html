@@ -49,7 +49,7 @@
 
 #introDialog{text-align:center;border-radius:3px;border:1px solid #60352f;border-top:5px solid #91272a;background:linear-gradient(#090809b0,#090709f5 78%),url('./Meshy_AI_night_sky_giant_heads.png') center 28%/cover}
 #introDialog .introEyebrow{color:#a9a397;letter-spacing:3px}#introDialog .introCopy{margin:16px auto;max-width:480px;color:#c9c4b8}#introDialog .introSteps{justify-content:center;margin:22px auto;gap:12px 24px}#introDialog .introTagline{color:#e9bf86;letter-spacing:2px}#introDialog .introFooter{color:#aaa194;text-align:center}
-#introDialog h1{position:relative;display:inline-block;max-width:100%;font-size:clamp(34px,9vw,88px);margin:24px auto 48px;color:#efe0c0;text-shadow:0 3px #892027,2px 5px #360b10,0 0 24px #6b101533;letter-spacing:2px;isolation:isolate}
+#introDialog h1{position:relative;display:inline-block;max-width:100%;font-size:clamp(34px,9vw,88px);margin:24px auto 48px;color:#efe0c0;text-shadow:0 3px #892027,2px 5px #360b10,0 0 24px #6b101533;letter-spacing:2px;isolation:isolate;z-index:2}
 #introDialog .splashRecords{max-width:600px;margin:26px auto;padding:18px 14px;background:linear-gradient(135deg,#242527bd,#0b0c0ed9);border:1px solid #55433c;border-top:3px solid #a63431;box-shadow:inset 0 0 20px #0008,0 8px 24px #0005}
 .splashRecords h2{font:clamp(25px,5vw,36px)/1.1 Creepster,Impact,fantasy;color:#e36254;letter-spacing:1.5px;text-shadow:2px 2px #240909}.splashRecords p{color:#b6aa92;font-size:14px;letter-spacing:.4px}.splashRecords th,.splashRecords td{text-align:center;border-color:#51413a}.splashRecords th{font:19px Creepster,Impact,fantasy;color:#d19476;letter-spacing:.7px;padding:9px 3px}.splashRecords td{font:600 19px 'Barlow Condensed',Arial,sans-serif;color:#e1d7c4;padding:9px 3px;font-variant-numeric:tabular-nums}.splashRecords td:nth-child(2){font:23px Creepster,Impact,fantasy;letter-spacing:2px;color:#eee3c8}.splashRecords td:nth-child(3){color:#efc774;font-weight:700}.splashRecords td:last-child{font-size:16px;color:#b7ac98}.splashRecords tbody tr:first-child{background:#9b47201c}.splashRecords tbody tr:first-child td:first-child{color:#f2c56a}
 #introDialog .primary{border-radius:2px;border:1px solid #d65c4c;background:linear-gradient(#b53530,#721d22);box-shadow:inset 0 1px #ffb08844,0 4px #280c0f;color:#fff0d6}#introDialog .assetCredits{text-align:center}#introDialog .creditsBody ul{list-style:none;padding-left:0}
@@ -679,23 +679,47 @@ const bloodSprites=Array.from({length:5},(_,variant)=>{
 });
 const splashBloodCanvas=$('splashTitleBlood'),splashBloodCtx=splashBloodCanvas.getContext('2d');let splashBloodParticles=[],splashBloodAnchors=[],splashBloodKey='',splashBloodTimer=.15;
 function drawSplashBlood(dt){
- if(!$('introDialog').open||document.hidden){splashBloodParticles=[];splashBloodTimer=.15;return;}
- const title=$('introTitle'),rect=title.getBoundingClientRect(),width=rect.width,height=rect.height;if(!width||!height)return;
- const dpr=Math.min(window.devicePixelRatio||1,2),totalHeight=height+85,style=getComputedStyle(title),key=[width,height,style.fontSize,document.fonts?.status].join(':');
+ if(!$('introDialog').open||document.hidden){splashBloodParticles=[];splashBloodTimer=.10;return;}
+ const title=$('introTitle'),rect=title.getBoundingClientRect(),records=document.querySelector('.splashRecords').getBoundingClientRect(),width=rect.width,height=rect.height;if(!width||!height)return;
+ const lipY=records.top-rect.top,lipLeft=Math.max(0,records.left-rect.left),lipRight=Math.min(width,records.right-rect.left);
+ const dpr=Math.min(window.devicePixelRatio||1,2),totalHeight=Math.max(height+85,lipY+130),style=getComputedStyle(title),key=[width,height,totalHeight,style.fontSize,document.fonts?.status].join(':');
  if(splashBloodKey!==key){
   splashBloodKey=key;splashBloodCanvas.width=Math.round(width*dpr);splashBloodCanvas.height=Math.round(totalHeight*dpr);splashBloodCanvas.style.height=totalHeight+'px';
   const mask=document.createElement('canvas');mask.width=Math.ceil(width);mask.height=Math.ceil(height);const paint=mask.getContext('2d');paint.font=style.fontSize+' '+style.fontFamily;paint.textAlign='center';paint.textBaseline='alphabetic';if('letterSpacing' in paint)paint.letterSpacing=style.letterSpacing;paint.fillStyle='#fff';paint.fillText('SLAUGHTERPULT',width/2,height*.80);
   const pixels=paint.getImageData(0,0,mask.width,mask.height).data;splashBloodAnchors=[];
-  for(const fraction of [.08,.19,.34,.46,.60,.76,.91]){const center=Math.round(width*fraction);let anchor=null;for(let offset=0;offset<10&&!anchor;offset++)for(const x of [center-offset,center+offset]){if(x<0||x>=mask.width)continue;for(let y=mask.height-1;y>=height*.45;y--)if(pixels[(y*mask.width+x)*4+3]>160){anchor={x,y:y+1};break;}if(anchor)break;}if(anchor)splashBloodAnchors.push(anchor);}
+  // Sample the bottoms of strokes across every letter, including the narrow ones.
+  for(let x=Math.round(width*.03);x<width*.97;x+=Math.max(7,width*.025)){
+   for(let y=mask.height-1;y>=height*.35;y--)if(pixels[(y*mask.width+x)*4+3]>160){splashBloodAnchors.push({x,y:y+1});break;}
+  }
   splashBloodParticles=[];
  }
  const paint=splashBloodCtx;paint.setTransform(dpr,0,0,dpr,0,0);paint.clearRect(0,0,width,totalHeight);
  if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;
- splashBloodTimer-=dt;if(splashBloodTimer<=0&&splashBloodAnchors.length){const anchor=splashBloodAnchors[Math.floor(Math.random()*splashBloodAnchors.length)];splashBloodParticles.push({...anchor,startY:anchor.y,age:0,vy:0,vx:(Math.random()-.5)*5,size:3+Math.random()*2.5,sprite:Math.floor(Math.random()*bloodSprites.length)});splashBloodTimer=.4+Math.random()*.55;}
- for(const drop of splashBloodParticles){drop.age+=dt;const hanging=drop.age<.32;if(!hanging){drop.vy+=180*dt;drop.y+=drop.vy*dt;drop.x+=drop.vx*dt;}
-  paint.save();paint.translate(drop.x,drop.y);paint.globalAlpha=Math.min(1,drop.age/.15)*Math.max(0,1-(drop.y-drop.startY)/75);paint.scale(1,hanging?.7+drop.age*1.3:1+Math.min(.9,drop.vy/180));paint.drawImage(bloodSprites[drop.sprite],-drop.size,-drop.size,drop.size*2,drop.size*2);paint.restore();
+ dt=Math.min(dt,.05);splashBloodTimer-=dt;
+ if(splashBloodTimer<=0&&splashBloodAnchors.length){
+  const anchor=splashBloodAnchors[Math.floor(Math.random()*splashBloodAnchors.length)];
+  splashBloodParticles.push({...anchor,startY:anchor.y,age:0,vy:0,vx:(Math.random()-.5)*4,size:2.5+Math.random()*3,sprite:Math.floor(Math.random()*bloodSprites.length),ooze:false,oozeAge:0,reach:45+Math.random()*65});
+  splashBloodTimer=.10+Math.random()*.12;
  }
- splashBloodParticles=splashBloodParticles.filter(drop=>drop.age<1.6&&drop.y-drop.startY<75);
+ for(const drop of splashBloodParticles){
+  drop.age+=dt;
+  if(!drop.ooze){
+   const hanging=drop.age<.28;
+   if(!hanging){drop.vy+=300*dt;drop.y+=drop.vy*dt;drop.x+=drop.vx*dt;}
+   if(drop.y>=lipY&&drop.x>=lipLeft&&drop.x<=lipRight){drop.ooze=true;drop.y=lipY;drop.x=Math.max(lipLeft+4,Math.min(lipRight-4,drop.x));}
+   paint.save();paint.translate(drop.x,drop.y);paint.globalAlpha=Math.min(1,drop.age/.15);paint.scale(1,hanging?.7+drop.age*1.3:1+Math.min(1.1,drop.vy/220));paint.drawImage(bloodSprites[drop.sprite],-drop.size,-drop.size,drop.size*2,drop.size*2);paint.restore();
+  }else{
+   drop.oozeAge+=dt;
+   const length=drop.reach*(1-Math.exp(-drop.oozeAge*.65)),alpha=Math.max(0,1-Math.max(0,drop.oozeAge-2)/2.5);
+   paint.save();paint.globalAlpha=alpha;
+   // Pool on the records lip, then stretch a wet rivulet down the front.
+   paint.fillStyle='#760710';paint.beginPath();paint.ellipse(drop.x,lipY,drop.size*(1.7+Math.min(1,drop.oozeAge)),drop.size*.65,0,0,Math.PI*2);paint.fill();
+   const trail=paint.createLinearGradient(0,lipY,0,lipY+length+1);trail.addColorStop(0,'#760710');trail.addColorStop(.75,'#970e19');trail.addColorStop(1,'rgba(118,7,16,.25)');
+   paint.strokeStyle=trail;paint.lineWidth=drop.size*.85;paint.lineCap='round';paint.beginPath();paint.moveTo(drop.x,lipY);paint.bezierCurveTo(drop.x-2,lipY+length*.3,drop.x+2,lipY+length*.7,drop.x,lipY+length);paint.stroke();
+   paint.fillStyle='#980e19';paint.beginPath();paint.ellipse(drop.x,lipY+length,drop.size*.65,drop.size*.95,0,0,Math.PI*2);paint.fill();paint.restore();
+  }
+ }
+ splashBloodParticles=splashBloodParticles.filter(drop=>drop.ooze?drop.oozeAge<4.5:drop.y<totalHeight&&drop.age<6).slice(-90);
 }
 
 function groundBlood(x,power=1){
