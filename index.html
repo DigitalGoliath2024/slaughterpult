@@ -648,16 +648,37 @@ function stepInfernoFire(dt){
  if(infernoFireParticles.length>450)infernoFireParticles.splice(0,infernoFireParticles.length-450);
  window.launcherInfernoBurns=infernoBurns;
 }
+const bbqWallImage=new Image(),bbqSkyImage=new Image();
+bbqWallImage.src='./bbq_wall.png';bbqSkyImage.src='./bbq_sky.png';
+const bbqFeatherPanels=new WeakMap();
+function bbqFeatherPanel(image){
+ let panel=bbqFeatherPanels.get(image);if(panel)return panel;
+ panel=document.createElement('canvas');panel.width=image.naturalWidth;panel.height=image.naturalHeight;
+ const paint=panel.getContext('2d');paint.drawImage(image,0,0);
+ paint.globalCompositeOperation='destination-in';
+ const mask=paint.createLinearGradient(0,0,panel.width*.06,0);mask.addColorStop(0,'rgba(0,0,0,0)');mask.addColorStop(1,'rgba(0,0,0,1)');
+ paint.fillStyle=mask;paint.fillRect(0,0,panel.width,panel.height);
+ bbqFeatherPanels.set(image,panel);return panel;
+}
+function drawBBQRepeatingImage(image,y,height,pan){
+ if(!image.complete||!image.naturalWidth||!image.naturalHeight)return;
+ const width=height*image.naturalWidth/image.naturalHeight,step=width*.94,start=Math.floor(pan/step)-1;
+ const feathered=bbqFeatherPanel(image);
+ for(let i=start;i<=Math.ceil((pan+W)/step);i++)ctx.drawImage(i===start?image:feathered,i*step-pan,y,width,height);
+}
 function drawInfernoBackdrop(){
- const floor=H*.88,ceiling=infernoCeiling();ctx.fillStyle='#180d0a';ctx.fillRect(0,cameraY,W,H);
- const image=horrorFactoryImage;
- if(image.complete&&image.naturalWidth){const height=floor-ceiling,width=image.naturalWidth*height/(image.naturalHeight*.85),pan=camera*.35,start=Math.floor(pan/width)-1;
-  for(let i=start;i<start+Math.ceil(W/width)+2;i++)ctx.drawImage(image,0,0,image.naturalWidth,image.naturalHeight*.85,i*width-pan,ceiling,width,height);
- }
- ctx.fillStyle='rgba(80,17,4,.25)';ctx.fillRect(0,ceiling,W,floor-ceiling);
- ctx.fillStyle='#29201b';ctx.fillRect(0,floor,W,H+Math.max(0,cameraY)-floor);
- ctx.fillStyle='#262b2d';ctx.fillRect(0,ceiling-35,W,40);ctx.strokeStyle='#89908b';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(0,ceiling+5);ctx.lineTo(W,ceiling+5);ctx.stroke();
- 
+ const floor=H*.88,ceiling=infernoCeiling();
+ // One vertical sky panel, repeating only horizontally; rooftop stays at wall height.
+ ctx.fillStyle='#626d76';ctx.fillRect(0,cameraY,W,H);
+ ctx.save();ctx.beginPath();ctx.rect(0,cameraY,W,Math.max(0,ceiling-cameraY+1));ctx.clip();
+ const skyHeight=Math.max(H*1.8,bbqSkyImage.naturalWidth?W*bbqSkyImage.naturalHeight/bbqSkyImage.naturalWidth:0);
+ drawBBQRepeatingImage(bbqSkyImage,ceiling-skyHeight,skyHeight,camera*.18);
+ ctx.restore();
+ ctx.save();ctx.beginPath();ctx.rect(0,ceiling,W,floor-ceiling);ctx.clip();
+ ctx.fillStyle='#261e19';ctx.fillRect(0,ceiling,W,floor-ceiling);
+ drawBBQRepeatingImage(bbqWallImage,ceiling,floor-ceiling,camera*.35);
+ ctx.restore();
+ ctx.fillStyle='#29201b';ctx.fillRect(0,floor,W,Math.max(0,cameraY+H-floor));
 }
 function drawInfernoMachines(){
  if(currentLevel!=='inferno')return;
